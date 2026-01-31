@@ -1,7 +1,7 @@
 import Foundation
 
 /// All application error cases as defined in the Architecture specification.
-enum AppError: Error, Sendable {
+enum AppError: Error, Sendable, Equatable {
     case keychainNotFound
     case keychainAccessDenied
     case keychainInvalidFormat
@@ -10,4 +10,23 @@ enum AppError: Error, Sendable {
     case networkUnreachable
     case apiError(statusCode: Int, body: String?)
     case parseError(underlying: any Error & Sendable)
+
+    static func == (lhs: AppError, rhs: AppError) -> Bool {
+        switch (lhs, rhs) {
+        case (.keychainNotFound, .keychainNotFound),
+             (.keychainAccessDenied, .keychainAccessDenied),
+             (.keychainInvalidFormat, .keychainInvalidFormat),
+             (.tokenExpired, .tokenExpired),
+             (.networkUnreachable, .networkUnreachable):
+            return true
+        case (.tokenRefreshFailed, .tokenRefreshFailed):
+            return true
+        case let (.apiError(lCode, lBody), .apiError(rCode, rBody)):
+            return lCode == rCode && lBody == rBody
+        case (.parseError, .parseError):
+            return true
+        default:
+            return false
+        }
+    }
 }

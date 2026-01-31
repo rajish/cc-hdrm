@@ -38,7 +38,7 @@ development_status:
   epic-1: in-progress
   1-1-xcode-project-initialization-menu-bar-shell: done
   1-2-keychain-credential-discovery: done
-  1-3-token-expiry-detection-refresh: backlog
+  1-3-token-expiry-detection-refresh: done
   epic-1-retrospective: optional
 
   epic-2: backlog

@@ -4,8 +4,9 @@ import os
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
-    private(set) var appState: AppState?
+    internal var appState: AppState?
     private let keychainService: any KeychainServiceProtocol
+    private let tokenRefreshService: any TokenRefreshServiceProtocol
     private var pollingTask: Task<Void, Never>?
 
     private static let logger = Logger(
@@ -13,14 +14,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         category: "AppDelegate"
     )
 
+    private static let tokenLogger = Logger(
+        subsystem: "com.cc-hdrm.app",
+        category: "token"
+    )
+
     override init() {
         self.keychainService = KeychainService()
+        self.tokenRefreshService = TokenRefreshService()
         super.init()
     }
 
-    /// Test-only initializer for injecting a mock keychain service.
-    init(keychainService: any KeychainServiceProtocol) {
+    /// Test-only initializer for injecting mock services.
+    init(
+        keychainService: any KeychainServiceProtocol,
+        tokenRefreshService: any TokenRefreshServiceProtocol = TokenRefreshService()
+    ) {
         self.keychainService = keychainService
+        self.tokenRefreshService = tokenRefreshService
         super.init()
     }
 
@@ -52,16 +63,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pollingTask?.cancel()
     }
 
+    /// Exposed for testing. In production, called internally by polling loop.
+    func performCredentialReadForTesting() async {
+        await performCredentialRead()
+    }
+
     private func performCredentialRead() async {
         guard let appState else { return }
         do {
             let credentials = try await keychainService.readCredentials()
             appState.updateSubscriptionTier(credentials.subscriptionType)
-            appState.updateConnectionStatus(.connected)
-            appState.updateStatusMessage(nil)
-            Self.logger.info("Credentials found — connection status set to connected")
+
+            // Check token expiry status
+            let status = TokenExpiryChecker.tokenStatus(for: credentials)
+
+            switch status {
+            case .valid:
+                appState.updateConnectionStatus(.connected)
+                appState.updateStatusMessage(nil)
+                Self.logger.info("Credentials found — token valid, connection status set to connected")
+
+            case .expired, .expiringSoon:
+                Self.tokenLogger.info("Token \(status == .expired ? "expired" : "expiring soon") — attempting refresh")
+                await attemptTokenRefresh(credentials: credentials, appState: appState)
+            }
         } catch {
             handleCredentialError(error, appState: appState)
+        }
+    }
+
+    private func attemptTokenRefresh(credentials: KeychainCredentials, appState: AppState) async {
+        guard let refreshToken = credentials.refreshToken else {
+            Self.tokenLogger.info("No refresh token available — setting token expired status")
+            appState.updateConnectionStatus(.tokenExpired)
+            appState.updateStatusMessage(StatusMessage(
+                title: "Token expired",
+                detail: "Run any Claude Code command to refresh"
+            ))
+            return
+        }
+
+        do {
+            let refreshedCredentials = try await tokenRefreshService.refreshToken(using: refreshToken)
+
+            // Merge refreshed fields with original credentials to preserve subscriptionType, rateLimitTier, scopes
+            let mergedCredentials = KeychainCredentials(
+                accessToken: refreshedCredentials.accessToken,
+                refreshToken: refreshedCredentials.refreshToken,
+                expiresAt: refreshedCredentials.expiresAt,
+                subscriptionType: credentials.subscriptionType,
+                rateLimitTier: credentials.rateLimitTier,
+                scopes: credentials.scopes
+            )
+
+            try await keychainService.writeCredentials(mergedCredentials)
+
+            appState.updateConnectionStatus(.connected)
+            appState.updateStatusMessage(nil)
+            Self.tokenLogger.info("Token refresh succeeded — credentials updated in Keychain")
+        } catch {
+            Self.tokenLogger.error("Token refresh failed: \(error.localizedDescription)")
+            appState.updateConnectionStatus(.tokenExpired)
+            appState.updateStatusMessage(StatusMessage(
+                title: "Token expired",
+                detail: "Run any Claude Code command to refresh"
+            ))
         }
     }
 

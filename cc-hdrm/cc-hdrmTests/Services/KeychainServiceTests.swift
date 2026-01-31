@@ -111,4 +111,125 @@ struct KeychainServiceTests {
             _ = try await service.readCredentials()
         }
     }
+
+    // MARK: - Write Credentials Tests
+
+    /// Thread-safe write tracker for Keychain write tests.
+    final class WriteTracker: @unchecked Sendable {
+        var writtenData: Data?
+    }
+
+    @Test("writeCredentials updates existing Keychain item")
+    func writeCredentialsUpdatesExisting() async throws {
+        let existingJSON = """
+        {
+            "claudeAiOauth": {
+                "accessToken": "old-token",
+                "subscriptionType": "pro",
+                "rateLimitTier": "tier_1"
+            }
+        }
+        """.data(using: .utf8)!
+
+        let tracker = WriteTracker()
+
+        let service = KeychainService(
+            dataProvider: { .success(existingJSON) },
+            writeProvider: { data in
+                tracker.writtenData = data
+                return .success
+            }
+        )
+
+        let newCreds = KeychainCredentials(
+            accessToken: "new-token",
+            refreshToken: "new-refresh",
+            expiresAt: 1738400000000,
+            subscriptionType: "pro",
+            rateLimitTier: "tier_1",
+            scopes: nil
+        )
+
+        try await service.writeCredentials(newCreds)
+
+        #expect(tracker.writtenData != nil)
+
+        // Verify written data contains updated claudeAiOauth
+        if let data = tracker.writtenData,
+           let outer = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let oauth = outer["claudeAiOauth"] as? [String: Any] {
+            #expect(oauth["accessToken"] as? String == "new-token")
+            #expect(oauth["refreshToken"] as? String == "new-refresh")
+            #expect(oauth["subscriptionType"] as? String == "pro")
+        } else {
+            #expect(Bool(false), "Written data should contain valid claudeAiOauth JSON")
+        }
+    }
+
+    @Test("writeCredentials creates item when none exists")
+    func writeCredentialsCreatesNew() async throws {
+        let tracker = WriteTracker()
+
+        let service = KeychainService(
+            dataProvider: { .notFound },
+            writeProvider: { data in
+                tracker.writtenData = data
+                return .success
+            }
+        )
+
+        let creds = KeychainCredentials(
+            accessToken: "token",
+            refreshToken: nil,
+            expiresAt: nil,
+            subscriptionType: nil,
+            rateLimitTier: nil,
+            scopes: nil
+        )
+
+        try await service.writeCredentials(creds)
+        #expect(tracker.writtenData != nil)
+    }
+
+    @Test("writeCredentials throws on access denied")
+    func writeCredentialsAccessDenied() async {
+        let service = KeychainService(
+            dataProvider: { .accessDenied },
+            writeProvider: { _ in .success }
+        )
+
+        let creds = KeychainCredentials(
+            accessToken: "token",
+            refreshToken: nil,
+            expiresAt: nil,
+            subscriptionType: nil,
+            rateLimitTier: nil,
+            scopes: nil
+        )
+
+        await #expect(throws: AppError.keychainAccessDenied) {
+            try await service.writeCredentials(creds)
+        }
+    }
+
+    @Test("writeCredentials throws on write failure")
+    func writeCredentialsWriteFailure() async {
+        let service = KeychainService(
+            dataProvider: { .notFound },
+            writeProvider: { _ in .error(-25293) }
+        )
+
+        let creds = KeychainCredentials(
+            accessToken: "token",
+            refreshToken: nil,
+            expiresAt: nil,
+            subscriptionType: nil,
+            rateLimitTier: nil,
+            scopes: nil
+        )
+
+        await #expect(throws: AppError.keychainAccessDenied) {
+            try await service.writeCredentials(creds)
+        }
+    }
 }

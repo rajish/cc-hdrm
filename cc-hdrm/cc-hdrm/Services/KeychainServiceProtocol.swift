@@ -4,4 +4,5 @@ import Foundation
 /// Enables mocking in tests — only `KeychainService` imports Security.
 protocol KeychainServiceProtocol: Sendable {
     func readCredentials() async throws -> KeychainCredentials
+    func writeCredentials(_ credentials: KeychainCredentials) async throws
 }
