@@ -41,8 +41,8 @@ development_status:
   1-3-token-expiry-detection-refresh: done
   epic-1-retrospective: optional
 
-  epic-2: backlog
-  2-1-api-client-usage-data-fetch: backlog
+  epic-2: in-progress
+  2-1-api-client-usage-data-fetch: done
   2-2-background-polling-engine: backlog
   2-3-data-freshness-tracking: backlog
   epic-2-retrospective: optional

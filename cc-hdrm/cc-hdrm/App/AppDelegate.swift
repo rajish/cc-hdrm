@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     internal var appState: AppState?
     private let keychainService: any KeychainServiceProtocol
     private let tokenRefreshService: any TokenRefreshServiceProtocol
+    private let apiClient: any APIClientProtocol
     private var pollingTask: Task<Void, Never>?
 
     private static let logger = Logger(
@@ -19,19 +20,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         category: "token"
     )
 
+    private static let apiLogger = Logger(
+        subsystem: "com.cc-hdrm.app",
+        category: "api"
+    )
+
     override init() {
         self.keychainService = KeychainService()
         self.tokenRefreshService = TokenRefreshService()
+        self.apiClient = APIClient()
         super.init()
     }
 
     /// Test-only initializer for injecting mock services.
     init(
         keychainService: any KeychainServiceProtocol,
-        tokenRefreshService: any TokenRefreshServiceProtocol = TokenRefreshService()
+        tokenRefreshService: any TokenRefreshServiceProtocol = TokenRefreshService(),
+        apiClient: any APIClientProtocol = APIClient()
     ) {
         self.keychainService = keychainService
         self.tokenRefreshService = tokenRefreshService
+        self.apiClient = apiClient
         super.init()
     }
 
@@ -79,9 +88,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             switch status {
             case .valid:
-                appState.updateConnectionStatus(.connected)
-                appState.updateStatusMessage(nil)
-                Self.logger.info("Credentials found — token valid, connection status set to connected")
+                Self.logger.info("Credentials found — token valid, fetching usage data")
+                await fetchUsageData(credentials: credentials, appState: appState)
 
             case .expired, .expiringSoon:
                 Self.tokenLogger.info("Token \(status == .expired ? "expired" : "expiring soon") — attempting refresh")
@@ -127,6 +135,73 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appState.updateStatusMessage(StatusMessage(
                 title: "Token expired",
                 detail: "Run any Claude Code command to refresh"
+            ))
+        }
+    }
+
+    private func fetchUsageData(credentials: KeychainCredentials, appState: AppState) async {
+        do {
+            let response = try await apiClient.fetchUsage(token: credentials.accessToken)
+
+            let fiveHourState = response.fiveHour.map { window in
+                WindowState(
+                    utilization: window.utilization ?? 0.0,
+                    resetsAt: window.resetsAt.flatMap { Date.fromISO8601($0) }
+                )
+            }
+            let sevenDayState = response.sevenDay.map { window in
+                WindowState(
+                    utilization: window.utilization ?? 0.0,
+                    resetsAt: window.resetsAt.flatMap { Date.fromISO8601($0) }
+                )
+            }
+
+            // Note: sevenDaySonnet and extraUsage are intentionally not mapped to WindowState yet.
+            // These will be surfaced in a future story when the UI supports additional windows.
+            appState.updateWindows(fiveHour: fiveHourState, sevenDay: sevenDayState)
+            appState.updateConnectionStatus(.connected)
+            appState.updateStatusMessage(nil)
+            Self.apiLogger.info("Usage data fetched and applied successfully")
+        } catch let error as AppError {
+            switch error {
+            case .apiError(statusCode: 401, _):
+                Self.apiLogger.info("API returned 401 — triggering token refresh")
+                await attemptTokenRefresh(credentials: credentials, appState: appState)
+            case .networkUnreachable:
+                Self.apiLogger.error("Network unreachable during usage fetch")
+                appState.updateConnectionStatus(.disconnected)
+                appState.updateStatusMessage(StatusMessage(
+                    title: "Unable to reach Claude API",
+                    detail: "Will retry automatically"
+                ))
+            case .apiError(let statusCode, let body):
+                Self.apiLogger.error("API error \(statusCode): \(body ?? "no body")")
+                appState.updateConnectionStatus(.disconnected)
+                appState.updateStatusMessage(StatusMessage(
+                    title: "API error (\(statusCode))",
+                    detail: body ?? "Unknown error"
+                ))
+            case .parseError:
+                Self.apiLogger.error("Failed to parse API response")
+                appState.updateConnectionStatus(.disconnected)
+                appState.updateStatusMessage(StatusMessage(
+                    title: "Unexpected API response format",
+                    detail: "Will retry automatically"
+                ))
+            default:
+                Self.apiLogger.error("Unexpected error during usage fetch: \(String(describing: error))")
+                appState.updateConnectionStatus(.disconnected)
+                appState.updateStatusMessage(StatusMessage(
+                    title: "Unexpected error",
+                    detail: "Will retry automatically"
+                ))
+            }
+        } catch {
+            Self.apiLogger.error("Unexpected non-AppError during usage fetch: \(error.localizedDescription)")
+            appState.updateConnectionStatus(.disconnected)
+            appState.updateStatusMessage(StatusMessage(
+                title: "Unexpected error",
+                detail: "Will retry automatically"
             ))
         }
     }

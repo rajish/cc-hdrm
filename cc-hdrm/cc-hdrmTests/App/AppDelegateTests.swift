@@ -79,6 +79,40 @@ struct MockTokenRefreshService: TokenRefreshServiceProtocol {
     }
 }
 
+// MARK: - Mock API Client
+
+struct MockAPIClient: APIClientProtocol {
+    let result: UsageResponse?
+    let error: (any Error)?
+    private let callTracker: APICallTracker
+
+    final class APICallTracker: @unchecked Sendable {
+        var callCount = 0
+        var lastToken: String?
+    }
+
+    init(result: UsageResponse? = nil, error: (any Error)? = nil) {
+        self.result = result
+        self.error = error
+        self.callTracker = APICallTracker()
+    }
+
+    var fetchCallCount: Int { callTracker.callCount }
+    var lastToken: String? { callTracker.lastToken }
+
+    func fetchUsage(token: String) async throws -> UsageResponse {
+        callTracker.callCount += 1
+        callTracker.lastToken = token
+        if let error {
+            throw error
+        }
+        guard let result else {
+            throw AppError.apiError(statusCode: 500, body: "mock not configured")
+        }
+        return result
+    }
+}
+
 // MARK: - AppDelegate Integration Tests
 
 @Suite("AppDelegate Token Refresh Integration Tests")
@@ -208,10 +242,17 @@ struct AppDelegateTests {
         let mockRefresh = MockTokenRefreshService(
             error: AppError.tokenRefreshFailed(underlying: URLError(.badServerResponse))
         )
+        let mockAPI = MockAPIClient(result: UsageResponse(
+            fiveHour: WindowUsage(utilization: 18.0, resetsAt: nil),
+            sevenDay: nil,
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        ))
 
         let delegate = AppDelegate(
             keychainService: mockKeychain,
-            tokenRefreshService: mockRefresh
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI
         )
         delegate.appState = AppState()
 
@@ -219,5 +260,115 @@ struct AppDelegateTests {
 
         #expect(delegate.appState?.connectionStatus == .connected)
         #expect(delegate.appState?.statusMessage == nil)
+    }
+}
+
+// MARK: - AppDelegate API Fetch Integration Tests
+
+@Suite("AppDelegate API Fetch Integration Tests")
+struct AppDelegateAPITests {
+
+    private static func validCredentials() -> KeychainCredentials {
+        KeychainCredentials(
+            accessToken: "valid-token",
+            refreshToken: "refresh-token",
+            expiresAt: (Date().timeIntervalSince1970 + 7200) * 1000,
+            subscriptionType: "pro",
+            rateLimitTier: nil,
+            scopes: nil
+        )
+    }
+
+    @Test("valid credentials + successful fetch populates fiveHour and sets connected")
+    @MainActor
+    func successfulFetchPopulatesState() async {
+        let mockKeychain = MockKeychainService(credentials: Self.validCredentials())
+        let mockRefresh = MockTokenRefreshService()
+        let mockAPI = MockAPIClient(result: UsageResponse(
+            fiveHour: WindowUsage(utilization: 18.0, resetsAt: "2026-01-31T01:59:59.782798+00:00"),
+            sevenDay: WindowUsage(utilization: 6.0, resetsAt: "2026-02-06T08:59:59+00:00"),
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        ))
+
+        let delegate = AppDelegate(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI
+        )
+        delegate.appState = AppState()
+
+        await delegate.performCredentialReadForTesting()
+
+        #expect(delegate.appState?.fiveHour?.utilization == 18.0)
+        #expect(delegate.appState?.sevenDay?.utilization == 6.0)
+        #expect(delegate.appState?.connectionStatus == .connected)
+        #expect(delegate.appState?.statusMessage == nil)
+    }
+
+    @Test("valid credentials + 401 triggers token refresh")
+    @MainActor
+    func apiError401TriggersRefresh() async {
+        let mockKeychain = MockKeychainService(credentials: Self.validCredentials())
+        let mockRefresh = MockTokenRefreshService(result: KeychainCredentials(
+            accessToken: "new-token",
+            refreshToken: "new-refresh",
+            expiresAt: (Date().timeIntervalSince1970 + 3600) * 1000,
+            subscriptionType: nil,
+            rateLimitTier: nil,
+            scopes: nil
+        ))
+        let mockAPI = MockAPIClient(error: AppError.apiError(statusCode: 401, body: "Unauthorized"))
+
+        let delegate = AppDelegate(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI
+        )
+        delegate.appState = AppState()
+
+        await delegate.performCredentialReadForTesting()
+
+        #expect(mockRefresh.refreshCallCount == 1, "Token refresh should be triggered on 401")
+    }
+
+    @Test("valid credentials + network error sets disconnected")
+    @MainActor
+    func networkErrorSetsDisconnected() async {
+        let mockKeychain = MockKeychainService(credentials: Self.validCredentials())
+        let mockRefresh = MockTokenRefreshService()
+        let mockAPI = MockAPIClient(error: AppError.networkUnreachable)
+
+        let delegate = AppDelegate(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI
+        )
+        delegate.appState = AppState()
+
+        await delegate.performCredentialReadForTesting()
+
+        #expect(delegate.appState?.connectionStatus == .disconnected)
+        #expect(delegate.appState?.statusMessage?.title == "Unable to reach Claude API")
+    }
+
+    @Test("valid credentials + parse error sets disconnected with format message")
+    @MainActor
+    func parseErrorSetsDisconnected() async {
+        let mockKeychain = MockKeychainService(credentials: Self.validCredentials())
+        let mockRefresh = MockTokenRefreshService()
+        let mockAPI = MockAPIClient(error: AppError.parseError(underlying: URLError(.cannotDecodeContentData)))
+
+        let delegate = AppDelegate(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI
+        )
+        delegate.appState = AppState()
+
+        await delegate.performCredentialReadForTesting()
+
+        #expect(delegate.appState?.connectionStatus == .disconnected)
+        #expect(delegate.appState?.statusMessage?.title == "Unexpected API response format")
     }
 }

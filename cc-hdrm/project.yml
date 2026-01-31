@@ -10,6 +10,8 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     MACOSX_DEPLOYMENT_TARGET: "14.0"
+    DEVELOPMENT_TEAM: HHTRL92UZR
+    CODE_SIGN_STYLE: Automatic
 
 targets:
   cc-hdrm:
