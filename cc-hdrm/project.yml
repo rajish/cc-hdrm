@@ -1,0 +1,46 @@
+name: cc-hdrm
+options:
+  bundleIdPrefix: com.cc-hdrm
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "26.2"
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+
+targets:
+  cc-hdrm:
+    type: application
+    platform: macOS
+    sources:
+      - path: cc-hdrm
+        excludes:
+          - "**/.gitkeep"
+    settings:
+      base:
+        INFOPLIST_FILE: cc-hdrm/Info.plist
+        CODE_SIGN_ENTITLEMENTS: cc-hdrm/cc_hdrm.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.cc-hdrm.app
+        PRODUCT_NAME: cc-hdrm
+        GENERATE_INFOPLIST_FILE: false
+    entitlements:
+      path: cc-hdrm/cc_hdrm.entitlements
+
+  cc-hdrmTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: cc-hdrmTests
+        excludes:
+          - "**/.gitkeep"
+    dependencies:
+      - target: cc-hdrm
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.cc-hdrm.tests
+        GENERATE_INFOPLIST_FILE: true
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/cc-hdrm.app/Contents/MacOS/cc-hdrm"
+        BUNDLE_LOADER: "$(TEST_HOST)"

@@ -1,0 +1,67 @@
+# generated: 2026-01-31
+# project: cc-usage
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created, ready for development
+#   - in-progress: Developer actively working on implementation
+#   - review: Implementation complete, ready for review
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Mark epic as 'in-progress' when starting work on its first story
+# - SM typically creates next story ONLY after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then Dev runs code-review (fresh context, ideally different LLM)
+
+generated: 2026-01-31
+project: cc-usage
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+  epic-1: in-progress
+  1-1-xcode-project-initialization-menu-bar-shell: done
+  1-2-keychain-credential-discovery: backlog
+  1-3-token-expiry-detection-refresh: backlog
+  epic-1-retrospective: optional
+
+  epic-2: backlog
+  2-1-api-client-usage-data-fetch: backlog
+  2-2-background-polling-engine: backlog
+  2-3-data-freshness-tracking: backlog
+  epic-2-retrospective: optional
+
+  epic-3: backlog
+  3-1-menu-bar-headroom-display-with-color-weight: backlog
+  3-2-context-adaptive-display-tighter-constraint-promotion: backlog
+  epic-3-retrospective: optional
+
+  epic-4: backlog
+  4-1-popover-shell-click-to-expand: backlog
+  4-2-5-hour-headroom-ring-gauge-with-countdown: backlog
+  4-3-7-day-headroom-ring-gauge-with-countdown: backlog
+  4-4-panel-footer-tier-freshness-quit: backlog
+  4-5-status-messages-for-error-states: backlog
+  epic-4-retrospective: optional
+
+  epic-5: backlog
+  5-1-notification-permission-service-setup: backlog
+  5-2-threshold-state-machine-warning-notifications: backlog
+  5-3-critical-threshold-persistent-notifications: backlog
+  epic-5-retrospective: optional
