@@ -101,4 +101,30 @@ struct AppStateTests {
         state.updateSubscriptionTier("pro")
         #expect(state.subscriptionTier == "pro")
     }
+
+    // MARK: - StatusMessage Tests
+
+    @Test("default statusMessage is nil")
+    @MainActor
+    func defaultStatusMessageIsNil() {
+        let state = AppState()
+        #expect(state.statusMessage == nil)
+    }
+
+    @Test("updateStatusMessage sets title and detail")
+    @MainActor
+    func updateStatusMessageSetsValues() {
+        let state = AppState()
+        state.updateStatusMessage(StatusMessage(title: "No Claude credentials found", detail: "Run Claude Code to create them"))
+        #expect(state.statusMessage == StatusMessage(title: "No Claude credentials found", detail: "Run Claude Code to create them"))
+    }
+
+    @Test("updateStatusMessage clears with nil")
+    @MainActor
+    func updateStatusMessageClearsWithNil() {
+        let state = AppState()
+        state.updateStatusMessage(StatusMessage(title: "title", detail: "detail"))
+        state.updateStatusMessage(nil)
+        #expect(state.statusMessage == nil)
+    }
 }

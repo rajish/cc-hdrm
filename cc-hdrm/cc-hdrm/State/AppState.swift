@@ -20,6 +20,12 @@ struct WindowState: Sendable, Equatable {
     }
 }
 
+/// A user-facing status message with title and detail text.
+struct StatusMessage: Sendable, Equatable {
+    let title: String
+    let detail: String
+}
+
 /// Single source of truth for all application state.
 /// Views observe this directly. Services write via methods only.
 @Observable
@@ -30,6 +36,7 @@ final class AppState {
     private(set) var connectionStatus: ConnectionStatus = .disconnected
     private(set) var lastUpdated: Date?
     private(set) var subscriptionTier: String?
+    private(set) var statusMessage: StatusMessage?
 
     /// Updates the usage window states from API data.
     func updateWindows(fiveHour: WindowState?, sevenDay: WindowState?) {
@@ -46,5 +53,10 @@ final class AppState {
     /// Updates the subscription tier.
     func updateSubscriptionTier(_ tier: String?) {
         self.subscriptionTier = tier
+    }
+
+    /// Updates or clears the status message shown to the user.
+    func updateStatusMessage(_ message: StatusMessage?) {
+        self.statusMessage = message
     }
 }

@@ -37,7 +37,7 @@ story_location: _bmad-output/implementation-artifacts
 development_status:
   epic-1: in-progress
   1-1-xcode-project-initialization-menu-bar-shell: done
-  1-2-keychain-credential-discovery: backlog
+  1-2-keychain-credential-discovery: done
   1-3-token-expiry-detection-refresh: backlog
   epic-1-retrospective: optional
 
