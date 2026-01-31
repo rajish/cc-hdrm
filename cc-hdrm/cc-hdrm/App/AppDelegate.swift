@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     internal var appState: AppState?
     private var pollingEngine: (any PollingEngineProtocol)?
+    private var freshnessMonitor: (any FreshnessMonitorProtocol)?
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -16,9 +17,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         super.init()
     }
 
-    /// Test-only initializer for injecting a mock polling engine.
-    init(pollingEngine: any PollingEngineProtocol) {
+    /// Test-only initializer for injecting mock services.
+    init(pollingEngine: any PollingEngineProtocol, freshnessMonitor: (any FreshnessMonitorProtocol)? = nil) {
         self.pollingEngine = pollingEngine
+        self.freshnessMonitor = freshnessMonitor
         super.init()
     }
 
@@ -48,12 +50,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
 
+        // Create FreshnessMonitor if not already injected (test path)
+        if freshnessMonitor == nil {
+            freshnessMonitor = FreshnessMonitor(appState: state)
+        }
+
         Task {
             await pollingEngine?.start()
+            await freshnessMonitor?.start()
         }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         pollingEngine?.stop()
+        freshnessMonitor?.stop()
     }
 }

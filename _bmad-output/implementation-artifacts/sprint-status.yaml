@@ -44,7 +44,7 @@ development_status:
   epic-2: in-progress
   2-1-api-client-usage-data-fetch: done
   2-2-background-polling-engine: done
-  2-3-data-freshness-tracking: backlog
+  2-3-data-freshness-tracking: done
   epic-2-retrospective: optional
 
   epic-3: backlog

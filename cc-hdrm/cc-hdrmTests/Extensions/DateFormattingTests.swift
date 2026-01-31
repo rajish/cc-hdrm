@@ -55,4 +55,54 @@ struct DateFormattingTests {
         #expect(Date.fromISO8601("") == nil)
         #expect(Date.fromISO8601("2026-13-45") == nil)
     }
+
+    // MARK: - relativeTimeAgo Tests
+
+    @Test("0 seconds ago returns 'just now'")
+    func zeroSecondsAgoReturnsJustNow() {
+        let date = Date()
+        #expect(date.relativeTimeAgo() == "just now")
+    }
+
+    @Test("future date returns 'just now'")
+    func futureDateReturnsJustNow() {
+        let date = Date().addingTimeInterval(60)
+        #expect(date.relativeTimeAgo() == "just now")
+    }
+
+    @Test("5 seconds ago returns seconds format")
+    func fiveSecondsAgo() {
+        let date = Date().addingTimeInterval(-5)
+        #expect(date.relativeTimeAgo() == "5s ago")
+    }
+
+    @Test("45 seconds ago returns seconds format")
+    func fortyFiveSecondsAgo() {
+        let date = Date().addingTimeInterval(-45)
+        #expect(date.relativeTimeAgo() == "45s ago")
+    }
+
+    @Test("90 seconds ago returns minutes format")
+    func ninetySecondsAgo() {
+        let date = Date().addingTimeInterval(-90)
+        #expect(date.relativeTimeAgo() == "1m ago")
+    }
+
+    @Test("150 seconds ago returns minutes format")
+    func oneHundredFiftySecondsAgo() {
+        let date = Date().addingTimeInterval(-150)
+        #expect(date.relativeTimeAgo() == "2m ago")
+    }
+
+    @Test("3720 seconds ago returns hours and minutes format")
+    func threeThousandSevenHundredTwentySecondsAgo() {
+        let date = Date().addingTimeInterval(-3720)
+        #expect(date.relativeTimeAgo() == "1h 2m ago")
+    }
+
+    @Test("90000 seconds ago returns days and hours format")
+    func ninetyThousandSecondsAgo() {
+        let date = Date().addingTimeInterval(-90000)
+        #expect(date.relativeTimeAgo() == "1d 1h ago")
+    }
 }

@@ -127,4 +127,42 @@ struct AppStateTests {
         state.updateStatusMessage(nil)
         #expect(state.statusMessage == nil)
     }
+
+    // MARK: - DataFreshness Derived Property Tests
+
+    @Test("dataFreshness returns .unknown when lastUpdated is nil")
+    @MainActor
+    func dataFreshnessUnknownWhenNilLastUpdated() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        #expect(state.dataFreshness == .unknown)
+    }
+
+    @Test("dataFreshness returns .fresh when lastUpdated is recent and connected")
+    @MainActor
+    func dataFreshnessFreshWhenRecentAndConnected() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateWindows(fiveHour: WindowState(utilization: 50, resetsAt: nil), sevenDay: nil)
+        #expect(state.dataFreshness == .fresh)
+    }
+
+    @Test("dataFreshness returns .unknown when disconnected regardless of lastUpdated")
+    @MainActor
+    func dataFreshnessUnknownWhenDisconnected() {
+        let state = AppState()
+        // Update windows to set lastUpdated, then disconnect
+        state.updateWindows(fiveHour: WindowState(utilization: 50, resetsAt: nil), sevenDay: nil)
+        state.updateConnectionStatus(.disconnected)
+        #expect(state.dataFreshness == .unknown)
+    }
+
+    @Test("dataFreshness returns .veryStale when lastUpdated is old and connected")
+    @MainActor
+    func dataFreshnessVeryStaleWhenOldAndConnected() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.setLastUpdated(Date().addingTimeInterval(-600))
+        #expect(state.dataFreshness == .veryStale)
+    }
 }

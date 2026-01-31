@@ -38,6 +38,15 @@ final class AppState {
     private(set) var subscriptionTier: String?
     private(set) var statusMessage: StatusMessage?
 
+    /// Derived data freshness based on `lastUpdated` and `connectionStatus`.
+    /// When disconnected, always returns `.unknown` regardless of `lastUpdated`.
+    var dataFreshness: DataFreshness {
+        guard connectionStatus == .connected else {
+            return .unknown
+        }
+        return DataFreshness(lastUpdated: lastUpdated)
+    }
+
     /// Updates the usage window states from API data.
     func updateWindows(fiveHour: WindowState?, sevenDay: WindowState?) {
         self.fiveHour = fiveHour
@@ -59,4 +68,11 @@ final class AppState {
     func updateStatusMessage(_ message: StatusMessage?) {
         self.statusMessage = message
     }
+
+    /// Sets `lastUpdated` to an arbitrary date. Test use only — not available in release builds.
+    #if DEBUG
+    func setLastUpdated(_ date: Date?) {
+        self.lastUpdated = date
+    }
+    #endif
 }
