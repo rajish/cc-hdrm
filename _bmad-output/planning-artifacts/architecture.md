@@ -629,7 +629,7 @@ Every architectural component has a defined file location. Boundaries are enforc
 
 **Non-Functional Requirements:** All 13 NFRs are addressed architecturally.
 
-**NFR8 Documentation Note:** PRD says "no endpoint other than claude.ai" but architecture correctly uses `api.anthropic.com` (usage) and `platform.claude.com` (token refresh) per API spike results. PRD should be updated.
+**NFR Coverage:** All 13 NFRs aligned between PRD and architecture. NFR7 specifies fresh Keychain read each poll cycle (no token caching). NFR8 correctly references `api.anthropic.com` and `platform.claude.com`.
 
 ### Implementation Readiness Validation ✅
 
@@ -643,13 +643,18 @@ Every architectural component has a defined file location. Boundaries are enforc
 
 **Critical Gaps:** None.
 
-**Important Gaps (documentation, not blocking):**
-1. PRD endpoint inconsistency — NFR8 references `claude.ai`, should reference `api.anthropic.com` and `platform.claude.com`
-2. PRD platform target — still says macOS 13+, architecture requires macOS 14+
-3. PRD threshold framing — PRD says 80%/95% usage, UX spec says 20%/5% headroom (equivalent values, different framing). Architecture uses headroom framing per UX spec.
-4. PRD Keychain access — says "Read-only" but token refresh requires write access
+**Resolved Gaps (fixed in PRD 2026-01-31):**
+1. ~~PRD endpoint inconsistency~~ — NFR8 now references `api.anthropic.com` and `platform.claude.com`
+2. ~~PRD platform target~~ — now says macOS 14+ (Sonoma), matching architecture's `@Observable` requirement
+3. ~~PRD Keychain access~~ — now says read/write, acknowledging token refresh write-back
+4. ~~FR4 stale Cloudflare fallback~~ — replaced with standard HTTP error handling language
+5. ~~NFR7 token caching ambiguity~~ — now specifies fresh Keychain read each poll cycle
+6. ~~Stale Cloudflare references~~ — removed or marked as resolved throughout PRD
 
-**Nice-to-Have:**
+**Remaining Minor Inconsistency:**
+- PRD threshold framing uses usage percentages (80%/95%), UX spec and architecture use headroom percentages (20%/5%). Values are mathematically equivalent — not a conflict, just different framing. Architecture follows UX spec convention.
+
+**Open Items (non-blocking):**
 - Token refresh OAuth request format (grant_type, client_id, etc.) needs discovery during implementation
 
 ### Architecture Completeness Checklist
@@ -693,7 +698,6 @@ Every architectural component has a defined file location. Boundaries are enforc
 
 **Areas for Future Enhancement:**
 - Token refresh request format needs discovery during implementation
-- PRD documentation inconsistencies should be updated (endpoints, platform target, threshold framing)
 - Phase 2 settings storage (UserDefaults) not yet designed — deferred intentionally
 
 ### Implementation Handoff
