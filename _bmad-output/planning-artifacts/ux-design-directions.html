@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cc-hdrm — Design Direction Mockups</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif; background: #1a1a1a; color: #e0e0e0; padding: 40px; }
+  h1 { font-size: 28px; font-weight: 300; margin-bottom: 8px; color: #fff; }
+  .subtitle { font-size: 14px; color: #888; margin-bottom: 40px; }
+  .directions { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 40px; }
+  .direction { background: #222; border-radius: 12px; padding: 24px; border: 1px solid #333; }
+  .direction:hover { border-color: #555; }
+  .direction h2 { font-size: 16px; font-weight: 600; margin-bottom: 4px; color: #fff; }
+  .direction .desc { font-size: 12px; color: #888; margin-bottom: 20px; line-height: 1.5; }
+  .label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+
+  /* Menu bar simulation */
+  .menubar { background: #2a2a2a; border-radius: 6px; height: 24px; display: flex; align-items: center; justify-content: flex-end; padding: 0 12px; gap: 16px; margin-bottom: 16px; font-size: 12px; }
+  .menubar .other { color: #999; font-size: 11px; }
+  .menubar .hdrm { font-variant-numeric: tabular-nums; }
+
+  /* Popover simulation */
+  .popover { background: #2d2d2d; border-radius: 10px; border: 1px solid #444; overflow: hidden; position: relative; }
+  .popover::before { content: ''; position: absolute; top: -6px; right: 24px; width: 12px; height: 12px; background: #2d2d2d; border-left: 1px solid #444; border-top: 1px solid #444; transform: rotate(45deg); }
+
+  /* Gauge styles */
+  .gauges { display: flex; justify-content: center; gap: 24px; padding: 16px; }
+  .gauge-container { text-align: center; }
+  .gauge-label { font-size: 10px; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .gauge { position: relative; width: 80px; height: 80px; }
+  .gauge svg { transform: rotate(-90deg); }
+  .gauge-track { fill: none; stroke: #3a3a3a; }
+  .gauge-fill { fill: none; stroke-linecap: round; transition: stroke-dashoffset 0.5s; }
+  .gauge-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
+  .gauge-pct { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .gauge-countdown { font-size: 10px; color: #888; margin-top: 4px; }
+
+  /* Color tokens */
+  .c-normal { color: #5ac85a; }
+  .c-caution { color: #e8c840; }
+  .c-warning { color: #e88c30; }
+  .c-critical { color: #e84040; }
+  .c-exhausted { color: #e84040; }
+  .c-disconnected { color: #666; }
+  .s-normal { stroke: #5ac85a; }
+  .s-caution { stroke: #e8c840; }
+  .s-warning { stroke: #e88c30; }
+  .s-critical { stroke: #e84040; }
+  .s-exhausted { stroke: #e84040; }
+
+  /* Font weight escalation */
+  .w-normal { font-weight: 400; }
+  .w-caution { font-weight: 500; }
+  .w-warning { font-weight: 600; }
+  .w-critical { font-weight: 700; }
+  .w-exhausted { font-weight: 700; }
+
+  /* Popover footer */
+  .popover-footer { padding: 8px 16px; border-top: 1px solid #3a3a3a; display: flex; justify-content: space-between; align-items: center; }
+  .popover-footer .tier { font-size: 11px; color: #888; }
+  .popover-footer .updated { font-size: 10px; color: #555; }
+  .popover-footer .quit { font-size: 11px; color: #666; cursor: pointer; }
+  .popover-footer .quit:hover { color: #e84040; }
+
+  /* Direction-specific */
+  .gauges-sm .gauge { width: 64px; height: 64px; }
+  .gauges-sm .gauge-pct { font-size: 15px; }
+  .gauges-lg .gauge { width: 96px; height: 96px; }
+  .gauges-lg .gauge-pct { font-size: 22px; }
+
+  .popover-wide .gauges { gap: 40px; padding: 20px; }
+  .popover-minimal { border: none; background: #262626; }
+  .popover-minimal::before { background: #262626; border-color: transparent; }
+
+  /* Horizontal bar alternative */
+  .bars-layout { padding: 16px; }
+  .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .bar-row:last-child { margin-bottom: 0; }
+  .bar-label { font-size: 10px; color: #888; width: 20px; text-transform: uppercase; flex-shrink: 0; }
+  .bar-track { flex: 1; height: 6px; background: #3a3a3a; border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; }
+  .bar-info { display: flex; justify-content: space-between; font-size: 11px; margin-top: 2px; }
+  .bar-pct { font-weight: 600; width: 36px; text-align: right; flex-shrink: 0; }
+  .bar-reset { font-size: 10px; color: #888; width: 60px; text-align: right; flex-shrink: 0; }
+
+  /* State showcase */
+  .states { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  .state-chip { font-size: 10px; padding: 3px 8px; border-radius: 4px; background: #333; }
+
+  /* Comparison section */
+  .comparison { margin-top: 60px; background: #222; border-radius: 12px; padding: 24px; border: 1px solid #333; }
+  .comparison h2 { font-size: 18px; margin-bottom: 16px; color: #fff; }
+  .comp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+  .comp-item { background: #2a2a2a; border-radius: 8px; padding: 16px; text-align: center; }
+  .comp-item .comp-label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+
+  /* Inline gauge helper */
+  .inline-gauges { display: flex; align-items: center; gap: 16px; padding: 12px 16px; }
+  .inline-gauge { display: flex; align-items: center; gap: 8px; }
+  .inline-ring { width: 40px; height: 40px; position: relative; }
+  .inline-ring svg { transform: rotate(-90deg); }
+  .inline-info { text-align: left; }
+  .inline-pct { font-size: 14px; font-weight: 700; }
+  .inline-reset { font-size: 10px; color: #888; }
+  .inline-label { font-size: 9px; color: #666; text-transform: uppercase; }
+</style>
+</head>
+<body>
+
+<h1>cc-hdrm — Design Directions</h1>
+<p class="subtitle">6 visual approaches for the menu bar popover and indicator. All use the headroom model, circular gauges, dense layout, and native macOS styling.</p>
+
+<div class="directions">
+
+<!-- Direction 1: Classic Dual Gauge -->
+<div class="direction">
+  <h2>Direction 1: Classic Dual Gauge</h2>
+  <p class="desc">Two large ring gauges side by side. Clean, symmetrical, iStat-inspired. The percentage lives inside the ring, countdown below. Maximum readability.</p>
+
+  <p class="label">Menu Bar — Normal (83% headroom)</p>
+  <div class="menubar">
+    <span class="other">Docker</span>
+    <span class="other">iStat</span>
+    <span class="hdrm c-normal w-normal">83%</span>
+    <span class="other">Sat 3:05</span>
+  </div>
+
+  <p class="label">Popover</p>
+  <div class="popover">
+    <div class="gauges">
+      <div class="gauge-container">
+        <div class="gauge-label">5h window</div>
+        <div class="gauge">
+          <svg viewBox="0 0 80 80" width="80" height="80">
+            <circle class="gauge-track" cx="40" cy="40" r="34" stroke-width="6"/>
+            <circle class="gauge-fill s-normal" cx="40" cy="40" r="34" stroke-width="6" stroke-dasharray="213.6" stroke-dashoffset="36.3"/>
+          </svg>
+          <div class="gauge-text">
+            <div class="gauge-pct c-normal">83%</div>
+          </div>
+        </div>
+        <div class="gauge-countdown">resets in 2h 13m</div>
+      </div>
+      <div class="gauge-container">
+        <div class="gauge-label">7d window</div>
+        <div class="gauge">
+          <svg viewBox="0 0 80 80" width="80" height="80">
+            <circle class="gauge-track" cx="40" cy="40" r="34" stroke-width="6"/>
+            <circle class="gauge-fill s-normal" cx="40" cy="40" r="34" stroke-width="6" stroke-dasharray="213.6" stroke-dashoffset="53.4"/>
+          </svg>
+          <div class="gauge-text">
+            <div class="gauge-pct c-normal">72%</div>
+          </div>
+        </div>
+        <div class="gauge-countdown">resets in 3d 4h</div>
+      </div>
+    </div>
+    <div class="popover-footer">
+      <span class="tier">Max Plan</span>
+      <span class="updated">Updated 12s ago</span>
+      <span class="quit">Quit</span>
+    </div>
+  </div>
+
+  <div class="states">
+    <span class="state-chip c-normal">Normal</span>
+    <span class="state-chip c-caution">Caution</span>
+    <span class="state-chip c-warning">Warning</span>
+    <span class="state-chip c-critical">Critical</span>
+  </div>
+</div>
+
+<!-- Direction 2: Compact Inline -->
+<div class="direction">
+  <h2>Direction 2: Compact Inline</h2>
+  <p class="desc">Smaller gauges with info beside them, not below. Ultra-dense, fits more into less vertical space. For the developer who wants maximum information in minimum popover height.</p>
+
+  <p class="label">Menu Bar — Caution (35% headroom)</p>
+  <div class="menubar">
+    <span class="other">Docker</span>
+    <span class="other">iStat</span>
+    <span class="hdrm c-caution w-caution">35%</span>
+    <span class="other">Sat 3:05</span>
+  </div>
+
+  <p class="label">Popover</p>
+  <div class="popover">
+    <div class="inline-gauges">
+      <div class="inline-gauge">
+        <div class="inline-ring">
+          <svg viewBox="0 0 40 40" width="40" height="40">
+            <circle class="gauge-track" cx="20" cy="20" r="16" stroke-width="4"/>
+            <circle class="gauge-fill s-caution" cx="20" cy="20" r="16" stroke-width="4" stroke-dasharray="100.5" stroke-dashoffset="65.3"/>
+          </svg>
+        </div>
+        <div class="inline-info">
+          <div class="inline-label">5h</div>
+          <div class="inline-pct c-caution">35%</div>
+          <div class="inline-reset">resets 47m</div>
+        </div>
+      </div>
+      <div class="inline-gauge">
+        <div class="inline-ring">
+          <svg viewBox="0 0 40 40" width="40" height="40">
+            <circle class="gauge-track" cx="20" cy="20" r="16" stroke-width="4"/>
+            <circle class="gauge-fill s-caution" cx="20" cy="20" r="16" stroke-width="4" stroke-dasharray="100.5" stroke-dashoffset="72.4"/>
+          </svg>
+        </div>
+        <div class="inline-info">
+          <div class="inline-label">7d</div>
+          <div class="inline-pct c-caution">28%</div>
+          <div class="inline-reset">resets 2d 8h</div>
+        </div>
+      </div>
+    </div>
+    <div class="popover-footer">
+      <span class="tier">Max Plan</span>
+      <span class="updated">Updated 8s ago</span>
+      <span class="quit">Quit</span>
+    </div>
+  </div>
+
+  <div class="states">
+    <span class="state-chip c-normal">Normal</span>
+    <span class="state-chip c-caution">Caution</span>
+    <span class="state-chip c-warning">Warning</span>
+    <span class="state-chip c-critical">Critical</span>
+  </div>
+</div>
+
+<!-- Direction 3: Warning State -->
+<div class="direction">
+  <h2>Direction 3: Warning State</h2>
+  <p class="desc">Shows the orange warning state (17% headroom). Classic dual gauge layout with bold menu bar text. Demonstrates the visual escalation at the "make decisions" threshold.</p>
+
+  <p class="label">Menu Bar — Warning (17% headroom)</p>
+  <div class="menubar">
+    <span class="other">Docker</span>
+    <span class="other">iStat</span>
+    <span class="hdrm c-warning w-warning">17%</span>
+    <span class="other">Sat 3:05</span>
+  </div>
+
+  <p class="label">Popover</p>
+  <div class="popover">
+    <div class="gauges">
+      <div class="gauge-container">
+        <div class="gauge-label">5h window</div>
+        <div class="gauge">
+          <svg viewBox="0 0 80 80" width="80" height="80">
+            <circle class="gauge-track" cx="40" cy="40" r="34" stroke-width="6"/>
+            <circle class="gauge-fill s-warning" cx="40" cy="40" r="34" stroke-width="6" stroke-dasharray="213.6" stroke-dashoffset="177.3"/>
+          </svg>
+          <div class="gauge-text">
+            <div class="gauge-pct c-warning">17%</div>
+          </div>
+        </div>
+        <div class="gauge-countdown">resets in 47m</div>
+      </div>
+      <div class="gauge-container">
+        <div class="gauge-label">7d window</div>
+        <div class="gauge">
+          <svg viewBox="0 0 80 80" width="80" height="80">
+            <circle class="gauge-track" cx="40" cy="40" r="34" stroke-width="6"/>
+            <circle class="gauge-fill s-caution" cx="40" cy="40" r="34" stroke-width="6" stroke-dasharray="213.6" stroke-dashoffset="145.2"/>
+          </svg>
+          <div class="gauge-text">
+            <div class="gauge-pct c-caution">32%</div>
+          </div>
+        </div>
+        <div class="gauge-countdown">resets in 2d 8h</div>
+      </div>
+    </div>
+    <div class="popover-footer">
+      <span class="tier">Max Plan</span>
+      <span class="updated">Updated 4s ago</span>
+      <span class="quit">Quit</span>
+    </div>
+  </div>
+
+  <div class="states">
+    <span class="state-chip c-normal">Normal</span>
+    <span class="state-chip c-caution">Caution</span>
+    <span class="state-chip c-warning" style="background:#3a2a1a;">● Warning</span>
+    <span class="state-chip c-critical">Critical</span>
+  </div>
+</div>
+
+<!-- Direction 4: Critical / Exhausted State -->
+<div class="direction">
+  <h2>Direction 4: Exhausted State</h2>
+  <p class="desc">Shows the exhausted state (0% headroom). Menu bar switches to countdown. Gauges are nearly empty. Demonstrates the context-adaptive display switch from percentage to reset timer.</p>
+
+  <p class="label">Menu Bar — Exhausted (0% headroom)</p>
+  <div class="menubar">
+    <span class="other">Docker</span>
+    <span class="other">iStat</span>
+    <span class="hdrm c-exhausted w-exhausted">↻ 12m</span>
+    <span class="other">Sat 3:05</span>
+  </div>
+
+  <p class="label">Popover</p>
+  <div class="popover">
+    <div class="gauges">
+      <div class="gauge-container">
+        <div class="gauge-label">5h window</div>
+        <div class="gauge">
+          <svg viewBox="0 0 80 80" width="80" height="80">
+            <circle class="gauge-track" cx="40" cy="40" r="34" stroke-width="6"/>
+            <circle class="gauge-fill s-exhausted" cx="40" cy="40" r="34" stroke-width="6" stroke-dasharray="213.6" stroke-dashoffset="213.6"/>
+          </svg>
+          <div class="gauge-text">
+            <div class="gauge-pct c-exhausted">0%</div>
+          </div>
+        </div>
+        <div class="gauge-countdown" style="color:#e84040;">resets in 12m</div>
+      </div>
+      <div class="gauge-container">
+        <div class="gauge-label">7d window</div>
+        <div class="gauge">
+          <svg viewBox="0 0 80 80" width="80" height="80">
+            <circle class="gauge-track" cx="40" cy="40" r="34" stroke-width="6"/>
+            <circle class="gauge-fill s-warning" cx="40" cy="40" r="34" stroke-width="6" stroke-dasharray="213.6" stroke-dashoffset="170.9"/>
+          </svg>
+          <div class="gauge-text">
+            <div class="gauge-pct c-warning">20%</div>
+          </div>
+        </div>
+        <div class="gauge-countdown">resets in 1d 16h</div>
+      </div>
+    </div>
+    <div class="popover-footer">
+      <span class="tier">Max Plan</span>
+      <span class="updated">Updated 2s ago</span>
+      <span class="quit">Quit</span>
+    </div>
+  </div>
+
+  <div class="states">
+    <span class="state-chip c-normal">Normal</span>
+    <span class="state-chip c-caution">Caution</span>
+    <span class="state-chip c-warning">Warning</span>
+    <span class="state-chip c-exhausted" style="background:#3a1a1a;">● Exhausted</span>
+  </div>
+</div>
+
+<!-- Direction 5: Disconnected State -->
+<div class="direction">
+  <h2>Direction 5: Disconnected State</h2>
+  <p class="desc">Shows the disconnected/error state. Menu bar shows "—" in grey. Gauges are inactive. Clear message that this is a tool problem, not a usage problem. Annoyance, not anxiety.</p>
+
+  <p class="label">Menu Bar — Disconnected</p>
+  <div class="menubar">
+    <span class="other">Docker</span>
+    <span class="other">iStat</span>
+    <span class="hdrm c-disconnected w-normal">—</span>
+    <span class="other">Sat 3:05</span>
+  </div>
+
+  <p class="label">Popover</p>
+  <div class="popover">
+    <div class="gauges">
+      <div class="gauge-container">
+        <div class="gauge-label" style="color:#555;">5h window</div>
+        <div class="gauge">
+          <svg viewBox="0 0 80 80" width="80" height="80">
+            <circle class="gauge-track" cx="40" cy="40" r="34" stroke-width="6"/>
+          </svg>
+          <div class="gauge-text">
+            <div class="gauge-pct c-disconnected" style="font-size:14px;">—</div>
+          </div>
+        </div>
+        <div class="gauge-countdown" style="color:#555;">no data</div>
+      </div>
+      <div class="gauge-container">
+        <div class="gauge-label" style="color:#555;">7d window</div>
+        <div class="gauge">
+          <svg viewBox="0 0 80 80" width="80" height="80">
+            <circle class="gauge-track" cx="40" cy="40" r="34" stroke-width="6"/>
+          </svg>
+          <div class="gauge-text">
+            <div class="gauge-pct c-disconnected" style="font-size:14px;">—</div>
+          </div>
+        </div>
+        <div class="gauge-countdown" style="color:#555;">no data</div>
+      </div>
+    </div>
+    <div style="padding: 8px 16px; text-align: center; font-size: 11px; color: #888; border-top: 1px solid #3a3a3a;">
+      Unable to reach Claude API<br>
+      <span style="font-size: 10px; color: #555;">Last attempt: 30s ago</span>
+    </div>
+    <div class="popover-footer">
+      <span class="tier" style="color:#555;">—</span>
+      <span class="updated" style="color:#555;">Disconnected</span>
+      <span class="quit">Quit</span>
+    </div>
+  </div>
+
+  <div class="states">
+    <span class="state-chip c-disconnected" style="background:#2a2a2a;">● Disconnected</span>
+  </div>
+</div>
+
+<!-- Direction 6: Stacked Vertical -->
+<div class="direction">
+  <h2>Direction 6: Stacked Vertical</h2>
+  <p class="desc">Gauges stacked vertically instead of side-by-side. Narrower popover, taller layout. 5h gauge is larger (primary), 7d gauge is smaller (secondary). Emphasizes information hierarchy.</p>
+
+  <p class="label">Menu Bar — Critical (4% headroom)</p>
+  <div class="menubar">
+    <span class="other">Docker</span>
+    <span class="other">iStat</span>
+    <span class="hdrm c-critical w-critical">4%</span>
+    <span class="other">Sat 3:05</span>
+  </div>
+
+  <p class="label">Popover</p>
+  <div class="popover" style="max-width: 180px; margin: 0 auto;">
+    <div style="padding: 16px; text-align: center;">
+      <div class="gauge-label">5h window</div>
+      <div class="gauge" style="margin: 8px auto; width: 96px; height: 96px;">
+        <svg viewBox="0 0 96 96" width="96" height="96">
+          <circle class="gauge-track" cx="48" cy="48" r="40" stroke-width="7"/>
+          <circle class="gauge-fill s-critical" cx="48" cy="48" r="40" stroke-width="7" stroke-dasharray="251.3" stroke-dashoffset="241.2"/>
+        </svg>
+        <div class="gauge-text">
+          <div class="gauge-pct c-critical" style="font-size: 24px;">4%</div>
+        </div>
+      </div>
+      <div class="gauge-countdown" style="color:#e84040;">resets in 8m</div>
+    </div>
+    <div style="padding: 0 16px 16px; text-align: center; border-top: 1px solid #3a3a3a; padding-top: 12px;">
+      <div class="gauge-label">7d window</div>
+      <div class="gauge" style="margin: 8px auto; width: 56px; height: 56px;">
+        <svg viewBox="0 0 56 56" width="56" height="56">
+          <circle class="gauge-track" cx="28" cy="28" r="22" stroke-width="4"/>
+          <circle class="gauge-fill s-caution" cx="28" cy="28" r="22" stroke-width="4" stroke-dasharray="138.2" stroke-dashoffset="96.7"/>
+        </svg>
+        <div class="gauge-text">
+          <div class="gauge-pct c-caution" style="font-size: 13px;">30%</div>
+        </div>
+      </div>
+      <div class="gauge-countdown">resets in 2d 1h</div>
+    </div>
+    <div class="popover-footer">
+      <span class="tier">Max Plan</span>
+      <span class="quit">Quit</span>
+    </div>
+  </div>
+
+  <div class="states">
+    <span class="state-chip c-normal">Normal</span>
+    <span class="state-chip c-caution">Caution</span>
+    <span class="state-chip c-warning">Warning</span>
+    <span class="state-chip c-critical" style="background:#3a1a1a;">● Critical</span>
+  </div>
+</div>
+
+</div>
+
+<!-- Comparison: Menu bar states -->
+<div class="comparison">
+  <h2>Menu Bar States — All Headroom Levels</h2>
+  <p style="font-size: 12px; color: #888; margin-bottom: 16px;">Shows font weight escalation + color shift across all states. Notice how the text gets bolder and more vivid as headroom decreases.</p>
+  <div class="comp-grid">
+    <div class="comp-item">
+      <div class="comp-label">Normal (83%)</div>
+      <div class="menubar" style="justify-content: center; margin-bottom: 0;">
+        <span class="hdrm c-normal w-normal" style="font-size: 13px;">83%</span>
+      </div>
+    </div>
+    <div class="comp-item">
+      <div class="comp-label">Caution (35%)</div>
+      <div class="menubar" style="justify-content: center; margin-bottom: 0;">
+        <span class="hdrm c-caution w-caution" style="font-size: 13px;">35%</span>
+      </div>
+    </div>
+    <div class="comp-item">
+      <div class="comp-label">Warning (17%)</div>
+      <div class="menubar" style="justify-content: center; margin-bottom: 0;">
+        <span class="hdrm c-warning w-warning" style="font-size: 13px;">17%</span>
+      </div>
+    </div>
+    <div class="comp-item">
+      <div class="comp-label">Critical (4%)</div>
+      <div class="menubar" style="justify-content: center; margin-bottom: 0;">
+        <span class="hdrm c-critical w-critical" style="font-size: 13px;">4%</span>
+      </div>
+    </div>
+    <div class="comp-item">
+      <div class="comp-label">Exhausted (0%)</div>
+      <div class="menubar" style="justify-content: center; margin-bottom: 0;">
+        <span class="hdrm c-exhausted w-exhausted" style="font-size: 13px;">↻ 12m</span>
+      </div>
+    </div>
+    <div class="comp-item">
+      <div class="comp-label">Disconnected</div>
+      <div class="menubar" style="justify-content: center; margin-bottom: 0;">
+        <span class="hdrm c-disconnected w-normal" style="font-size: 13px;">—</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Notification mockups -->
+<div class="comparison" style="margin-top: 30px;">
+  <h2>Notification Mockups</h2>
+  <p style="font-size: 12px; color: #888; margin-bottom: 16px;">macOS native notification style. Factual language, full context, no urgency words.</p>
+  <div style="display: flex; flex-direction: column; gap: 12px; max-width: 360px;">
+    <div style="background: #3a3a3a; border-radius: 12px; padding: 12px 16px; display: flex; gap: 12px; align-items: flex-start;">
+      <div style="width: 36px; height: 36px; border-radius: 8px; background: #2a2a2a; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+        <span style="font-size: 14px; font-weight: 700;" class="c-warning">17%</span>
+      </div>
+      <div>
+        <div style="font-size: 12px; font-weight: 600; color: #fff;">cc-hdrm</div>
+        <div style="font-size: 11px; color: #ccc; line-height: 1.4;">Claude headroom at 17% — 5h window resets in 47 min.</div>
+      </div>
+    </div>
+    <div style="background: #3a3a3a; border-radius: 12px; padding: 12px 16px; display: flex; gap: 12px; align-items: flex-start;">
+      <div style="width: 36px; height: 36px; border-radius: 8px; background: #2a2a2a; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+        <span style="font-size: 14px; font-weight: 700;" class="c-critical">4%</span>
+      </div>
+      <div>
+        <div style="font-size: 12px; font-weight: 600; color: #fff;">cc-hdrm</div>
+        <div style="font-size: 11px; color: #ccc; line-height: 1.4;">Claude headroom at 4% — 5h window resets in 8 min.</div>
+      </div>
+    </div>
+    <div style="background: #3a3a3a; border-radius: 12px; padding: 12px 16px; display: flex; gap: 12px; align-items: flex-start;">
+      <div style="width: 36px; height: 36px; border-radius: 8px; background: #2a2a2a; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+        <span style="font-size: 14px; font-weight: 700;" class="c-caution">28%</span>
+      </div>
+      <div>
+        <div style="font-size: 12px; font-weight: 600; color: #fff;">cc-hdrm</div>
+        <div style="font-size: 11px; color: #ccc; line-height: 1.4;">Claude 7-day headroom at 28% — resets in 2d 8h.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
