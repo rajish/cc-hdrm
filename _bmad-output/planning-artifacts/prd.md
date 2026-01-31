@@ -117,7 +117,7 @@ OAuth tokens expire (observed `expiresAt` ~6h from issue). The Keychain includes
 - Stable for 8+ continuous hours without crash or memory leak
 - Memory under 50 MB
 - Usage data no more than 60s stale
-- Cloudflare fallback handled silently -- user sees usage data or a clear status, never a raw error
+- API errors handled silently -- user sees usage data or a clear status, never a raw error
 - Zero false negatives on threshold notifications
 
 ### Measurable Outcomes
@@ -145,8 +145,7 @@ OAuth tokens expire (observed `expiresAt` ~6h from issue). The Keychain includes
 3. **Automatic authentication** -- reads OAuth credentials from macOS Keychain, zero manual config
 4. **Background polling** -- every 30-60 seconds, entirely outside Claude conversations
 5. **Threshold notifications** -- macOS native notifications at 80% and 95% (hardcoded)
-6. **Cloudflare fallback** -- layered strategy with graceful error handling
-7. **Disconnected state** -- clear indicator when API is unreachable
+6. **Disconnected state** -- clear indicator when API is unreachable
 8. **Subscription tier display** -- Pro/Max shown in expanded panel
 
 **Core User Journeys Supported:** All three (onboarding, daily flow, edge case)
@@ -170,7 +169,7 @@ OAuth tokens expire (observed `expiresAt` ~6h from issue). The Keychain includes
 
 | Risk                             | Likelihood | Impact | Mitigation                                               |
 | -------------------------------- | ---------- | ------ | -------------------------------------------------------- |
-| Cloudflare blocks all approaches | Medium     | Fatal  | Spike first. Layered fallback chain. Kill if all fail.   |
+| ~~Cloudflare blocks all approaches~~ | ~~Medium~~ | ~~Fatal~~ | **Eliminated** -- API is on `api.anthropic.com`, no Cloudflare. See API Spike Results. |
 | OAuth token expiry mid-session   | High       | Low    | Show clear "token expired, run claude to refresh" status |
 | Keychain access denied           | Low        | Medium | Clear error message with instructions                    |
 | Anthropic changes API format     | Low        | Medium | Defensive parsing, graceful degradation                  |
@@ -232,7 +231,7 @@ Without cc-hdrm, he'd have kept going, gotten cut off mid-response, lost context
 
 ### Architecture
 
-- **Language/Framework:** Swift 5.9+, SwiftUI, targeting macOS 13+ (Ventura)
+- **Language/Framework:** Swift 5.9+, SwiftUI, targeting macOS 14+ (Sonoma) — required for `@Observable` macro
 - **App type:** Menu bar-only (LSUIElement = true, no dock icon, no main window)
 - **Distribution:** Build from source (Xcode), manual update
 - **Signing:** Unsigned for initial release, users allow in System Preferences
@@ -241,13 +240,13 @@ Without cc-hdrm, he'd have kept going, gotten cut off mid-response, lost context
 
 | Platform | Status       | Notes                                |
 | -------- | ------------ | ------------------------------------ |
-| macOS    | MVP          | 13+ (Ventura), Apple Silicon + Intel |
+| macOS    | MVP          | 14+ (Sonoma), Apple Silicon + Intel  |
 | Linux    | Future       | Community-contributed tray support   |
 | Windows  | Out of scope | No current plans                     |
 
 ### System Integration
 
-- **macOS Keychain** -- reads Claude Code OAuth credentials via `Security` framework. Read-only.
+- **macOS Keychain** -- reads Claude Code OAuth credentials via `Security` framework. Read + write (write required for token refresh).
 - **macOS Notifications** -- `UserNotifications` framework for threshold alerts (80%, 95%)
 - **Menu bar** -- `NSStatusItem` with SwiftUI popover for expanded view
 
@@ -261,7 +260,7 @@ Without cc-hdrm, he'd have kept going, gotten cut off mid-response, lost context
 ### Constraints
 
 - No main window -- entire UI lives in the menu bar popover
-- Minimal permissions -- only Keychain read access and outbound HTTPS
+- Minimal permissions -- Keychain read/write access (write for token refresh) and outbound HTTPS
 - Background execution via `NSApplication` with no termination on last window close
 - Under 50 MB memory, no persistent storage beyond in-memory state
 
@@ -272,7 +271,7 @@ Without cc-hdrm, he'd have kept going, gotten cut off mid-response, lost context
 - FR1: App can retrieve OAuth credentials from the macOS Keychain without user interaction
 - FR2: App can detect the user's subscription type and rate limit tier from stored credentials
 - FR3: App can fetch current usage data from the Claude usage API
-- FR4: App can attempt multiple fallback strategies when the primary API request is blocked
+- FR4: App can handle API request failures with standard HTTP error handling (retry, timeout, graceful degradation)
 - FR5: App can detect when OAuth credentials have expired and display an actionable status message
 
 ### Usage Display
@@ -322,8 +321,8 @@ Without cc-hdrm, he'd have kept going, gotten cut off mid-response, lost context
 ### Security
 
 - NFR6: OAuth credentials are read from Keychain at runtime and never persisted to disk, logs, or user defaults
-- NFR7: OAuth tokens are held in memory only for the duration of the API request, not cached long-term
-- NFR8: No credentials or usage data are transmitted to any endpoint other than `claude.ai`
+- NFR7: OAuth tokens are read fresh from Keychain each poll cycle and not cached in application state between cycles
+- NFR8: No credentials or usage data are transmitted to any endpoint other than `api.anthropic.com` (usage data) and `platform.claude.com` (token refresh)
 - NFR9: API requests use HTTPS exclusively
 
 ### Integration
