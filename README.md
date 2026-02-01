@@ -6,22 +6,9 @@ A macOS menu bar utility that shows your Claude usage at a glance. Built for Cla
 
 cc-hdrm sits in your menu bar and displays your current 5-hour usage percentage with color-coded warnings. Click it to see detailed usage rings for both 5-hour and 7-day windows, reset countdowns, and your subscription tier.
 
-```
-┌─────────────────────────────┐
-│  Menu Bar:  ▮▮▮▮▯  62%     │
-│                             │
-│  Click to expand:           │
-│  ┌───────────────────────┐  │
-│  │  5h   ████░░  62%     │  │
-│  │  Reset in 2h 14m      │  │
-│  │                       │  │
-│  │  7d   ██░░░░  31%     │  │
-│  │  Reset in 4d 7h       │  │
-│  │                       │  │
-│  │  Tier: Max             │  │
-│  └───────────────────────┘  │
-└─────────────────────────────┘
-```
+<p align="center">
+  <img src="headroom_green.png" alt="cc-hdrm showing 67% 5-hour usage and 79% 7-day usage in the menu bar popover" width="336">
+</p>
 
 ### Key Features
 
