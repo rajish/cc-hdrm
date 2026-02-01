@@ -8,9 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Menu bar headroom display with color-coded usage percentage
-- Context-adaptive display with constraint promotion at high usage
-- Click-to-expand popover with usage detail view
+- Menu bar headroom display with color-coded remaining capacity
+- Context-adaptive display with constraint promotion at low headroom
+- Click-to-expand popover with headroom detail view
 - 5-hour headroom ring gauge with reset countdown
 - 7-day headroom ring gauge with reset countdown
 - Background polling engine (30-second intervals)

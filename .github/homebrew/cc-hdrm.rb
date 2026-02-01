@@ -16,7 +16,7 @@ cask "cc-hdrm" do
 
   url "https://github.com/rajish/cc-hdrm/releases/download/v#{version}/cc-hdrm-v#{version}.dmg"
   name "cc-hdrm"
-  desc "macOS menu bar utility showing Claude usage at a glance"
+  desc "macOS menu bar utility showing remaining Claude capacity at a glance"
   homepage "https://github.com/rajish/cc-hdrm"
 
   depends_on macos: ">= :sonoma"
