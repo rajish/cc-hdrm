@@ -63,5 +63,5 @@ development_status:
   epic-5: in-progress
   5-1-notification-permission-service-setup: done
   5-2-threshold-state-machine-warning-notifications: done
-  5-3-critical-threshold-persistent-notifications: backlog
+  5-3-critical-threshold-persistent-notifications: done
   epic-5-retrospective: optional

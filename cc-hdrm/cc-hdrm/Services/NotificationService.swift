@@ -22,7 +22,7 @@ final class NotificationService: NotificationServiceProtocol {
     func evaluateThresholds(fiveHour: WindowState?, sevenDay: WindowState?) async {
         if let fiveHour {
             let headroom = 100.0 - fiveHour.utilization
-            let (newState, shouldFire) = evaluateWindow(
+            let (newState, shouldFireWarning, shouldFireCritical) = evaluateWindow(
                 currentState: fiveHourThresholdState,
                 headroom: headroom
             )
@@ -30,14 +30,17 @@ final class NotificationService: NotificationServiceProtocol {
                 Self.logger.info("5h threshold: \(self.fiveHourThresholdState.rawValue, privacy: .public) → \(newState.rawValue, privacy: .public) (headroom \(headroom, format: .fixed(precision: 1))%)")
                 fiveHourThresholdState = newState
             }
-            if shouldFire {
+            if shouldFireWarning {
                 await sendNotification(window: "5h", headroom: Int(headroom.rounded()), resetsAt: fiveHour.resetsAt)
+            }
+            if shouldFireCritical {
+                await sendCriticalNotification(window: "5h", headroom: Int(headroom.rounded()), resetsAt: fiveHour.resetsAt)
             }
         }
 
         if let sevenDay {
             let headroom = 100.0 - sevenDay.utilization
-            let (newState, shouldFire) = evaluateWindow(
+            let (newState, shouldFireWarning, shouldFireCritical) = evaluateWindow(
                 currentState: sevenDayThresholdState,
                 headroom: headroom
             )
@@ -45,8 +48,11 @@ final class NotificationService: NotificationServiceProtocol {
                 Self.logger.info("7d threshold: \(self.sevenDayThresholdState.rawValue, privacy: .public) → \(newState.rawValue, privacy: .public) (headroom \(headroom, format: .fixed(precision: 1))%)")
                 sevenDayThresholdState = newState
             }
-            if shouldFire {
+            if shouldFireWarning {
                 await sendNotification(window: "7d", headroom: Int(headroom.rounded()), resetsAt: sevenDay.resetsAt)
+            }
+            if shouldFireCritical {
+                await sendCriticalNotification(window: "7d", headroom: Int(headroom.rounded()), resetsAt: sevenDay.resetsAt)
             }
         }
     }
@@ -56,34 +62,48 @@ final class NotificationService: NotificationServiceProtocol {
     func evaluateWindow(
         currentState: ThresholdState,
         headroom: Double
-    ) -> (ThresholdState, shouldFireWarning: Bool) {
+    ) -> (ThresholdState, shouldFireWarning: Bool, shouldFireCritical: Bool) {
         switch currentState {
         case .aboveWarning:
-            if headroom < 20 {
-                return (.warned20, shouldFireWarning: true)
+            if headroom < 5 {
+                // Skip warning, go straight to critical
+                return (.warned5, shouldFireWarning: false, shouldFireCritical: true)
             }
-            return (.aboveWarning, shouldFireWarning: false)
+            if headroom < 20 {
+                return (.warned20, shouldFireWarning: true, shouldFireCritical: false)
+            }
+            return (.aboveWarning, shouldFireWarning: false, shouldFireCritical: false)
         case .warned20:
             if headroom >= 20 {
-                return (.aboveWarning, shouldFireWarning: false)
+                return (.aboveWarning, shouldFireWarning: false, shouldFireCritical: false)
             }
             if headroom < 5 {
-                return (.warned5, shouldFireWarning: false)
+                return (.warned5, shouldFireWarning: false, shouldFireCritical: true)
             }
-            return (.warned20, shouldFireWarning: false)
+            return (.warned20, shouldFireWarning: false, shouldFireCritical: false)
         case .warned5:
             if headroom >= 20 {
-                return (.aboveWarning, shouldFireWarning: false)
+                return (.aboveWarning, shouldFireWarning: false, shouldFireCritical: false)
             }
-            return (.warned5, shouldFireWarning: false)
+            return (.warned5, shouldFireWarning: false, shouldFireCritical: false)
         }
     }
 
     // MARK: - Notification Delivery
 
-    private func sendNotification(window: String, headroom: Int, resetsAt: Date?) async {
+    /// Shared delivery method for both warning and critical notifications.
+    /// - `sound`: `.default` for critical (5%), `nil` for warning (20%).
+    /// - `identifierPrefix`: `"headroom-warning"` or `"headroom-critical"` — distinct
+    ///   prefixes ensure critical doesn't replace warning in Notification Center.
+    private func deliverNotification(
+        window: String,
+        headroom: Int,
+        resetsAt: Date?,
+        sound: UNNotificationSound?,
+        identifierPrefix: String
+    ) async {
         guard isAuthorized else {
-            Self.logger.info("Skipping notification — not authorized")
+            Self.logger.info("Skipping \(identifierPrefix, privacy: .public) notification — not authorized")
             return
         }
 
@@ -98,19 +118,39 @@ final class NotificationService: NotificationServiceProtocol {
         }
 
         content.body = body
-        // No sound for warning threshold (sound is Story 5.3 critical)
+        content.sound = sound
 
-        // Intentional: reusing the same identifier per window replaces any
-        // undismissed notification instead of stacking duplicates.
-        let identifier = "headroom-warning-\(window)"
+        let identifier = "\(identifierPrefix)-\(window)"
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
 
         do {
             try await notificationCenter.add(request)
-            Self.logger.info("Notification delivered: \(window, privacy: .public) headroom \(headroom)%")
+            Self.logger.info("\(identifierPrefix, privacy: .public) notification delivered: \(window, privacy: .public) headroom \(headroom)%")
         } catch {
-            Self.logger.error("Failed to deliver notification: \(error.localizedDescription)")
+            Self.logger.error("Failed to deliver \(identifierPrefix, privacy: .public) notification: \(error.localizedDescription)")
         }
+    }
+
+    private func sendCriticalNotification(window: String, headroom: Int, resetsAt: Date?) async {
+        await deliverNotification(
+            window: window,
+            headroom: headroom,
+            resetsAt: resetsAt,
+            sound: .default,
+            identifierPrefix: "headroom-critical"
+        )
+    }
+
+    private func sendNotification(window: String, headroom: Int, resetsAt: Date?) async {
+        // Intentional: reusing the same identifier per window replaces any
+        // undismissed notification instead of stacking duplicates.
+        await deliverNotification(
+            window: window,
+            headroom: headroom,
+            resetsAt: resetsAt,
+            sound: nil,
+            identifierPrefix: "headroom-warning"
+        )
     }
 
     // MARK: - Authorization
