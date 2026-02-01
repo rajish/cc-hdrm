@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 import Testing
 @testable import cc_hdrm
 
@@ -108,6 +109,80 @@ struct AppDelegateTests {
 
         delegate.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
         #expect(mockMonitor.stopCallCount == 1, "FreshnessMonitor should be stopped on terminate")
+    }
+}
+
+// MARK: - Popover Tests (Story 4.1)
+
+@Suite("AppDelegate Popover Tests")
+struct AppDelegatePopoverTests {
+
+    @Test("After launch, popover is non-nil")
+    @MainActor
+    func popoverCreatedOnLaunch() async {
+        let mockEngine = MockPollingEngine()
+        let delegate = AppDelegate(pollingEngine: mockEngine)
+
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+
+        #expect(delegate.popover != nil, "Popover should be created during launch")
+    }
+
+    @Test("After launch, button action is set to togglePopover: selector")
+    @MainActor
+    func buttonActionWiredToToggle() async {
+        let mockEngine = MockPollingEngine()
+        let delegate = AppDelegate(pollingEngine: mockEngine)
+
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+
+        let action = delegate.statusItem?.button?.action
+        #expect(action == #selector(AppDelegate.togglePopover(_:)), "Button action should be togglePopover:")
+    }
+
+    @Test("Popover behavior is transient (AC #4)")
+    @MainActor
+    func popoverBehaviorIsTransient() async {
+        let mockEngine = MockPollingEngine()
+        let delegate = AppDelegate(pollingEngine: mockEngine)
+
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+
+        #expect(delegate.popover?.behavior == .transient, "Popover behavior should be .transient for auto-dismiss")
+    }
+
+    @Test("Popover contentViewController is set with NSHostingController")
+    @MainActor
+    func popoverHasHostingController() async {
+        let mockEngine = MockPollingEngine()
+        let delegate = AppDelegate(pollingEngine: mockEngine)
+
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+
+        #expect(delegate.popover?.contentViewController != nil, "Popover should have a content view controller")
+        #expect(delegate.popover?.contentViewController is NSHostingController<PopoverView>,
+                "Content view controller should be NSHostingController<PopoverView>")
+    }
+
+    @Test("togglePopover does not crash when popover is not shown (headless CI)")
+    @MainActor
+    func togglePopoverCallDoesNotCrash() async {
+        let mockEngine = MockPollingEngine()
+        let delegate = AppDelegate(pollingEngine: mockEngine)
+
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+
+        // Popover starts not shown
+        #expect(delegate.popover?.isShown == false, "Popover should start closed")
+
+        // Call togglePopover — in headless CI, show() may silently fail (no status bar),
+        // but the method must not crash and the popover object must remain valid.
+        delegate.togglePopover(nil)
+        #expect(delegate.popover != nil, "Popover should still be valid after toggle attempt")
+
+        // Call again to exercise the close path
+        delegate.togglePopover(nil)
+        #expect(delegate.popover != nil, "Popover should still be valid after second toggle")
     }
 }
 

@@ -1,10 +1,12 @@
 import AppKit
+import SwiftUI
 import os
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     internal var statusItem: NSStatusItem?
     internal var appState: AppState?
+    internal var popover: NSPopover?
     private var pollingEngine: (any PollingEngineProtocol)?
     private var freshnessMonitor: (any FreshnessMonitorProtocol)?
     private var observationTask: Task<Void, Never>?
@@ -15,6 +17,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
         category: "menubar"
+    )
+
+    private static let popoverLogger = Logger(
+        subsystem: "com.cc-hdrm.app",
+        category: "popover"
     )
 
     override init() {
@@ -38,6 +45,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Initial render from current state (disconnected placeholder)
         updateMenuBarDisplay()
+
+        // Configure NSPopover with SwiftUI content
+        let pop = NSPopover()
+        pop.contentSize = NSSize(width: 220, height: 0) // width hint only; SwiftUI determines height
+        pop.behavior = .transient
+        pop.contentViewController = NSHostingController(rootView: PopoverView(appState: state))
+        pop.animates = true
+        self.popover = pop
+
+        // Wire status item button to toggle popover
+        statusItem?.button?.action = #selector(togglePopover(_:))
+        statusItem?.button?.target = self
+        statusItem?.button?.sendAction(on: .leftMouseUp)
 
         Self.logger.info("Menu bar status item configured")
 
@@ -69,6 +89,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         freshnessMonitor?.stop()
         observationTask?.cancel()
         observationTask = nil
+    }
+
+    // MARK: - Popover Toggle
+
+    @objc func togglePopover(_ sender: Any?) {
+        guard let popover else {
+            Self.popoverLogger.warning("togglePopover called but popover is nil")
+            return
+        }
+        if popover.isShown {
+            Self.popoverLogger.info("Popover closing")
+            popover.performClose(sender)
+        } else if let button = statusItem?.button {
+            Self.popoverLogger.info("Popover opening")
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        } else {
+            Self.popoverLogger.warning("togglePopover called but statusItem button is nil")
+        }
     }
 
     // MARK: - Menu Bar Display
