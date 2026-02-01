@@ -16,15 +16,15 @@ struct HeadroomStateTests {
         #expect(HeadroomState(from: 0) == .normal)
     }
 
-    @Test("utilization 60 (headroom 40%) returns .normal")
-    func headroom40IsNormal() {
-        #expect(HeadroomState(from: 60) == .normal)
+    @Test("utilization 60 (headroom 40%) returns .caution — AC#2 says 20-40% inclusive")
+    func headroom40IsCaution() {
+        #expect(HeadroomState(from: 60) == .caution)
     }
 
-    @Test("utilization 60.0 (headroom exactly 40%) is .normal boundary")
-    func headroomExactly40IsNormal() {
-        // headroom = 40, which is >= 40 → .normal
-        #expect(HeadroomState(from: 60.0) == .normal)
+    @Test("utilization 60.0 (headroom exactly 40%) is .caution boundary — inclusive per AC#2")
+    func headroomExactly40IsCaution() {
+        // headroom = 40, which is in 20...40 → .caution
+        #expect(HeadroomState(from: 60.0) == .caution)
     }
 
     @Test("utilization 60.01 (headroom 39.99%) returns .caution")
@@ -95,7 +95,7 @@ struct HeadroomStateTests {
         #expect(HeadroomState.caution.fontWeight == "medium")
         #expect(HeadroomState.warning.fontWeight == "semibold")
         #expect(HeadroomState.critical.fontWeight == "bold")
-        #expect(HeadroomState.exhausted.fontWeight == "heavy")
+        #expect(HeadroomState.exhausted.fontWeight == "bold")
         #expect(HeadroomState.disconnected.fontWeight == "regular")
     }
 }

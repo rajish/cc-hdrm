@@ -47,6 +47,24 @@ final class AppState {
         return DataFreshness(lastUpdated: lastUpdated)
     }
 
+    /// Derived headroom state for the menu bar display.
+    /// Returns `.disconnected` when not connected; otherwise derived from 5-hour window.
+    var menuBarHeadroomState: HeadroomState {
+        guard connectionStatus == .connected else {
+            return .disconnected
+        }
+        return fiveHour?.headroomState ?? .disconnected
+    }
+
+    /// Derived menu bar text: sparkle icon + headroom percentage or em dash when disconnected.
+    var menuBarText: String {
+        if menuBarHeadroomState == .disconnected {
+            return "\u{2733} \u{2014}" // ✳ —
+        }
+        let headroom = max(0, Int(100.0 - (fiveHour?.utilization ?? 0)))
+        return "\u{2733} \(headroom)%"
+    }
+
     /// Updates the usage window states from API data.
     func updateWindows(fiveHour: WindowState?, sevenDay: WindowState?) {
         self.fiveHour = fiveHour

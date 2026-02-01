@@ -28,7 +28,7 @@ enum HeadroomState: String, CaseIterable, Sendable {
             self = .critical
         case 5..<20:
             self = .warning
-        case 20..<40:
+        case 20...40:
             self = .caution
         default:
             self = .normal
@@ -54,7 +54,7 @@ enum HeadroomState: String, CaseIterable, Sendable {
         case .caution: "medium"
         case .warning: "semibold"
         case .critical: "bold"
-        case .exhausted: "heavy"
+        case .exhausted: "bold"
         case .disconnected: "regular"
         }
     }

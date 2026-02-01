@@ -3,14 +3,16 @@ import os
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var statusItem: NSStatusItem?
+    internal var statusItem: NSStatusItem?
     internal var appState: AppState?
     private var pollingEngine: (any PollingEngineProtocol)?
     private var freshnessMonitor: (any FreshnessMonitorProtocol)?
+    private var observationTask: Task<Void, Never>?
+    private var previousAccessibilityValue: String?
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
-        category: "AppDelegate"
+        category: "menubar"
     )
 
     override init() {
@@ -32,13 +34,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
-        if let button = statusItem?.button {
-            button.title = "\u{2733} --"
-            button.font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-            button.contentTintColor = .systemGray
-        }
+        // Initial render from current state (disconnected placeholder)
+        updateMenuBarDisplay()
 
-        Self.logger.info("Menu bar status item configured with placeholder")
+        Self.logger.info("Menu bar status item configured")
 
         // Create PollingEngine with production services if not already injected (test path)
         if pollingEngine == nil {
@@ -55,6 +54,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             freshnessMonitor = FreshnessMonitor(appState: state)
         }
 
+        startObservingAppState()
+
         Task {
             await pollingEngine?.start()
             await freshnessMonitor?.start()
@@ -64,5 +65,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         pollingEngine?.stop()
         freshnessMonitor?.stop()
+        observationTask?.cancel()
+        observationTask = nil
+    }
+
+    // MARK: - Menu Bar Display
+
+    /// Starts an observation loop that re-renders the menu bar whenever AppState changes.
+    /// Uses `withObservationTracking` + `AsyncStream` so the loop suspends until a
+    /// tracked property actually changes, avoiding unnecessary CPU usage (NFR4).
+    private func startObservingAppState() {
+        observationTask = Task { [weak self] in
+            while !Task.isCancelled {
+                let stream = AsyncStream<Void> { continuation in
+                    withObservationTracking {
+                        self?.updateMenuBarDisplay()
+                    } onChange: {
+                        continuation.yield()
+                        continuation.finish()
+                    }
+                }
+                // Suspend here until onChange fires
+                for await _ in stream { break }
+                // Small yield to coalesce rapid successive changes
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+        }
+    }
+
+    /// Updates the NSStatusItem's attributed title, color, weight, and accessibility
+    /// based on the current AppState.
+    internal func updateMenuBarDisplay() {
+        guard let appState else { return }
+
+        let state = appState.menuBarHeadroomState
+        let text = appState.menuBarText
+
+        let color = NSColor.headroomColor(for: state)
+        let font = NSFont.menuBarFont(for: state)
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .foregroundColor: color,
+            .font: font
+        ]
+        statusItem?.button?.attributedTitle = NSAttributedString(string: text, attributes: attributes)
+
+        // Accessibility (AC #6, #7)
+        // AC#6: VoiceOver announces "cc-hdrm: Claude headroom [X] percent, [state]"
+        // Set as accessibilityLabel so it reads as a single phrase.
+        let accessibilityValue: String
+        if state == .disconnected {
+            accessibilityValue = "cc-hdrm: Claude headroom disconnected"
+        } else {
+            let headroom = max(0, Int(100.0 - (appState.fiveHour?.utilization ?? 0)))
+            accessibilityValue = "cc-hdrm: Claude headroom \(headroom) percent, \(state.rawValue)"
+        }
+
+        statusItem?.button?.setAccessibilityLabel(accessibilityValue)
+
+        if previousAccessibilityValue != accessibilityValue {
+            statusItem?.button?.setAccessibilityValue(accessibilityValue)
+            if let button = statusItem?.button {
+                NSAccessibility.post(element: button, notification: .valueChanged)
+            }
+            previousAccessibilityValue = accessibilityValue
+            Self.logger.debug("Menu bar updated: \(text, privacy: .public) state=\(state.rawValue, privacy: .public)")
+        }
     }
 }

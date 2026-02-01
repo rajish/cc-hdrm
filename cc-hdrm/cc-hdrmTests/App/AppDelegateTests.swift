@@ -110,3 +110,98 @@ struct AppDelegateTests {
         #expect(mockMonitor.stopCallCount == 1, "FreshnessMonitor should be stopped on terminate")
     }
 }
+
+// MARK: - Menu Bar Display Tests (Task 8)
+
+@Suite("AppDelegate Menu Bar Display Tests")
+struct AppDelegateMenuBarTests {
+
+    @Test("updateMenuBarDisplay updates attributedTitle with correct text after state change")
+    @MainActor
+    func updateMenuBarDisplayReflectsState() async {
+        let mockEngine = MockPollingEngine()
+        let delegate = AppDelegate(pollingEngine: mockEngine)
+
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+        try? await Task.sleep(for: .milliseconds(50))
+
+        guard let appState = delegate.appState else {
+            #expect(Bool(false), "AppState should exist after launch")
+            return
+        }
+
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(fiveHour: WindowState(utilization: 17.0, resetsAt: nil), sevenDay: nil)
+        delegate.updateMenuBarDisplay()
+
+        let title = delegate.statusItem?.button?.attributedTitle
+        #expect(title != nil, "attributedTitle should be set")
+        #expect(title?.string == "\u{2733} 83%", "attributedTitle text should reflect 83% headroom")
+    }
+
+    @Test("status item button has accessibilityLabel set matching AC#6 format")
+    @MainActor
+    func statusItemHasAccessibilityLabel() async {
+        let mockEngine = MockPollingEngine()
+        let delegate = AppDelegate(pollingEngine: mockEngine)
+
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+        delegate.updateMenuBarDisplay()
+
+        let label = delegate.statusItem?.button?.accessibilityLabel() as? String
+        #expect(label != nil, "accessibilityLabel should be set")
+        #expect(label?.contains("cc-hdrm:") == true, "accessibilityLabel should start with 'cc-hdrm:'")
+    }
+
+    @Test("status item accessibilityValue includes percent for connected states")
+    @MainActor
+    func accessibilityValueIncludesPercent() async {
+        let mockEngine = MockPollingEngine()
+        let delegate = AppDelegate(pollingEngine: mockEngine)
+
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+        try? await Task.sleep(for: .milliseconds(50))
+
+        guard let appState = delegate.appState else {
+            #expect(Bool(false), "AppState should exist")
+            return
+        }
+
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(fiveHour: WindowState(utilization: 50.0, resetsAt: nil), sevenDay: nil)
+        delegate.updateMenuBarDisplay()
+
+        let value = delegate.statusItem?.button?.accessibilityValue() as? String
+        #expect(value != nil, "accessibilityValue should be set")
+        #expect(value?.contains("percent") == true, "accessibilityValue should include 'percent' for connected states")
+        #expect(value?.contains("50") == true, "accessibilityValue should include the headroom percentage")
+    }
+
+    @Test("attributedTitle uses correct font weight for state")
+    @MainActor
+    func attributedTitleUsesCorrectFontWeight() async {
+        let mockEngine = MockPollingEngine()
+        let delegate = AppDelegate(pollingEngine: mockEngine)
+
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+        try? await Task.sleep(for: .milliseconds(50))
+
+        guard let appState = delegate.appState else {
+            #expect(Bool(false), "AppState should exist")
+            return
+        }
+
+        // Set critical state (bold weight expected)
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(fiveHour: WindowState(utilization: 97.0, resetsAt: nil), sevenDay: nil)
+        delegate.updateMenuBarDisplay()
+
+        let title = delegate.statusItem?.button?.attributedTitle
+        #expect(title != nil, "attributedTitle should be set")
+
+        let expectedFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .bold)
+        if let font = title?.attribute(.font, at: 0, effectiveRange: nil) as? NSFont {
+            #expect(font.fontName == expectedFont.fontName, "Critical state should use bold weight")
+        }
+    }
+}

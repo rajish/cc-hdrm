@@ -165,4 +165,134 @@ struct AppStateTests {
         state.setLastUpdated(Date().addingTimeInterval(-600))
         #expect(state.dataFreshness == .veryStale)
     }
+
+    // MARK: - Menu Bar Headroom State Tests (Task 7)
+
+    @Test("disconnected connectionStatus → menuBarHeadroomState == .disconnected and menuBarText == sparkle em dash")
+    @MainActor
+    func menuBarDisconnected() {
+        let state = AppState()
+        // Default connectionStatus is .disconnected
+        #expect(state.menuBarHeadroomState == .disconnected)
+        #expect(state.menuBarText == "\u{2733} \u{2014}")
+    }
+
+    @Test("connected with nil fiveHour → .disconnected")
+    @MainActor
+    func menuBarConnectedNilFiveHour() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        #expect(state.menuBarHeadroomState == .disconnected)
+        #expect(state.menuBarText == "\u{2733} \u{2014}")
+    }
+
+    @Test("connected with utilization 17.0 → headroom 83% → .normal")
+    @MainActor
+    func menuBarNormal83() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateWindows(fiveHour: WindowState(utilization: 17.0, resetsAt: nil), sevenDay: nil)
+        #expect(state.menuBarHeadroomState == .normal)
+        #expect(state.menuBarText == "\u{2733} 83%")
+    }
+
+    @Test("connected with utilization 65.0 → headroom 35% → .caution")
+    @MainActor
+    func menuBarCaution35() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateWindows(fiveHour: WindowState(utilization: 65.0, resetsAt: nil), sevenDay: nil)
+        #expect(state.menuBarHeadroomState == .caution)
+        #expect(state.menuBarText == "\u{2733} 35%")
+    }
+
+    @Test("connected with utilization 85.0 → headroom 15% → .warning")
+    @MainActor
+    func menuBarWarning15() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateWindows(fiveHour: WindowState(utilization: 85.0, resetsAt: nil), sevenDay: nil)
+        #expect(state.menuBarHeadroomState == .warning)
+        #expect(state.menuBarText == "\u{2733} 15%")
+    }
+
+    @Test("connected with utilization 97.0 → headroom 3% → .critical")
+    @MainActor
+    func menuBarCritical3() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateWindows(fiveHour: WindowState(utilization: 97.0, resetsAt: nil), sevenDay: nil)
+        #expect(state.menuBarHeadroomState == .critical)
+        #expect(state.menuBarText == "\u{2733} 3%")
+    }
+
+    @Test("connected with utilization 100.0 → headroom 0% → .exhausted")
+    @MainActor
+    func menuBarExhausted0() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateWindows(fiveHour: WindowState(utilization: 100.0, resetsAt: nil), sevenDay: nil)
+        #expect(state.menuBarHeadroomState == .exhausted)
+        #expect(state.menuBarText == "\u{2733} 0%")
+    }
+
+    @Test("tokenExpired → .disconnected")
+    @MainActor
+    func menuBarTokenExpired() {
+        let state = AppState()
+        state.updateConnectionStatus(.tokenExpired)
+        #expect(state.menuBarHeadroomState == .disconnected)
+        #expect(state.menuBarText == "\u{2733} \u{2014}")
+    }
+
+    @Test("noCredentials → .disconnected")
+    @MainActor
+    func menuBarNoCredentials() {
+        let state = AppState()
+        state.updateConnectionStatus(.noCredentials)
+        #expect(state.menuBarHeadroomState == .disconnected)
+        #expect(state.menuBarText == "\u{2733} \u{2014}")
+    }
+
+    @Test("utilization > 100 clamps headroom to 0%")
+    @MainActor
+    func menuBarUtilizationOver100() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateWindows(fiveHour: WindowState(utilization: 110.0, resetsAt: nil), sevenDay: nil)
+        #expect(state.menuBarText == "\u{2733} 0%")
+    }
+
+    // MARK: - Headroom Percentage Edge Cases (Task 9)
+
+    @Test("utilization 0.0 → headroom 100%")
+    @MainActor
+    func menuBarHeadroom100() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateWindows(fiveHour: WindowState(utilization: 0.0, resetsAt: nil), sevenDay: nil)
+        #expect(state.menuBarText == "\u{2733} 100%")
+    }
+
+    @Test("utilization 50.5 → headroom 49% (Int truncation)")
+    @MainActor
+    func menuBarHeadroomTruncation() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateWindows(fiveHour: WindowState(utilization: 50.5, resetsAt: nil), sevenDay: nil)
+        // Int(100 - 50.5) = Int(49.5) = 49
+        #expect(state.menuBarText == "\u{2733} 49%")
+    }
+
+    @Test("utilization 99.9 → headroom 0% display (Int truncation) but .critical state (0.1% actual headroom)")
+    @MainActor
+    func menuBarHeadroom99_9() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateWindows(fiveHour: WindowState(utilization: 99.9, resetsAt: nil), sevenDay: nil)
+        // Int(100 - 99.9) = Int(0.1) = 0 for display
+        // But HeadroomState uses actual 0.1% headroom → 0<0.1<5 → .critical
+        #expect(state.menuBarText == "\u{2733} 0%")
+        #expect(state.menuBarHeadroomState == .critical)
+    }
 }
