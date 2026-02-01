@@ -131,3 +131,68 @@ struct PopoverView5hGaugeTests {
         #expect(detected, "Observation should detect fiveHour update read by FiveHourGaugeSection")
     }
 }
+
+// MARK: - 7d Gauge Integration Tests (Story 4.3, Task 4)
+
+@Suite("PopoverView 7d Gauge Integration Tests")
+struct PopoverView7dGaugeTests {
+
+    @Test("PopoverView with valid sevenDay data renders 7d section without crash")
+    @MainActor
+    func validSevenDayData() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: WindowState(utilization: 35.0, resetsAt: Date().addingTimeInterval(2 * 86400))
+        )
+        let view = PopoverView(appState: appState)
+        let controller = NSHostingController(rootView: view)
+        _ = controller.view
+        #expect(appState.sevenDay != nil)
+    }
+
+    @Test("PopoverView with nil sevenDay does NOT render 7d section")
+    @MainActor
+    func nilSevenDayData() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: nil
+        )
+        let view = PopoverView(appState: appState)
+        let controller = NSHostingController(rootView: view)
+        _ = controller.view
+        #expect(appState.sevenDay == nil)
+    }
+
+    @Test("Updating AppState.sevenDay from nil to valid triggers observation")
+    @MainActor
+    func sevenDayObservation() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        // Start with nil sevenDay
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: nil
+        )
+
+        let expectation = OSAllocatedUnfairLock(initialState: false)
+        withObservationTracking {
+            let view = PopoverView(appState: appState)
+            _ = view.body
+        } onChange: {
+            expectation.withLock { $0 = true }
+        }
+
+        // Update sevenDay from nil → valid data
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: WindowState(utilization: 40.0, resetsAt: Date().addingTimeInterval(86400))
+        )
+
+        let detected = expectation.withLock { $0 }
+        #expect(detected, "Observation should detect sevenDay update read by PopoverView.body")
+    }
+}

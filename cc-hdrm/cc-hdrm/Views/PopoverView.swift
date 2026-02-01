@@ -16,12 +16,14 @@ struct PopoverView: View {
                 .padding(.horizontal)
                 .padding(.vertical, 8)
 
-            Divider()
+            // 7-day gauge section (hidden entirely when sevenDay is nil per AC #6)
+            if appState.sevenDay != nil {
+                Divider()
 
-            Text("7d gauge")
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal)
-                .padding(.vertical, 8)
+                SevenDayGaugeSection(appState: appState)
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+            }
 
             Divider()
 
