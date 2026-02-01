@@ -48,7 +48,7 @@ struct AppDelegateTests {
     @MainActor
     func initWithPollingEngine() async {
         let mockEngine = MockPollingEngine()
-        _ = AppDelegate(pollingEngine: mockEngine)
+        _ = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
 
         // Verify delegate was created — polling engine not started yet (only starts in applicationDidFinishLaunching)
         #expect(mockEngine.startCallCount == 0)
@@ -58,7 +58,7 @@ struct AppDelegateTests {
     @MainActor
     func terminateStopsPollingEngine() async {
         let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine)
+        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
 
         delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
 
@@ -74,7 +74,7 @@ struct AppDelegateTests {
     @MainActor
     func launchCreatesAppState() async {
         let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine)
+        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
 
         #expect(delegate.appState == nil)
 
@@ -88,7 +88,7 @@ struct AppDelegateTests {
     func launchStartsFreshnessMonitor() async {
         let mockEngine = MockPollingEngine()
         let mockMonitor = MockFreshnessMonitor()
-        let delegate = AppDelegate(pollingEngine: mockEngine, freshnessMonitor: mockMonitor)
+        let delegate = AppDelegate(pollingEngine: mockEngine, freshnessMonitor: mockMonitor, notificationService: MockNotificationService())
 
         delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
 
@@ -102,7 +102,7 @@ struct AppDelegateTests {
     func terminateStopsFreshnessMonitor() async {
         let mockEngine = MockPollingEngine()
         let mockMonitor = MockFreshnessMonitor()
-        let delegate = AppDelegate(pollingEngine: mockEngine, freshnessMonitor: mockMonitor)
+        let delegate = AppDelegate(pollingEngine: mockEngine, freshnessMonitor: mockMonitor, notificationService: MockNotificationService())
 
         delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
         try? await Task.sleep(for: .milliseconds(50))
@@ -121,7 +121,7 @@ struct AppDelegatePopoverTests {
     @MainActor
     func popoverCreatedOnLaunch() async {
         let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine)
+        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
 
         delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
 
@@ -132,7 +132,7 @@ struct AppDelegatePopoverTests {
     @MainActor
     func buttonActionWiredToToggle() async {
         let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine)
+        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
 
         delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
 
@@ -144,7 +144,7 @@ struct AppDelegatePopoverTests {
     @MainActor
     func popoverBehaviorIsTransient() async {
         let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine)
+        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
 
         delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
 
@@ -155,7 +155,7 @@ struct AppDelegatePopoverTests {
     @MainActor
     func popoverHasHostingController() async {
         let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine)
+        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
 
         delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
 
@@ -168,7 +168,7 @@ struct AppDelegatePopoverTests {
     @MainActor
     func togglePopoverCallDoesNotCrash() async {
         let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine)
+        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
 
         delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
 
@@ -195,7 +195,7 @@ struct AppDelegateMenuBarTests {
     @MainActor
     func updateMenuBarDisplayReflectsState() async {
         let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine)
+        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
 
         delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
         try? await Task.sleep(for: .milliseconds(50))
@@ -218,7 +218,7 @@ struct AppDelegateMenuBarTests {
     @MainActor
     func statusItemHasAccessibilityLabel() async {
         let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine)
+        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
 
         delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
         delegate.updateMenuBarDisplay()
@@ -232,7 +232,7 @@ struct AppDelegateMenuBarTests {
     @MainActor
     func accessibilityValueIncludesPercent() async {
         let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine)
+        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
 
         delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
         try? await Task.sleep(for: .milliseconds(50))
@@ -258,7 +258,7 @@ struct AppDelegateMenuBarTests {
     @MainActor
     func accessibilityExhaustedWithResetsAt() async {
         let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine)
+        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
 
         delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
         try? await Task.sleep(for: .milliseconds(50))
@@ -282,7 +282,7 @@ struct AppDelegateMenuBarTests {
     @MainActor
     func accessibilityExhaustedWithoutResetsAt() async {
         let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine)
+        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
 
         delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
         try? await Task.sleep(for: .milliseconds(50))
@@ -305,7 +305,7 @@ struct AppDelegateMenuBarTests {
     @MainActor
     func attributedTitleUsesCorrectFontWeight() async {
         let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine)
+        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
 
         delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
         try? await Task.sleep(for: .milliseconds(50))

@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     internal var popover: NSPopover?
     private var pollingEngine: (any PollingEngineProtocol)?
     private var freshnessMonitor: (any FreshnessMonitorProtocol)?
+    private var notificationService: (any NotificationServiceProtocol)?
     private var observationTask: Task<Void, Never>?
     private var previousAccessibilityValue: String?
     private var previousDisplayedWindow: DisplayedWindow?
@@ -29,9 +30,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Test-only initializer for injecting mock services.
-    init(pollingEngine: any PollingEngineProtocol, freshnessMonitor: (any FreshnessMonitorProtocol)? = nil) {
+    init(pollingEngine: any PollingEngineProtocol, freshnessMonitor: (any FreshnessMonitorProtocol)? = nil, notificationService: (any NotificationServiceProtocol)? = nil) {
         self.pollingEngine = pollingEngine
         self.freshnessMonitor = freshnessMonitor
+        self.notificationService = notificationService
         super.init()
     }
 
@@ -76,11 +78,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             freshnessMonitor = FreshnessMonitor(appState: state)
         }
 
+        // Create NotificationService if not already injected (test path)
+        if notificationService == nil {
+            notificationService = NotificationService()
+        }
+
         startObservingAppState()
 
         Task {
             await pollingEngine?.start()
             await freshnessMonitor?.start()
+            await notificationService?.requestAuthorization()
         }
     }
 

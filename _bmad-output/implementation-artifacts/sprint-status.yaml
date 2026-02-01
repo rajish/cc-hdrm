@@ -57,11 +57,11 @@ development_status:
   4-2-5-hour-headroom-ring-gauge-with-countdown: done
   4-3-7-day-headroom-ring-gauge-with-countdown: done
   4-4-panel-footer-tier-freshness-quit: done
-  4-5-status-messages-for-error-states: in-progress
+  4-5-status-messages-for-error-states: done
   epic-4-retrospective: optional
 
-  epic-5: backlog
-  5-1-notification-permission-service-setup: backlog
+  epic-5: in-progress
+  5-1-notification-permission-service-setup: done
   5-2-threshold-state-machine-warning-notifications: backlog
   5-3-critical-threshold-persistent-notifications: backlog
   epic-5-retrospective: optional
