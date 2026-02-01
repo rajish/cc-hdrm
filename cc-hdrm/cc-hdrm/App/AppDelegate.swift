@@ -63,24 +63,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         Self.logger.info("Menu bar status item configured")
 
+        // Create NotificationService if not already injected (test path)
+        if notificationService == nil {
+            notificationService = NotificationService()
+        }
+
         // Create PollingEngine with production services if not already injected (test path)
         if pollingEngine == nil {
             pollingEngine = PollingEngine(
                 keychainService: KeychainService(),
                 tokenRefreshService: TokenRefreshService(),
                 apiClient: APIClient(),
-                appState: state
+                appState: state,
+                notificationService: notificationService
             )
         }
 
         // Create FreshnessMonitor if not already injected (test path)
         if freshnessMonitor == nil {
             freshnessMonitor = FreshnessMonitor(appState: state)
-        }
-
-        // Create NotificationService if not already injected (test path)
-        if notificationService == nil {
-            notificationService = NotificationService()
         }
 
         startObservingAppState()

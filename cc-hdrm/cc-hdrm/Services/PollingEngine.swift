@@ -10,6 +10,7 @@ final class PollingEngine: PollingEngineProtocol {
     private let tokenRefreshService: any TokenRefreshServiceProtocol
     private let apiClient: any APIClientProtocol
     private let appState: AppState
+    private let notificationService: (any NotificationServiceProtocol)?
     private var pollingTask: Task<Void, Never>?
 
     private static let logger = Logger(
@@ -21,12 +22,14 @@ final class PollingEngine: PollingEngineProtocol {
         keychainService: any KeychainServiceProtocol,
         tokenRefreshService: any TokenRefreshServiceProtocol,
         apiClient: any APIClientProtocol,
-        appState: AppState
+        appState: AppState,
+        notificationService: (any NotificationServiceProtocol)? = nil
     ) {
         self.keychainService = keychainService
         self.tokenRefreshService = tokenRefreshService
         self.apiClient = apiClient
         self.appState = appState
+        self.notificationService = notificationService
     }
 
     func start() async {
@@ -133,6 +136,7 @@ final class PollingEngine: PollingEngineProtocol {
             }
 
             appState.updateWindows(fiveHour: fiveHourState, sevenDay: sevenDayState)
+            await notificationService?.evaluateThresholds(fiveHour: fiveHourState, sevenDay: sevenDayState)
             appState.updateConnectionStatus(.connected)
             appState.updateStatusMessage(nil)
             Self.logger.info("Usage data fetched and applied successfully")
