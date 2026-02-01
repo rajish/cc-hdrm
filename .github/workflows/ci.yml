@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: cc-hdrm
+        run: xcodegen generate
+
+      - name: Build
+        working-directory: cc-hdrm
+        run: |
+          xcodebuild \
+            -project cc-hdrm.xcodeproj \
+            -scheme cc-hdrm \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+      - name: Test
+        working-directory: cc-hdrm
+        run: |
+          xcodebuild \
+            -project cc-hdrm.xcodeproj \
+            -scheme cc-hdrmTests \
+            -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            test
