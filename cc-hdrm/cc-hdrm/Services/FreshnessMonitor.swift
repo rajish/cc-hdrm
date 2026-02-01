@@ -14,7 +14,9 @@ final class FreshnessMonitor: FreshnessMonitorProtocol {
     )
 
     static let defaultCheckInterval: TimeInterval = 15
+    static let countdownTickInterval: TimeInterval = 60
     private let checkInterval: TimeInterval
+    private var countdownTickTask: Task<Void, Never>?
 
     /// The title used for freshness status messages. Used to identify and clear our own messages.
     static let staleMessageTitle = "Data may be outdated"
@@ -34,12 +36,23 @@ final class FreshnessMonitor: FreshnessMonitorProtocol {
             }
             Self.logger.info("Freshness monitor stopped")
         }
+
+        // Countdown tick: increment every 60 seconds to drive countdown re-renders
+        countdownTickTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(Self.countdownTickInterval))
+                guard !Task.isCancelled else { break }
+                self?.appState.tickCountdown()
+            }
+        }
     }
 
     func stop() {
         Self.logger.info("Freshness monitor stopping")
         monitorTask?.cancel()
         monitorTask = nil
+        countdownTickTask?.cancel()
+        countdownTickTask = nil
     }
 
     // MARK: - Internal (exposed for testing)

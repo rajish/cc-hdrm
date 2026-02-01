@@ -105,4 +105,66 @@ struct DateFormattingTests {
         let date = Date().addingTimeInterval(-90000)
         #expect(date.relativeTimeAgo() == "1d 1h ago")
     }
+
+    // MARK: - countdownString Tests (Story 3.2, Task 7)
+
+    @Test("resetsAt 30 minutes from now → 30m")
+    func countdown30Minutes() {
+        let date = Date().addingTimeInterval(30 * 60 + 10) // +10s buffer for test execution
+        #expect(date.countdownString() == "30m")
+    }
+
+    @Test("resetsAt 47 minutes from now → 47m")
+    func countdown47Minutes() {
+        let date = Date().addingTimeInterval(47 * 60 + 10)
+        #expect(date.countdownString() == "47m")
+    }
+
+    @Test("resetsAt 59 minutes from now → 59m")
+    func countdown59Minutes() {
+        let date = Date().addingTimeInterval(59 * 60 + 10)
+        #expect(date.countdownString() == "59m")
+    }
+
+    @Test("resetsAt 1 hour from now → 1h 0m")
+    func countdown1Hour() {
+        let date = Date().addingTimeInterval(60 * 60 + 10)
+        #expect(date.countdownString() == "1h 0m")
+    }
+
+    @Test("resetsAt 2h 13m from now → 2h 13m")
+    func countdown2h13m() {
+        let date = Date().addingTimeInterval(2 * 3600 + 13 * 60 + 10)
+        #expect(date.countdownString() == "2h 13m")
+    }
+
+    @Test("resetsAt 23h 59m from now → 23h 59m")
+    func countdown23h59m() {
+        let date = Date().addingTimeInterval(23 * 3600 + 59 * 60 + 10)
+        #expect(date.countdownString() == "23h 59m")
+    }
+
+    @Test("resetsAt 25h from now → 1d 1h")
+    func countdown25h() {
+        let date = Date().addingTimeInterval(25 * 3600 + 10)
+        #expect(date.countdownString() == "1d 1h")
+    }
+
+    @Test("resetsAt 49h from now → 2d 1h")
+    func countdown49h() {
+        let date = Date().addingTimeInterval(49 * 3600 + 10)
+        #expect(date.countdownString() == "2d 1h")
+    }
+
+    @Test("resetsAt in the past → 0m")
+    func countdownPast() {
+        let date = Date().addingTimeInterval(-60)
+        #expect(date.countdownString() == "0m")
+    }
+
+    @Test("resetsAt exactly now → 0m")
+    func countdownNow() {
+        let date = Date()
+        #expect(date.countdownString() == "0m")
+    }
 }

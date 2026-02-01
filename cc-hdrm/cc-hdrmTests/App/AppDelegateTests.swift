@@ -177,6 +177,55 @@ struct AppDelegateMenuBarTests {
         #expect(value?.contains("50") == true, "accessibilityValue should include the headroom percentage")
     }
 
+    // MARK: - Exhausted Accessibility Tests (Story 3.2, Task 10)
+
+    @Test("exhausted state with resetsAt → accessibility contains 'exhausted' and 'resets in'")
+    @MainActor
+    func accessibilityExhaustedWithResetsAt() async {
+        let mockEngine = MockPollingEngine()
+        let delegate = AppDelegate(pollingEngine: mockEngine)
+
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+        try? await Task.sleep(for: .milliseconds(50))
+
+        guard let appState = delegate.appState else {
+            #expect(Bool(false), "AppState should exist")
+            return
+        }
+
+        let resetsAt = Date().addingTimeInterval(30 * 60)
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(fiveHour: WindowState(utilization: 100.0, resetsAt: resetsAt), sevenDay: nil)
+        delegate.updateMenuBarDisplay()
+
+        let label = delegate.statusItem?.button?.accessibilityLabel() as? String
+        #expect(label?.contains("exhausted") == true, "Should contain 'exhausted'")
+        #expect(label?.contains("resets in") == true, "Should contain 'resets in'")
+    }
+
+    @Test("exhausted state without resetsAt → accessibility contains 'exhausted' but not 'resets in'")
+    @MainActor
+    func accessibilityExhaustedWithoutResetsAt() async {
+        let mockEngine = MockPollingEngine()
+        let delegate = AppDelegate(pollingEngine: mockEngine)
+
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+        try? await Task.sleep(for: .milliseconds(50))
+
+        guard let appState = delegate.appState else {
+            #expect(Bool(false), "AppState should exist")
+            return
+        }
+
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(fiveHour: WindowState(utilization: 100.0, resetsAt: nil), sevenDay: nil)
+        delegate.updateMenuBarDisplay()
+
+        let label = delegate.statusItem?.button?.accessibilityLabel() as? String
+        #expect(label?.contains("exhausted") == true, "Should contain 'exhausted'")
+        #expect(label?.contains("resets in") == false, "Should not contain 'resets in' without resetsAt")
+    }
+
     @Test("attributedTitle uses correct font weight for state")
     @MainActor
     func attributedTitleUsesCorrectFontWeight() async {

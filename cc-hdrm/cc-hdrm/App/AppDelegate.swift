@@ -9,6 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var freshnessMonitor: (any FreshnessMonitorProtocol)?
     private var observationTask: Task<Void, Never>?
     private var previousAccessibilityValue: String?
+    private var previousDisplayedWindow: DisplayedWindow?
+    private var previousShowingCountdown: Bool = false
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -111,17 +113,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem?.button?.attributedTitle = NSAttributedString(string: text, attributes: attributes)
 
         // Accessibility (AC #6, #7)
-        // AC#6: VoiceOver announces "cc-hdrm: Claude headroom [X] percent, [state]"
-        // Set as accessibilityLabel so it reads as a single phrase.
         let accessibilityValue: String
         if state == .disconnected {
             accessibilityValue = "cc-hdrm: Claude headroom disconnected"
+        } else if state == .exhausted {
+            let window: WindowState? = appState.displayedWindow == .fiveHour ? appState.fiveHour : appState.sevenDay
+            if let resetsAt = window?.resetsAt {
+                let minutes = max(0, Int(resetsAt.timeIntervalSince(Date()) / 60))
+                accessibilityValue = "cc-hdrm: Claude headroom exhausted, resets in \(minutes) minutes"
+            } else {
+                accessibilityValue = "cc-hdrm: Claude headroom exhausted"
+            }
         } else {
-            let headroom = max(0, Int(100.0 - (appState.fiveHour?.utilization ?? 0)))
+            let window: WindowState? = appState.displayedWindow == .fiveHour ? appState.fiveHour : appState.sevenDay
+            let headroom = max(0, Int(100.0 - (window?.utilization ?? 0)))
             accessibilityValue = "cc-hdrm: Claude headroom \(headroom) percent, \(state.rawValue)"
         }
 
         statusItem?.button?.setAccessibilityLabel(accessibilityValue)
+
+        // Log display mode transitions (percentage↔countdown, 5h↔7d promotion)
+        let currentWindow = appState.displayedWindow
+        let currentShowingCountdown = text.contains("\u{21BB}")
+
+        if previousDisplayedWindow != nil && previousDisplayedWindow != currentWindow {
+            let from = previousDisplayedWindow == .fiveHour ? "5h" : "7d"
+            let to = currentWindow == .fiveHour ? "5h" : "7d"
+            Self.logger.info("Display window switched: \(from, privacy: .public) → \(to, privacy: .public)")
+        }
+        if previousShowingCountdown != currentShowingCountdown {
+            let mode = currentShowingCountdown ? "countdown" : "percentage"
+            Self.logger.info("Display mode switched to \(mode, privacy: .public)")
+        }
+        previousDisplayedWindow = currentWindow
+        previousShowingCountdown = currentShowingCountdown
 
         if previousAccessibilityValue != accessibilityValue {
             statusItem?.button?.setAccessibilityValue(accessibilityValue)

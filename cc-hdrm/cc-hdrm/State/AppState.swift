@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 
 /// The connection status of the application.
 enum ConnectionStatus: String, Sendable {
@@ -26,6 +27,12 @@ struct StatusMessage: Sendable, Equatable {
     let detail: String
 }
 
+/// Which time window is currently promoted to the menu bar display.
+enum DisplayedWindow: Sendable, Equatable {
+    case fiveHour
+    case sevenDay
+}
+
 /// Single source of truth for all application state.
 /// Views observe this directly. Services write via methods only.
 @Observable
@@ -38,6 +45,14 @@ final class AppState {
     private(set) var subscriptionTier: String?
     private(set) var statusMessage: StatusMessage?
 
+    /// Counter incremented every 60 seconds to trigger observation-based re-renders of countdown text.
+    private(set) var countdownTick: UInt = 0
+
+    private static let logger = Logger(
+        subsystem: "com.cc-hdrm.app",
+        category: "menubar"
+    )
+
     /// Derived data freshness based on `lastUpdated` and `connectionStatus`.
     /// When disconnected, always returns `.unknown` regardless of `lastUpdated`.
     var dataFreshness: DataFreshness {
@@ -47,22 +62,62 @@ final class AppState {
         return DataFreshness(lastUpdated: lastUpdated)
     }
 
+    /// Which window is currently displayed in the menu bar.
+    /// 7-day promotes when it has lower headroom AND is in warning or critical state.
+    var displayedWindow: DisplayedWindow {
+        guard connectionStatus == .connected, fiveHour != nil else {
+            return .fiveHour
+        }
+
+        let fiveHourHeadroom = 100.0 - (fiveHour?.utilization ?? 100.0)
+        let sevenDayHeadroom = 100.0 - (sevenDay?.utilization ?? 100.0)
+
+        if let sevenDayState = sevenDay?.headroomState,
+           (sevenDayState == .warning || sevenDayState == .critical),
+           sevenDayHeadroom < fiveHourHeadroom {
+            return .sevenDay
+        }
+
+        return .fiveHour
+    }
+
     /// Derived headroom state for the menu bar display.
-    /// Returns `.disconnected` when not connected; otherwise derived from 5-hour window.
+    /// Returns `.disconnected` when not connected; promotes 7-day when tighter constraint applies.
     var menuBarHeadroomState: HeadroomState {
         guard connectionStatus == .connected else {
             return .disconnected
         }
-        return fiveHour?.headroomState ?? .disconnected
+
+        switch displayedWindow {
+        case .fiveHour:
+            return fiveHour?.headroomState ?? .disconnected
+        case .sevenDay:
+            return sevenDay?.headroomState ?? .disconnected
+        }
     }
 
-    /// Derived menu bar text: sparkle icon + headroom percentage or em dash when disconnected.
+    /// Derived menu bar text: sparkle icon + headroom percentage, countdown, or em dash when disconnected.
     var menuBarText: String {
         if menuBarHeadroomState == .disconnected {
             return "\u{2733} \u{2014}" // ✳ —
         }
-        let headroom = max(0, Int(100.0 - (fiveHour?.utilization ?? 0)))
+
+        let window: WindowState? = displayedWindow == .fiveHour ? fiveHour : sevenDay
+
+        if let window, window.headroomState == .exhausted, let resetsAt = window.resetsAt {
+            // Access countdownTick to register with withObservationTracking
+            _ = countdownTick
+            return "\u{2733} \u{21BB} \(resetsAt.countdownString())" // ✳ ↻ Xm
+        }
+
+        let headroom = max(0, Int(100.0 - (window?.utilization ?? 0)))
         return "\u{2733} \(headroom)%"
+    }
+
+    /// Increments the countdown tick to trigger observation-based re-renders.
+    /// Called every 60 seconds by FreshnessMonitor or AppDelegate.
+    func tickCountdown() {
+        countdownTick &+= 1
     }
 
     /// Updates the usage window states from API data.

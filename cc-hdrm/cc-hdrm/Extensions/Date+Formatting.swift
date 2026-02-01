@@ -34,6 +34,36 @@ extension Date {
         }
     }
 
+    /// Returns a countdown string from now to self (the reset time).
+    /// - `< 1h`: `"47m"`
+    /// - `1h–24h`: `"2h 13m"`
+    /// - `> 24h`: `"2d 1h"`
+    /// - Past or zero: `"0m"`
+    func countdownString() -> String {
+        let remaining = max(0, self.timeIntervalSince(Date()))
+        let totalMinutes = Int(remaining / 60)
+
+        if totalMinutes <= 0 {
+            return "0m"
+        }
+
+        let totalHours = totalMinutes / 60
+        let minutes = totalMinutes % 60
+
+        if totalHours == 0 {
+            return "\(totalMinutes)m"
+        }
+
+        let days = totalHours / 24
+        let hours = totalHours % 24
+
+        if days > 0 {
+            return "\(days)d \(hours)h"
+        }
+
+        return "\(totalHours)h \(minutes)m"
+    }
+
     /// Parses an ISO 8601 date string with fractional seconds support.
     /// Returns `nil` on parse failure — never crashes.
     static func fromISO8601(_ string: String) -> Date? {
