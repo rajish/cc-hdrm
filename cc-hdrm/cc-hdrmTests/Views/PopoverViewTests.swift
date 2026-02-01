@@ -74,3 +74,60 @@ struct PopoverViewLiveUpdateTests {
         #expect(appState.connectionStatus == .connected)
     }
 }
+
+// MARK: - 5h Gauge Integration Tests (Story 4.2, Task 9)
+
+@Suite("PopoverView 5h Gauge Integration Tests")
+struct PopoverView5hGaugeTests {
+
+    @Test("PopoverView with valid 5h data renders without crash")
+    @MainActor
+    func validFiveHourData() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 17.0, resetsAt: Date().addingTimeInterval(47 * 60)),
+            sevenDay: nil
+        )
+        let view = PopoverView(appState: appState)
+        let controller = NSHostingController(rootView: view)
+        _ = controller.view
+        #expect(appState.fiveHour != nil)
+    }
+
+    @Test("PopoverView with nil fiveHour renders disconnected gauge without crash")
+    @MainActor
+    func nilFiveHourData() {
+        let appState = AppState()
+        // Default: no fiveHour data, disconnected
+        let view = PopoverView(appState: appState)
+        let controller = NSHostingController(rootView: view)
+        _ = controller.view
+        #expect(appState.fiveHour == nil)
+    }
+
+    @Test("Updating AppState.fiveHour triggers observation on FiveHourGaugeSection")
+    @MainActor
+    func fiveHourObservation() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+
+        // Track observation at FiveHourGaugeSection level — this view directly reads fiveHour
+        let expectation = OSAllocatedUnfairLock(initialState: false)
+        withObservationTracking {
+            let section = FiveHourGaugeSection(appState: appState)
+            _ = section.body
+        } onChange: {
+            expectation.withLock { $0 = true }
+        }
+
+        // Mutate fiveHour — FiveHourGaugeSection.body reads appState.fiveHour directly
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 50.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: nil
+        )
+
+        let detected = expectation.withLock { $0 }
+        #expect(detected, "Observation should detect fiveHour update read by FiveHourGaugeSection")
+    }
+}

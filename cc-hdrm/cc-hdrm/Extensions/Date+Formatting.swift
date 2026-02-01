@@ -64,6 +64,29 @@ extension Date {
         return "\(totalHours)h \(minutes)m"
     }
 
+    private nonisolated(unsafe) static let sameDayTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        return formatter
+    }()
+
+    private nonisolated(unsafe) static let differentDayTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE h:mm a"
+        return formatter
+    }()
+
+    /// Returns an absolute time string for display below countdowns.
+    /// - Same day: `"at 4:52 PM"`
+    /// - Different day: `"at Mon 7:05 PM"`
+    func absoluteTimeString() -> String {
+        let formatter = Calendar.current.isDateInToday(self)
+            ? Self.sameDayTimeFormatter
+            : Self.differentDayTimeFormatter
+
+        return "at \(formatter.string(from: self))"
+    }
+
     /// Parses an ISO 8601 date string with fractional seconds support.
     /// Returns `nil` on parse failure — never crashes.
     static func fromISO8601(_ string: String) -> Date? {

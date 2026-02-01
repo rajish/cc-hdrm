@@ -167,4 +167,38 @@ struct DateFormattingTests {
         let date = Date()
         #expect(date.countdownString() == "0m")
     }
+
+    // MARK: - absoluteTimeString Tests (Story 4.2, Task 3)
+
+    @Test("absoluteTimeString for same-day date produces 'at H:mm a' format")
+    func absoluteTimeSameDay() {
+        // Create a date today at 4:52 PM local time
+        var components = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+        components.hour = 16
+        components.minute = 52
+        let date = Calendar.current.date(from: components)!
+
+        let result = date.absoluteTimeString()
+        #expect(result.hasPrefix("at "))
+        // Should NOT contain a weekday abbreviation for same-day
+        let withoutAt = String(result.dropFirst(3))
+        // Same-day format: "4:52 PM" — no weekday
+        #expect(withoutAt.contains(":"))
+        #expect(withoutAt.lowercased().contains("m")) // AM/PM or am/pm
+    }
+
+    @Test("absoluteTimeString for different-day date produces 'at EEE H:mm a' format")
+    func absoluteTimeDifferentDay() {
+        // Create a date 2 days from now
+        let date = Calendar.current.date(byAdding: .day, value: 2, to: Date())!
+        let result = date.absoluteTimeString()
+        #expect(result.hasPrefix("at "))
+        // Different-day format should include weekday abbreviation (3 chars like Mon, Tue)
+        let withoutAt = String(result.dropFirst(3))
+        #expect(withoutAt.contains(":"))
+        #expect(withoutAt.lowercased().contains("m")) // AM/PM or am/pm
+        // Should have a weekday prefix (e.g. "Mon ", "Tue ")
+        let parts = withoutAt.split(separator: " ")
+        #expect(parts.count >= 3, "Expected weekday + time + AM/PM, got: \(withoutAt)")
+    }
 }
