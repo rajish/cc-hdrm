@@ -20,4 +20,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Automatic token expiry detection and refresh
 - Xcode project with XcodeGen configuration
 
-[Unreleased]: https://github.com/rajish/cc-hdrm/commits/main
+[Unreleased]: https://github.com/rajish/cc-hdrm/commits/master

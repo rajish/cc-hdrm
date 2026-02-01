@@ -6,7 +6,7 @@ Thanks for your interest in contributing. This document covers the process for c
 
 1. Fork the repository
 2. Clone your fork
-3. Create a branch from `main` for your change
+3. Create a branch from `master` for your change
 
 ### Development Setup
 
@@ -57,7 +57,7 @@ Open an [issue](https://github.com/rajish/cc-hdrm/issues/new?template=feature_re
 2. Fork and create a branch: `git checkout -b fix/description` or `git checkout -b feat/description`
 3. Make your changes
 4. Ensure tests pass
-5. Submit a pull request against `main`
+5. Submit a pull request against `master`
 
 ### Pull Request Guidelines
 
