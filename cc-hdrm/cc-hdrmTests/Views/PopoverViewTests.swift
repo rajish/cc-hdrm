@@ -123,6 +123,96 @@ struct PopoverViewLiveUpdateTests {
     }
 }
 
+// MARK: - Status Message Integration Tests (Story 4.5, Task 4)
+
+@Suite("PopoverView Status Message Tests")
+struct PopoverViewStatusMessageTests {
+
+    @Test("PopoverView renders without crash when connectionStatus == .disconnected")
+    @MainActor
+    func rendersInDisconnectedState() {
+        let appState = AppState()
+        // Default state is .disconnected
+        #expect(appState.connectionStatus == .disconnected)
+        let view = PopoverView(appState: appState)
+        let controller = NSHostingController(rootView: view)
+        _ = controller.view
+    }
+
+    @Test("PopoverView renders without crash when connectionStatus == .tokenExpired")
+    @MainActor
+    func rendersInTokenExpiredState() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.tokenExpired)
+        let view = PopoverView(appState: appState)
+        let controller = NSHostingController(rootView: view)
+        _ = controller.view
+    }
+
+    @Test("PopoverView renders without crash when connectionStatus == .noCredentials")
+    @MainActor
+    func rendersInNoCredentialsState() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.noCredentials)
+        let view = PopoverView(appState: appState)
+        let controller = NSHostingController(rootView: view)
+        _ = controller.view
+    }
+
+    @Test("PopoverView renders without crash when connected with very stale data")
+    @MainActor
+    func rendersWithVeryStaleData() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: nil
+        )
+        // Make data very stale (> 5 minutes old)
+        appState.setLastUpdated(Date().addingTimeInterval(-400))
+        #expect(appState.dataFreshness == .veryStale)
+        let view = PopoverView(appState: appState)
+        let controller = NSHostingController(rootView: view)
+        _ = controller.view
+    }
+
+    @Test("PopoverView renders without crash when connected with fresh data (no StatusMessageView)")
+    @MainActor
+    func rendersWithFreshDataNoStatusMessage() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: nil
+        )
+        #expect(appState.dataFreshness == .fresh)
+        let view = PopoverView(appState: appState)
+        let controller = NSHostingController(rootView: view)
+        _ = controller.view
+    }
+
+    @Test("Observation triggers when connectionStatus changes")
+    @MainActor
+    func observationTriggersOnConnectionStatusChange() {
+        let appState = AppState()
+        // Start disconnected (default)
+
+        let expectation = OSAllocatedUnfairLock(initialState: false)
+        withObservationTracking {
+            let view = PopoverView(appState: appState)
+            _ = view.body
+        } onChange: {
+            expectation.withLock { $0 = true }
+        }
+
+        // Change connectionStatus — PopoverView.body reads it via resolvedStatusMessage
+        appState.updateConnectionStatus(.connected)
+
+        let detected = expectation.withLock { $0 }
+        #expect(detected, "Observation should detect connectionStatus change read by PopoverView.body")
+    }
+}
+
 // MARK: - 5h Gauge Integration Tests (Story 4.2, Task 9)
 
 @Suite("PopoverView 5h Gauge Integration Tests")
