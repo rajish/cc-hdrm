@@ -47,31 +47,79 @@ struct PopoverViewLiveUpdateTests {
             expectation.withLock { $0 = true }
         }
 
-        // Mutate a property that PopoverView.body reads (connectionStatus)
-        appState.updateConnectionStatus(.connected)
+        // Mutate a property that PopoverView.body reads (sevenDay via appState.sevenDay != nil)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: WindowState(utilization: 30.0, resetsAt: Date().addingTimeInterval(86400))
+        )
 
         // onChange fires synchronously on the property mutation
         let detected = expectation.withLock { $0 }
         #expect(detected, "Observation should detect AppState change read by PopoverView.body")
     }
 
-    @Test("PopoverView footer reflects disconnected state")
+    @Test("PopoverView with footer renders without crash in disconnected and connected states")
     @MainActor
-    func footerReflectsDisconnectedState() {
+    func footerRendersInBothStates() {
         let appState = AppState()
-        // Default connectionStatus is .disconnected
+        // Disconnected state — footer should render with "—" placeholders
+        #expect(appState.connectionStatus == .disconnected)
         let view = PopoverView(appState: appState)
         let controller = NSHostingController(rootView: view)
         _ = controller.view // force layout
 
-        // After connecting, a new view evaluation should differ
+        // Connected state with data — footer should render with tier and freshness
         appState.updateConnectionStatus(.connected)
+        appState.updateSubscriptionTier("Max")
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: nil
+        )
+        #expect(appState.connectionStatus == .connected)
+        #expect(appState.dataFreshness == .fresh)
         let view2 = PopoverView(appState: appState)
         let controller2 = NSHostingController(rootView: view2)
         _ = controller2.view
+    }
 
-        // Verify the appState reference is shared and connected
-        #expect(appState.connectionStatus == .connected)
+    @Test("PopoverView with subscription tier renders footer without crash")
+    @MainActor
+    func footerRendersWithSubscriptionTier() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        appState.updateSubscriptionTier("Max")
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: nil
+        )
+        let view = PopoverView(appState: appState)
+        let controller = NSHostingController(rootView: view)
+        _ = controller.view
+        #expect(appState.subscriptionTier == "Max")
+    }
+
+    @Test("PopoverView observation triggers on sevenDay change (conditional section)")
+    @MainActor
+    func observationTriggersOnSevenDayChange() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+
+        let expectation = OSAllocatedUnfairLock(initialState: false)
+        withObservationTracking {
+            let view = PopoverView(appState: appState)
+            _ = view.body
+        } onChange: {
+            expectation.withLock { $0 = true }
+        }
+
+        // sevenDay is read directly by PopoverView.body (the `if appState.sevenDay != nil` condition)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: WindowState(utilization: 30.0, resetsAt: Date().addingTimeInterval(86400))
+        )
+
+        let detected = expectation.withLock { $0 }
+        #expect(detected, "Observation should detect sevenDay change read by PopoverView.body")
     }
 }
 

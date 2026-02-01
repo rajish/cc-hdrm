@@ -7,11 +7,6 @@ struct PopoverView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Reading connectionStatus and countdownTick registers observation dependencies,
-            // ensuring SwiftUI re-renders this view when AppState changes.
-            let status = appState.connectionStatus
-            let _ = appState.countdownTick
-
             FiveHourGaugeSection(appState: appState)
                 .padding(.horizontal)
                 .padding(.vertical, 8)
@@ -27,8 +22,7 @@ struct PopoverView: View {
 
             Divider()
 
-            Text(status == .disconnected ? "disconnected" : "footer")
-                .frame(maxWidth: .infinity, alignment: .leading)
+            PopoverFooterView(appState: appState)
                 .padding(.horizontal)
                 .padding(.vertical, 8)
         }
