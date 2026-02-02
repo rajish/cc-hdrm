@@ -13,6 +13,16 @@ settings:
     DEVELOPMENT_TEAM: HHTRL92UZR
     CODE_SIGN_STYLE: Automatic
 
+schemes:
+  cc-hdrm:
+    build:
+      targets:
+        cc-hdrm: all
+        cc-hdrmTests: [test]
+    test:
+      targets:
+        - cc-hdrmTests
+
 targets:
   cc-hdrm:
     type: application
