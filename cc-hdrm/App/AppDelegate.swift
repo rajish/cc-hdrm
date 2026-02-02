@@ -86,12 +86,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self, let popover = self.popover, popover.isShown else { return }
-                Self.popoverLogger.info("Popover closing via settings dismiss")
-                popover.performClose(nil)
-                self.removeEventMonitor()
-            }
+            guard let self, let popover = self.popover, popover.isShown else { return }
+            Self.popoverLogger.info("Popover closing via settings dismiss")
+            popover.performClose(nil)
+            self.removeEventMonitor()
         }
 
         Self.logger.info("Menu bar status item configured")
@@ -164,12 +162,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the expected click-away-to-close behavior.
     private func installEventMonitor() {
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self, let popover = self.popover, popover.isShown else { return }
-                Self.popoverLogger.info("Popover closing via click-outside")
-                popover.performClose(nil)
-                self.removeEventMonitor()
-            }
+            guard let self, let popover = self.popover, popover.isShown else { return }
+            Self.popoverLogger.info("Popover closing via click-outside")
+            popover.performClose(nil)
+            self.removeEventMonitor()
         }
     }
 

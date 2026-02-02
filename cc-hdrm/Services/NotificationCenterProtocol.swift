@@ -10,4 +10,4 @@ protocol NotificationCenterProtocol: Sendable {
     func add(_ request: UNNotificationRequest) async throws
 }
 
-extension UNUserNotificationCenter: @retroactive @unchecked Sendable, NotificationCenterProtocol {}
+extension UNUserNotificationCenter: @preconcurrency NotificationCenterProtocol {}
