@@ -1,5 +1,5 @@
 ---
-stepsCompleted: [step-01-validate-prerequisites, step-02-design-epics, step-03-create-stories, step-04-final-validation]
+stepsCompleted: [step-01-validate-prerequisites, step-02-design-epics, step-03-create-stories, step-04-final-validation, phase-2-epics-added]
 inputDocuments:
   - _bmad-output/planning-artifacts/prd.md
   - _bmad-output/planning-artifacts/architecture.md
@@ -40,6 +40,14 @@ FR21: User can see an explanation of the connection failure in the expanded pane
 FR22: App can automatically resume normal display when connectivity returns
 FR23: App can launch and display usage data without any manual configuration
 FR24: User can quit the app from the menu bar
+FR25: User can see when a newer version is available via a dismissable badge in the expanded panel; once dismissed, the badge does not reappear until a newer version is released (Phase 2)
+FR26: User can access a direct download link for the latest version from within the expanded panel (Phase 2)
+FR27: User can configure notification headroom thresholds, replacing the hardcoded 20% and 5% defaults (Phase 2)
+FR28: User can configure the polling interval, replacing the hardcoded 30-second default (Phase 2)
+FR29: User can enable launch at login so the app starts automatically on macOS boot (Phase 2)
+FR30: User can access a settings view from the gear menu to configure preferences (Phase 2)
+FR31: Maintainer can trigger a semver release by including [patch], [minor], or [major] in a PR title merged to master (Phase 2)
+FR32: Release changelog is auto-generated from merged PR titles since last tag, with optional maintainer preamble (Phase 2)
 
 ### NonFunctional Requirements
 
@@ -124,6 +132,14 @@ FR21: Epic 2 - Connection failure explanation in panel
 FR22: Epic 2 - Auto-resume on connectivity return
 FR23: Epic 1 - Zero-config launch
 FR24: Epic 4 - Quit from menu bar
+FR25: Epic 8 - Dismissable update badge in popover
+FR26: Epic 8 - Direct download link in popover
+FR27: Epic 6 - Configurable notification thresholds
+FR28: Epic 6 - Configurable poll interval
+FR29: Epic 6 - Launch at login
+FR30: Epic 6 - Settings view in gear menu
+FR31: Epic 7 - Keyword-driven semver release
+FR32: Epic 7 - Auto-generated changelog
 
 ## Epic List
 
@@ -146,6 +162,22 @@ Alex clicks to expand and sees the full picture — both usage windows with ring
 ### Epic 5: Threshold Notifications
 Alex gets notified before he hits the wall — macOS notifications fire at 20% and 5% headroom for both windows independently, with full context including reset countdowns and absolute times. Never misses a warning, even when AFK.
 **FRs covered:** FR17, FR18, FR19
+
+### Epic 6: User Preferences & Settings (Phase 2)
+Alex tweaks cc-hdrm to fit his workflow — adjustable notification thresholds, custom poll interval, launch at login. All accessible from a settings view in the gear menu, all taking effect immediately.
+**FRs covered:** FR27, FR28, FR29, FR30
+
+### Epic 7: Release Infrastructure & CI/CD (Phase 2)
+The maintainer merges a PR with `[minor]` in the title and walks away. GitHub Actions bumps the version, tags the release, builds the binary, generates a changelog from merged PRs, and publishes to GitHub Releases — no manual steps.
+**FRs covered:** FR31, FR32
+
+### Epic 8: In-App Update Awareness (Phase 2)
+Alex sees a subtle badge in the popover when a new version is available — one click to download, one click to dismiss. No nag, no interruption, just awareness.
+**FRs covered:** FR25, FR26
+
+### Epic 9: Homebrew Tap Distribution (Phase 2)
+A developer finds cc-hdrm, runs `brew install cc-hdrm`, and it works. Upgrades flow through `brew upgrade` automatically when new releases are published.
+**FRs covered:** (supports FR25/FR26 Homebrew update path)
 
 ## Epic 1: Zero-Config Launch & Credential Discovery
 
@@ -605,3 +637,317 @@ So that I have maximum warning to wrap up before hitting the limit.
 **When** a threshold crossing occurs
 **Then** no notification is attempted, no error is shown
 **And** the menu bar color/weight changes still reflect the state (visual fallback)
+
+## Epic 6: User Preferences & Settings (Phase 2)
+
+Alex tweaks cc-hdrm to fit his workflow — adjustable notification thresholds, custom poll interval, launch at login. All accessible from a settings view in the gear menu, all taking effect immediately.
+
+### Story 6.1: Preferences Manager & UserDefaults Persistence
+
+As a developer using Claude Code,
+I want my preference changes to persist across app restarts,
+So that I configure cc-hdrm once and it remembers my choices.
+
+**Acceptance Criteria:**
+
+**Given** the app launches for the first time (no UserDefaults entries exist)
+**When** PreferencesManager initializes
+**Then** it provides default values: warning threshold 20%, critical threshold 5%, poll interval 30s, launch at login false, dismissedVersion nil
+**And** PreferencesManager conforms to PreferencesManagerProtocol for testability
+
+**Given** the user changes a preference via the settings view
+**When** the value is written to UserDefaults
+**Then** it persists across app restarts
+**And** the new value takes effect immediately without requiring restart
+
+**Given** the user sets warning threshold to 15% and critical threshold to 3%
+**When** the next poll cycle evaluates thresholds
+**Then** NotificationService uses 15% and 3% instead of the defaults
+**And** threshold state machines re-arm based on new thresholds
+
+**Given** the user sets poll interval to 60 seconds
+**When** the current poll cycle completes
+**Then** PollingEngine waits 60 seconds before the next cycle (hot-reconfigurable)
+
+**Given** UserDefaults contains an invalid value (e.g. poll interval of 5 seconds)
+**When** PreferencesManager reads the value
+**Then** it clamps to the valid range (min 10s, max 300s) and uses the clamped value
+**And** warning threshold must be > critical threshold — if violated, defaults are restored
+
+### Story 6.2: Settings View UI
+
+As a developer using Claude Code,
+I want to access a settings view from the gear menu,
+So that I can configure cc-hdrm's behavior without editing files.
+
+**Acceptance Criteria:**
+
+**Given** the popover is open and Alex clicks the gear icon
+**When** the gear menu appears
+**Then** it shows "Settings..." as a menu item above "Quit cc-hdrm" (FR30)
+
+**Given** Alex selects "Settings..."
+**When** the settings view opens
+**Then** it displays:
+**And** Warning threshold: stepper or slider (range 6-50%, default 20%)
+**And** Critical threshold: stepper or slider (range 1-49%, must be < warning threshold)
+**And** Poll interval: picker with options 10s, 15s, 30s, 60s, 120s, 300s (default 30s)
+**And** Launch at login: toggle switch (default off)
+**And** "Reset to Defaults" button
+
+**Given** Alex changes any preference value
+**When** the value changes
+**Then** it takes effect immediately (no save button required)
+**And** the value is persisted to UserDefaults via @AppStorage bindings
+
+**Given** Alex clicks "Reset to Defaults"
+**When** the reset executes
+**Then** all preferences return to default values (20%, 5%, 30s, off)
+**And** changes take effect immediately
+
+**Given** a VoiceOver user navigates the settings view
+**When** VoiceOver reads each control
+**Then** each has a descriptive accessibility label (e.g., "Warning notification threshold, 20 percent")
+
+### Story 6.3: Configurable Notification Thresholds
+
+As a developer using Claude Code,
+I want to set my own notification thresholds,
+So that I get alerted at the headroom levels that matter for my workflow.
+
+**Acceptance Criteria:**
+
+**Given** the user has set warning threshold to 30% and critical threshold to 10%
+**When** 5-hour headroom drops below 30%
+**Then** a warning notification fires with the same format as Story 5.2 (FR27)
+**And** the 20% default is no longer used
+
+**Given** the user has set critical threshold to 10%
+**When** headroom drops below 10% (after warning has fired)
+**Then** a critical notification fires with the same format as Story 5.3 (FR27)
+
+**Given** the user changes thresholds while headroom is already below the old threshold
+**When** the new threshold is set
+**Then** the threshold state machine re-evaluates immediately against current headroom
+**And** if headroom is above the new threshold, state resets to ABOVE_WARNING (re-armed)
+**And** if headroom is below the new threshold and no notification fired for it yet, notification fires
+
+### Story 6.4: Launch at Login
+
+As a developer using Claude Code,
+I want cc-hdrm to start automatically when I log in,
+So that usage monitoring is always running without me remembering to launch it.
+
+**Acceptance Criteria:**
+
+**Given** the user enables "Launch at login" in settings
+**When** the toggle is switched on
+**Then** the app registers as a login item via SMAppService.mainApp.register() (FR29)
+**And** on next macOS login, cc-hdrm launches automatically
+
+**Given** the user disables "Launch at login" in settings
+**When** the toggle is switched off
+**Then** the app unregisters via SMAppService.mainApp.unregister()
+**And** cc-hdrm no longer launches on login
+
+**Given** the app launches
+**When** PreferencesManager reads the launchAtLogin preference
+**Then** the toggle in settings reflects the actual SMAppService.mainApp.status (not just the stored preference)
+**And** if there's a mismatch (user changed it in System Settings), the UI reflects reality
+
+## Epic 7: Release Infrastructure & CI/CD (Phase 2)
+
+The maintainer merges a PR with `[minor]` in the title and walks away. GitHub Actions bumps the version, tags the release, builds the binary, generates a changelog from merged PRs, and publishes to GitHub Releases — no manual steps.
+
+### Story 7.1: Semantic Versioning Scheme & CHANGELOG
+
+As a project maintainer,
+I want a consistent versioning scheme and changelog format,
+So that users and contributors can track what changed between releases.
+
+**Acceptance Criteria:**
+
+**Given** the project repository
+**When** a developer inspects versioning
+**Then** the version lives in Info.plist (`CFBundleShortVersionString`) as the single source of truth
+**And** git tags follow the format `v{major}.{minor}.{patch}` (e.g., `v1.0.0`, `v1.1.0`)
+**And** CHANGELOG.md exists in the repo root
+
+**Given** a new release is published
+**When** the changelog is generated
+**Then** the CHANGELOG.md contains a section `## [version] - YYYY-MM-DD`
+**And** the section includes an auto-generated list of merged PR titles since the last tag
+**And** if the release PR body contained content between `<!-- release-notes-start -->` and `<!-- release-notes-end -->` markers, that content appears as a preamble above the PR list
+
+### Story 7.2: Pre-Merge Version Bump Workflow
+
+As a project maintainer,
+I want the version to be bumped automatically when I include a release keyword in a PR title,
+So that I don't have to manually edit Info.plist or remember version numbers.
+
+**Acceptance Criteria:**
+
+**Given** a maintainer opens a PR with `[patch]` in the title
+**When** the `release-prepare.yml` GitHub Actions workflow runs
+**Then** it reads the current version from Info.plist
+**And** bumps the patch component (e.g., `1.0.0` → `1.0.1`)
+**And** commits the updated Info.plist back to the PR branch
+**And** the commit message is: `chore: bump version to {new_version}`
+
+**Given** a maintainer opens a PR with `[minor]` in the title
+**When** the workflow runs
+**Then** it bumps the minor component and resets patch (e.g., `1.0.1` → `1.1.0`)
+
+**Given** a maintainer opens a PR with `[major]` in the title
+**When** the workflow runs
+**Then** it bumps the major component and resets minor + patch (e.g., `1.1.0` → `2.0.0`)
+
+**Given** a PR title contains no release keyword
+**When** the workflow evaluates the PR
+**Then** no version bump occurs, no commit is made, the workflow exits cleanly
+
+**Given** a non-maintainer opens a PR with a release keyword
+**When** the workflow evaluates permissions
+**Then** the version bump is skipped (only maintainers can trigger releases)
+**And** a comment or annotation indicates the keyword was ignored due to permissions
+
+### Story 7.3: Post-Merge Release Publish Workflow
+
+As a project maintainer,
+I want merging a release PR to automatically build, package, and publish,
+So that the entire release process requires zero manual steps after merge.
+
+**Acceptance Criteria:**
+
+**Given** a PR with a version bump commit is merged to `master`
+**When** the `release-publish.yml` GitHub Actions workflow runs
+**Then** it detects the version from the bumped Info.plist
+**And** tags `master` with `v{version}`
+**And** auto-generates a changelog entry from merged PR titles since the previous tag
+**And** if the merged PR body contained release notes between `<!-- release-notes-start -->` and `<!-- release-notes-end -->`, prepends that preamble
+**And** updates CHANGELOG.md with the new entry and commits to `master`
+**And** builds a universal binary (arm64 + x86_64) via `xcodebuild`
+**And** creates a ZIP: `cc-hdrm-{version}-macos.zip`
+**And** creates a GitHub Release with the changelog entry as body and the ZIP as an asset
+
+**Given** a PR without a version bump commit is merged to `master`
+**When** the workflow evaluates the merge
+**Then** no release is triggered, the workflow exits cleanly
+
+**Given** the build fails during the release workflow
+**When** `xcodebuild` returns a non-zero exit code
+**Then** the workflow fails, no GitHub Release is created, no tag is pushed
+**And** the maintainer is notified via GitHub Actions failure notification
+
+## Epic 8: In-App Update Awareness (Phase 2)
+
+Alex sees a subtle badge in the popover when a new version is available — one click to download, one click to dismiss. No nag, no interruption, just awareness.
+
+### Story 8.1: Update Check Service
+
+As a developer using Claude Code,
+I want the app to check for updates on launch,
+So that I know when a newer version is available without leaving the app.
+
+**Acceptance Criteria:**
+
+**Given** the app launches
+**When** UpdateCheckService runs
+**Then** it fetches `https://api.github.com/repos/{owner}/{repo}/releases/latest`
+**And** includes headers: `Accept: application/vnd.github.v3+json`, `User-Agent: cc-hdrm/<version>`
+**And** compares the response `tag_name` (stripped of `v` prefix) against `Bundle.main.infoDictionary["CFBundleShortVersionString"]`
+**And** UpdateCheckService conforms to UpdateCheckServiceProtocol for testability
+
+**Given** the latest release version is newer than the running version
+**When** the comparison completes
+**Then** AppState.availableUpdate is set with the version string and download URL (browser_download_url of the ZIP asset, falling back to html_url)
+
+**Given** the latest release version is equal to or older than the running version
+**When** the comparison completes
+**Then** AppState.availableUpdate remains nil, no badge is shown
+
+**Given** the GitHub API request fails (network error, rate limit, etc.)
+**When** the fetch fails
+**Then** the failure is silent — no error state, no UI impact, no log noise beyond `.debug` level
+**And** the app functions normally without update awareness
+
+### Story 8.2: Dismissable Update Badge & Download Link
+
+As a developer using Claude Code,
+I want to see and dismiss an update badge in the popover,
+So that I'm aware of updates without being nagged.
+
+**Acceptance Criteria:**
+
+**Given** AppState.availableUpdate is set (newer version available)
+**And** PreferencesManager.dismissedVersion != the available version
+**When** the popover renders
+**Then** a subtle badge appears in the popover (e.g., above the footer or below the gauges): "v{version} available" with a download icon/link (FR25)
+**And** the download link opens the release URL in the default browser (FR26)
+**And** a dismiss button (X or "Dismiss") is visible next to the badge
+
+**Given** Alex clicks the dismiss button
+**When** the badge is dismissed
+**Then** PreferencesManager.dismissedVersion is set to the available version
+**And** the badge disappears immediately
+**And** the badge does not reappear on subsequent launches or popover opens
+
+**Given** a *newer* version is released after Alex dismissed a previous update
+**When** UpdateCheckService detects a version newer than dismissedVersion
+**Then** the badge reappears for the new version
+**And** the cycle repeats (dismiss stores the new version)
+
+**Given** Alex installed via Homebrew
+**When** the update badge is shown
+**Then** the badge also shows "or `brew upgrade cc-hdrm`" as alternative update path
+
+**Given** a VoiceOver user focuses the update badge
+**When** VoiceOver reads the element
+**Then** it announces "Update available: version {version}. Activate to download. Double tap to dismiss."
+
+## Epic 9: Homebrew Tap Distribution (Phase 2)
+
+A developer finds cc-hdrm, runs `brew install cc-hdrm`, and it works. Upgrades flow through `brew upgrade` automatically when new releases are published.
+
+### Story 9.1: Homebrew Tap Repository Setup
+
+As a project maintainer,
+I want a Homebrew tap repository with a working formula,
+So that users can install cc-hdrm via `brew install`.
+
+**Acceptance Criteria:**
+
+**Given** the maintainer creates a separate repository `{owner}/homebrew-tap`
+**When** the repository is configured
+**Then** it contains `Formula/cc-hdrm.rb` with a valid Homebrew formula
+**And** the formula downloads the ZIP asset from the latest GitHub Release
+**And** the formula includes the correct SHA256 checksum of the ZIP
+**And** the formula installs the cc-hdrm.app bundle to the appropriate location
+
+**Given** a user runs `brew tap {owner}/tap && brew install cc-hdrm`
+**When** Homebrew processes the formula
+**Then** cc-hdrm is downloaded, extracted, and installed
+**And** the user can launch cc-hdrm from the installed location
+
+**Given** a user runs `brew upgrade cc-hdrm` after a new release
+**When** the formula has been updated with the new version and SHA256
+**Then** the new version is downloaded and installed, replacing the old version
+
+### Story 9.2: Automated Homebrew Formula Update
+
+As a project maintainer,
+I want the Homebrew formula to be updated automatically when a release is published,
+So that Homebrew users get new versions without manual formula maintenance.
+
+**Acceptance Criteria:**
+
+**Given** the `release-publish.yml` workflow has created a GitHub Release with a ZIP asset
+**When** the Homebrew update step runs
+**Then** it computes the SHA256 of the uploaded ZIP asset
+**And** updates `Formula/cc-hdrm.rb` in the `{owner}/homebrew-tap` repository with the new version URL and SHA256
+**And** commits and pushes the formula update
+
+**Given** the Homebrew formula update fails (e.g., push permission denied)
+**When** the step fails
+**Then** the GitHub Release is still published (formula update is non-blocking)
+**And** the maintainer is notified of the formula update failure

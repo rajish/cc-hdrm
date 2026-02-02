@@ -156,10 +156,15 @@ OAuth tokens expire (observed `expiresAt` ~6h from issue). The Keychain includes
 - Configurable poll interval
 - Homebrew tap distribution (`brew install cc-hdrm`)
 - Launch at login preference
-- Sonnet-specific usage breakdown
+- **Semantic versioning** (SemVer) with git tags
+- **CHANGELOG.md** maintained in repo, included in GitHub Release notes
+- **GitHub Releases pipeline** -- scripted build → ZIP packaging → GitHub Release with changelog
+- **In-app update check** -- app checks GitHub Releases API on launch, displays a dismissable badge in the expanded panel when a newer version is available with direct download link. Once dismissed, badge does not reappear until a *newer* version is released.
+- **Homebrew tap update path** -- `brew upgrade cc-hdrm` for Homebrew users, paired with the GitHub Releases pipeline
 
 ### Phase 3: Expansion
 
+- Sonnet-specific usage breakdown
 - Usage graphs -- historical patterns over hours/days/weeks
 - Limit prediction based on usage slope
 - Linux tray support
@@ -307,6 +312,14 @@ Without cc-hdrm, he'd have kept going, gotten cut off mid-response, lost context
 
 - FR23: App can launch and display usage data without any manual configuration
 - FR24: User can quit the app from the menu bar
+- FR25: User can see when a newer version is available via a dismissable badge in the expanded panel; once dismissed, the badge does not reappear until a newer version is released (Phase 2)
+- FR26: User can access a direct download link for the latest version from within the expanded panel (Phase 2)
+- FR27: User can configure notification headroom thresholds, replacing the hardcoded 20% and 5% defaults (Phase 2)
+- FR28: User can configure the polling interval, replacing the hardcoded 30-second default (Phase 2)
+- FR29: User can enable launch at login so the app starts automatically on macOS boot (Phase 2)
+- FR30: User can access a settings view from the gear menu to configure preferences (Phase 2)
+- FR31: Maintainer can trigger a semver release by including `[patch]`, `[minor]`, or `[major]` in a PR title merged to `master` (Phase 2)
+- FR32: Release changelog is auto-generated from merged PR titles since last tag, with optional maintainer preamble (Phase 2)
 
 ## Non-Functional Requirements
 

@@ -120,10 +120,16 @@ Native macOS desktop application (Swift/SwiftUI) — determined by PRD requireme
 9. Notifications → `UserNotifications` framework
 10. Testing → Swift Testing, protocol-based service interfaces for mocking
 
-**Deferred Decisions (Post-MVP):**
-- CI/CD pipeline
-- Homebrew distribution packaging
-- Configurable settings storage (UserDefaults for preferences in Phase 2)
+**Phase 2 Decisions (Now Resolved):**
+11. Settings persistence → `UserDefaults` via `PreferencesManager`
+12. Settings UI → `SettingsView` embedded in gear menu as a submenu/sheet
+13. Launch at login → `SMAppService` (ServiceManagement framework, macOS 13+)
+14. Update check → `UpdateCheckService` polling GitHub Releases API
+15. Release packaging → Scripted ZIP build + GitHub Release via `gh` CLI
+
+16. CI/CD → GitHub Actions: keyword-driven release from PR merge to `master`
+
+**Deferred Decisions (Post-MVP, Post-Phase 2):**
 - Sonnet-specific / extra usage display
 
 ### App Architecture
@@ -609,6 +615,164 @@ cc-hdrm/
 
 **Error flow:**
 - Any service failure → `PollingEngine` catches → `AppState.setError(error:)` → `connectionStatus` updates → Views show grey "—" + `StatusMessageView`
+
+## Phase 2 Architectural Additions
+
+### Settings Persistence (UserDefaults)
+
+**Framework:** `UserDefaults.standard` via a `PreferencesManager` service.
+
+**Stored preferences:**
+- `notificationWarningThreshold: Double` — headroom percentage for warning notification (default: 20.0)
+- `notificationCriticalThreshold: Double` — headroom percentage for critical notification (default: 5.0)
+- `pollInterval: TimeInterval` — seconds between poll cycles (default: 30, min: 10, max: 300)
+- `launchAtLogin: Bool` — whether app registers as login item (default: false)
+- `dismissedVersion: String?` — last version whose update badge was dismissed (for FR25)
+
+**Pattern:**
+- `PreferencesManager` conforms to `PreferencesManagerProtocol` for testability
+- Uses `@AppStorage` property wrappers in `SettingsView` for two-way binding
+- Services read preferences via `PreferencesManager` — not directly from `UserDefaults`
+- `PollingEngine` reads `pollInterval` from `PreferencesManager` at each cycle start (hot-reconfigurable)
+- `NotificationService` reads thresholds from `PreferencesManager` at each evaluation (hot-reconfigurable)
+
+**Validation rules:**
+- Warning threshold must be > critical threshold
+- Poll interval clamped to 10-300 second range
+- Invalid values silently replaced with defaults
+
+### Settings UI
+
+**Location:** `SettingsView.swift` in `Views/`
+
+**Access:** Gear menu in popover footer expands to show "Settings..." menu item (alongside existing "Quit cc-hdrm"). Selecting "Settings..." presents a sheet/popover with preference controls.
+
+**Layout:**
+- Notification thresholds: two sliders or steppers (warning %, critical %)
+- Poll interval: stepper or picker (10s, 15s, 30s, 60s, 120s, 300s)
+- Launch at login: toggle switch
+- Reset to defaults button
+
+**Binding:** `@AppStorage` property wrappers bind directly to `UserDefaults` keys. Changes take effect immediately (no save button).
+
+### Launch at Login
+
+**Framework:** `ServiceManagement` — `SMAppService.mainApp`
+
+**Implementation:**
+- `SMAppService.mainApp.register()` / `unregister()` called from `PreferencesManager` when `launchAtLogin` changes
+- Status checked on app launch via `SMAppService.mainApp.status`
+- No helper app needed — `SMAppService` (macOS 13+) handles it natively
+
+### Update Check Service
+
+**Service:** `UpdateCheckService` conforming to `UpdateCheckServiceProtocol`
+
+**Behavior:**
+- On app launch, fetches latest release from `https://api.github.com/repos/{owner}/{repo}/releases/latest`
+- Compares `tag_name` (semver) against `Bundle.main.infoDictionary["CFBundleShortVersionString"]`
+- If newer version exists AND `tag_name != PreferencesManager.dismissedVersion`:
+  - Sets `AppState.availableUpdate` with version string and download URL (`html_url` or asset browser_download_url)
+- If user dismisses the badge, stores the version in `PreferencesManager.dismissedVersion`
+- Badge does not reappear until a *newer* version (different `tag_name`) is released
+
+**Request headers:**
+- `Accept: application/vnd.github.v3+json`
+- `User-Agent: cc-hdrm/<version>`
+- No authentication required (public repo, GitHub API rate limit: 60 req/hr unauthenticated — more than sufficient for once-per-launch check)
+
+**Error handling:** Update check failures are silent — no error state, no UI impact. App functions normally without update awareness.
+
+### Release Packaging & CI/CD
+
+**Versioning:** Semantic versioning. Version string in `Info.plist` (`CFBundleShortVersionString`) and git tag (`v1.0.0`, `v1.1.0`). Default branch: `master`.
+
+**Release trigger:** Keyword in PR title: `[patch]`, `[minor]`, or `[major]`. No keyword = no release. Only PRs from maintainers trigger the release workflow (enforced via GitHub Actions permission check on actor).
+
+**Pre-merge workflow (on PR with keyword detected):**
+1. Detect `[patch]`/`[minor]`/`[major]` in PR title
+2. Read current version from `Info.plist`
+3. Bump version according to semver keyword
+4. Commit updated `Info.plist` back to the PR branch
+5. PR is ready for maintainer review and merge
+
+**Post-merge workflow (on merge to `master`):**
+1. Detect that merged PR had a version bump commit
+2. Tag `master` with `v{new_version}`
+3. Auto-generate changelog entry from merged PR titles since last tag
+4. If the release PR body contains a section between `<!-- release-notes-start -->` and `<!-- release-notes-end -->` markers, prepend that as a preamble above the auto-generated list
+5. Update `CHANGELOG.md` with the new entry and commit to `master`
+6. Build universal binary via `xcodebuild` (arm64 + x86_64)
+7. Create ZIP: `cc-hdrm-{version}-macos.zip`
+8. Create GitHub Release with changelog entry as body and ZIP as asset
+9. Update Homebrew formula in `{owner}/homebrew-tap` with new version and SHA256
+
+**CHANGELOG.md:** Auto-generated and maintained in repo root. Each release gets a `## [version] - date` section with optional maintainer preamble followed by auto-generated PR list.
+
+**GitHub Actions files:**
+- `.github/workflows/release-prepare.yml` — runs on PR, detects keyword, bumps version, commits to PR branch
+- `.github/workflows/release-publish.yml` — runs on merge to `master`, tags, builds, packages, publishes
+
+### Homebrew Tap
+
+**Repository:** Separate repo `{owner}/homebrew-tap` containing `Formula/cc-hdrm.rb`
+
+**Formula:**
+- Downloads ZIP asset from GitHub Release
+- Installs binary to `/usr/local/bin/` or Application folder
+- `brew upgrade cc-hdrm` pulls latest release
+
+**Maintenance:** Formula updated as part of release script (or manually post-release).
+
+### Phase 2 Project Structure Additions
+
+```
+cc-hdrm/
+├── cc-hdrm/
+│   ├── Services/
+│   │   ├── PreferencesManagerProtocol.swift   # NEW
+│   │   ├── PreferencesManager.swift           # NEW - UserDefaults wrapper
+│   │   ├── UpdateCheckServiceProtocol.swift   # NEW
+│   │   └── UpdateCheckService.swift           # NEW - GitHub Releases API
+│   ├── Views/
+│   │   └── SettingsView.swift                 # NEW - preferences UI
+├── cc-hdrmTests/
+│   ├── Services/
+│   │   ├── PreferencesManagerTests.swift      # NEW
+│   │   └── UpdateCheckServiceTests.swift      # NEW
+├── .github/
+│   └── workflows/
+│       ├── release-prepare.yml                # NEW - PR keyword detection + version bump
+│       └── release-publish.yml                # NEW - tag, build, package, publish
+├── CHANGELOG.md                               # NEW
+```
+
+### Phase 2 Requirements to Structure Mapping
+
+- FR25 (Update badge) → `Services/UpdateCheckService.swift` + `Views/PopoverView.swift` (badge in popover)
+- FR26 (Download link) → `Views/PopoverView.swift` (link opens in browser)
+- FR27 (Configurable thresholds) → `Services/PreferencesManager.swift` + `Views/SettingsView.swift` + `Services/NotificationService.swift`
+- FR28 (Configurable poll interval) → `Services/PreferencesManager.swift` + `Views/SettingsView.swift` + `Services/PollingEngine.swift`
+- FR29 (Launch at login) → `Services/PreferencesManager.swift` + `Views/SettingsView.swift`
+- FR30 (Settings view) → `Views/SettingsView.swift` + `Views/GearMenu.swift`
+
+### Phase 2 Data Flow Addition
+
+```
+┌───────────────┐     ┌───────────────────┐
+│ GitHub Releases│◀────│ UpdateCheckService │
+│     API        │────▶│ (launch check)    │──────┐
+└───────────────┘     └───────────────────┘      │ writes
+                                                  ▼
+┌───────────────┐     ┌───────────────────┐  ┌──────────┐
+│  UserDefaults  │◀───▶│ PreferencesManager│  │ AppState │
+└───────────────┘     └────────┬──────────┘  └──────────┘
+                               │ reads                ▲
+                    ┌──────────┼──────────┐           │
+                    ▼          ▼          ▼           │
+              PollingEngine  Notif.Svc  SettingsView──┘
+              (poll interval) (thresholds)
+```
 
 ## Architecture Validation Results
 
