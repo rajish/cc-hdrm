@@ -30,6 +30,7 @@ final class UpdateCheckService: UpdateCheckServiceProtocol, @unchecked Sendable 
     }
 
     /// Test initializer — injects network layer and version.
+    @MainActor
     init(
         dataLoader: @escaping DataLoader,
         appState: AppState,
@@ -69,7 +70,7 @@ final class UpdateCheckService: UpdateCheckServiceProtocol, @unchecked Sendable 
                 ? String(release.tagName.dropFirst())
                 : release.tagName
 
-            guard isNewer(remoteVersion, than: currentVersion) else {
+            guard Self.isNewer(remoteVersion, than: currentVersion) else {
                 Self.logger.debug("No update available (remote: \(remoteVersion))")
                 return
             }
@@ -113,10 +114,6 @@ final class UpdateCheckService: UpdateCheckServiceProtocol, @unchecked Sendable 
         let l = local.split(separator: ".").compactMap { Int($0) }
         guard r.count == 3, l.count == 3 else { return false }
         return (r[0], r[1], r[2]) > (l[0], l[1], l[2])
-    }
-
-    private func isNewer(_ remote: String, than local: String) -> Bool {
-        Self.isNewer(remote, than: local)
     }
 
     // MARK: - GitHub API Response Model

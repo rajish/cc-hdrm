@@ -1,6 +1,6 @@
 # Story 8.1: Update Check Service
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -14,7 +14,7 @@ so that I know when a newer version is available without leaving the app.
 
 1. **Given** the app launches, **When** `UpdateCheckService` runs, **Then** it fetches `https://api.github.com/repos/{owner}/{repo}/releases/latest` **And** includes headers: `Accept: application/vnd.github.v3+json`, `User-Agent: cc-hdrm/<version>` **And** compares the response `tag_name` (stripped of `v` prefix) against `Bundle.main.infoDictionary["CFBundleShortVersionString"]` **And** `UpdateCheckService` conforms to `UpdateCheckServiceProtocol` for testability.
 
-2. **Given** the latest release version is newer than the running version, **When** the comparison completes, **Then** `AppState.availableUpdate` is set with the version string and download URL (`browser_download_url` of the ZIP asset, falling back to `html_url`).
+2. **Given** the latest release version is newer than the running version, **When** the comparison completes, **Then** `AppState.availableUpdate` is set with the version string and download URL (`browser_download_url` of the DMG asset preferred, falling back to ZIP asset, falling back to `html_url`).
 
 3. **Given** the latest release version is equal to or older than the running version, **When** the comparison completes, **Then** `AppState.availableUpdate` remains nil, no badge is shown.
 
@@ -89,7 +89,7 @@ The `{owner}` and `{repo}` must be determined. Options:
 1. Hardcode (simplest, appropriate for a single-repo project)
 2. Read from a config constant
 
-Recommend: Define a `private static let` constant in `UpdateCheckService` for owner/repo. The repo is `rajish/cc-usage` based on the git remote.
+Recommend: Define a `private static let` constant in `UpdateCheckService` for owner/repo. The repo is `rajish/cc-hdrm` based on the git remote.
 
 **Required headers:**
 
@@ -274,6 +274,7 @@ None — clean implementation, no debugging required.
 ### Change Log
 
 - 2026-02-02: Implemented UpdateCheckService — GitHub Releases API integration with semver comparison, silent failure handling, dismissed version check, and 12 unit tests. All 355 tests pass.
+- 2026-02-02: Code review fixes — Updated AC #2 to reflect DMG-preferred asset selection (by design). Fixed test URLs from cc-usage to cc-hdrm. Fixed Dev Notes repo name. Added @MainActor to test initializer. Removed redundant instance isNewer wrapper. Added empty assets array test. Removed false pbxproj claim from File List.
 
 ### File List
 
@@ -287,4 +288,3 @@ None — clean implementation, no debugging required.
 **Modified files:**
 - `cc-hdrm/State/AppState.swift` — added `availableUpdate` property and `updateAvailableUpdate()` method
 - `cc-hdrm/App/AppDelegate.swift` — added `updateCheckService` property and fire-and-forget update check call
-- `cc-hdrm.xcodeproj/project.pbxproj` — added 5 new files to project

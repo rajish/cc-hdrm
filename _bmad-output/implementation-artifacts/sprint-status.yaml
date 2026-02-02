@@ -79,7 +79,7 @@ development_status:
   7-3-post-merge-release-publish-workflow: done
   epic-7-retrospective: done
 
-  epic-8: in-progress
-  8-1-update-check-service: review
+  epic-8: done
+  8-1-update-check-service: done
   8-2-dismissable-update-badge-download-link: done
   epic-8-retrospective: optional

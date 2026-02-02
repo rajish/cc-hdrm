@@ -7,14 +7,14 @@ struct UpdateCheckServiceTests {
 
     // MARK: - Helpers
 
-    private static let githubURL = URL(string: "https://api.github.com/repos/rajish/cc-usage/releases/latest")!
+    private static let githubURL = URL(string: "https://api.github.com/repos/rajish/cc-hdrm/releases/latest")!
 
     private static func makeRelease(
         tagName: String = "v2.0.0",
-        htmlUrl: String = "https://github.com/rajish/cc-usage/releases/tag/v2.0.0",
+        htmlUrl: String = "https://github.com/rajish/cc-hdrm/releases/tag/v2.0.0",
         assets: [[String: String]] = [
-            ["name": "cc-hdrm-2.0.0.dmg", "browser_download_url": "https://github.com/rajish/cc-usage/releases/download/v2.0.0/cc-hdrm-2.0.0.dmg"],
-            ["name": "cc-hdrm-v2.0.0-macos.zip", "browser_download_url": "https://github.com/rajish/cc-usage/releases/download/v2.0.0/cc-hdrm-v2.0.0-macos.zip"]
+            ["name": "cc-hdrm-2.0.0.dmg", "browser_download_url": "https://github.com/rajish/cc-hdrm/releases/download/v2.0.0/cc-hdrm-2.0.0.dmg"],
+            ["name": "cc-hdrm-v2.0.0-macos.zip", "browser_download_url": "https://github.com/rajish/cc-hdrm/releases/download/v2.0.0/cc-hdrm-v2.0.0-macos.zip"]
         ]
     ) -> String {
         let assetsJSON = assets.map { asset in
@@ -81,7 +81,7 @@ struct UpdateCheckServiceTests {
         await sut.checkForUpdate()
 
         #expect(appState.availableUpdate?.version == "2.0.0")
-        #expect(appState.availableUpdate?.downloadURL.absoluteString == "https://github.com/rajish/cc-usage/releases/download/v2.0.0/cc-hdrm-2.0.0.dmg")
+        #expect(appState.availableUpdate?.downloadURL.absoluteString == "https://github.com/rajish/cc-hdrm/releases/download/v2.0.0/cc-hdrm-2.0.0.dmg")
     }
 
     // MARK: - Same version → nil
@@ -142,7 +142,7 @@ struct UpdateCheckServiceTests {
     func missingAssetsFallback() async {
         let json = Self.makeRelease(
             tagName: "v2.0.0",
-            htmlUrl: "https://github.com/rajish/cc-usage/releases/tag/v2.0.0",
+            htmlUrl: "https://github.com/rajish/cc-hdrm/releases/tag/v2.0.0",
             assets: [["name": "something-else.tar.gz", "browser_download_url": "https://example.com/other.tar.gz"]]
         )
         let (sut, appState, _) = Self.makeSUT(json: json, currentVersion: "1.0.0")
@@ -150,7 +150,25 @@ struct UpdateCheckServiceTests {
         await sut.checkForUpdate()
 
         #expect(appState.availableUpdate?.version == "2.0.0")
-        #expect(appState.availableUpdate?.downloadURL.absoluteString == "https://github.com/rajish/cc-usage/releases/tag/v2.0.0")
+        #expect(appState.availableUpdate?.downloadURL.absoluteString == "https://github.com/rajish/cc-hdrm/releases/tag/v2.0.0")
+    }
+
+    // MARK: - Empty assets → falls back to htmlUrl
+
+    @Test("empty assets array falls back to htmlUrl")
+    @MainActor
+    func emptyAssetsFallback() async {
+        let json = Self.makeRelease(
+            tagName: "v2.0.0",
+            htmlUrl: "https://github.com/rajish/cc-hdrm/releases/tag/v2.0.0",
+            assets: []
+        )
+        let (sut, appState, _) = Self.makeSUT(json: json, currentVersion: "1.0.0")
+
+        await sut.checkForUpdate()
+
+        #expect(appState.availableUpdate?.version == "2.0.0")
+        #expect(appState.availableUpdate?.downloadURL.absoluteString == "https://github.com/rajish/cc-hdrm/releases/tag/v2.0.0")
     }
 
     // MARK: - No DMG → falls back to ZIP
@@ -160,14 +178,14 @@ struct UpdateCheckServiceTests {
     func missingDMGFallsBackToZip() async {
         let json = Self.makeRelease(
             tagName: "v2.0.0",
-            assets: [["name": "cc-hdrm-v2.0.0-macos.zip", "browser_download_url": "https://github.com/rajish/cc-usage/releases/download/v2.0.0/cc-hdrm-v2.0.0-macos.zip"]]
+            assets: [["name": "cc-hdrm-v2.0.0-macos.zip", "browser_download_url": "https://github.com/rajish/cc-hdrm/releases/download/v2.0.0/cc-hdrm-v2.0.0-macos.zip"]]
         )
         let (sut, appState, _) = Self.makeSUT(json: json, currentVersion: "1.0.0")
 
         await sut.checkForUpdate()
 
         #expect(appState.availableUpdate?.version == "2.0.0")
-        #expect(appState.availableUpdate?.downloadURL.absoluteString == "https://github.com/rajish/cc-usage/releases/download/v2.0.0/cc-hdrm-v2.0.0-macos.zip")
+        #expect(appState.availableUpdate?.downloadURL.absoluteString == "https://github.com/rajish/cc-hdrm/releases/download/v2.0.0/cc-hdrm-v2.0.0-macos.zip")
     }
 
     // MARK: - Dismissed version → nil
