@@ -5,8 +5,8 @@
 **cc-hdrm** is a native macOS menu bar utility that gives Claude Pro/Max subscribers always-visible, glanceable usage headroom data. It polls the Claude usage API in the background and displays live usage bars, reset countdowns, and color-coded warnings directly in the menu bar — zero tokens spent, zero workflow interruption.
 
 **Repository:** cc-usage (monorepo root) / cc-hdrm (Xcode project)
-**Status:** Active development, MVP phase
-**Distribution:** Open source, build from source (Xcode)
+**Status:** Active development, Phase 2 (MVP complete through Epic 5, Phase 2 Epics 6-9 in progress)
+**Distribution:** Open source, build from source (Xcode). Automated GitHub Releases via CI/CD. Homebrew tap planned.
 
 ---
 
@@ -41,11 +41,15 @@ Services (async throws)  -->  AppState (@Observable, @MainActor)  -->  Views (re
 
 **Key Components:**
 - `AppState` — single `@Observable` source of truth, `@MainActor`, services write via methods only
-- `PollingEngine` — `Task.sleep` loop (30s), orchestrates: Keychain read -> token check -> API fetch -> state update
+- `PollingEngine` — `Task.sleep` loop (configurable interval, default 30s), orchestrates: Keychain read -> token check -> API fetch -> state update
 - `KeychainService` — thin wrapper around Security framework, reads `Claude Code-credentials`
 - `APIClient` — `URLSession` GET to `api.anthropic.com/api/oauth/usage`
 - `TokenRefreshService` — POST to `platform.claude.com/v1/oauth/token`
-- `NotificationService` — threshold state machines, `UserNotifications`
+- `NotificationService` — threshold state machines, `UserNotifications`, configurable thresholds
+- `PreferencesManager` — `UserDefaults` wrapper for user preferences (thresholds, poll interval, launch at login, dismissed version)
+- `FreshnessMonitor` — 60-second timer for countdown tick and data freshness tracking
+- `LaunchAtLoginService` — `SMAppService` wrapper for login item registration
+- `UpdateCheckService` — fetches latest release from GitHub API, compares semver (Phase 2, Epic 8)
 
 ---
 
@@ -124,7 +128,7 @@ Follow **Apple Swift API Design Guidelines** consistently:
 
 ### Logging
 - Framework: `os.Logger`, subsystem `com.cc-hdrm.app`
-- Categories: `keychain`, `api`, `polling`, `notification`, `token`
+- Categories: `keychain`, `api`, `polling`, `notification`, `token`, `update`
 - **NEVER** log credentials, tokens, or sensitive data at any level
 - Log state transitions and error context factually
 
@@ -143,7 +147,7 @@ Follow **Apple Swift API Design Guidelines** consistently:
 
 ## Allowed Dependencies
 
-**MVP: Zero external dependencies.** The entire app uses only Apple SDK frameworks:
+**Zero external dependencies.** The entire app uses only Apple SDK frameworks:
 - SwiftUI, AppKit (UI)
 - Security (Keychain)
 - UserNotifications (alerts)
@@ -158,7 +162,7 @@ Do **not** add third-party packages without explicit approval.
 
 1. **Menu bar-only** — `LSUIElement=true`, no dock icon, no main window
 2. **No persistent storage** — all state in-memory, no database, no UserDefaults for usage data
-3. **No data transmission** to any endpoint other than `api.anthropic.com` and `platform.claude.com` (NFR8)
+3. **No data transmission** to any endpoint other than `api.anthropic.com`, `platform.claude.com`, and `api.github.com` (NFR8 + update checks)
 4. **Performance budgets:** <50MB memory, <1% CPU between polls, <200ms popover open, <2s UI update, <10s poll
 5. **Graceful degradation** — every component handles disconnected, token-expired, and no-credentials states
 6. **Defensive parsing** — API response changes must not crash the app (NFR12)
@@ -183,7 +187,9 @@ Do **not** add third-party packages without explicit approval.
 | Boundary        | Owner Component        | Rule                                                    |
 | --------------- | ---------------------- | ------------------------------------------------------- |
 | Keychain        | `KeychainService`      | Only component that imports `Security`                  |
-| HTTP            | `APIClient`            | Only component that makes external HTTP requests        |
+| HTTP (Usage)    | `APIClient`            | Only component that calls `api.anthropic.com`           |
+| HTTP (Token)    | `TokenRefreshService`  | Only component that calls `platform.claude.com`         |
+| HTTP (Update)   | `UpdateCheckService`   | Only component that calls `api.github.com`              |
 | Notifications   | `NotificationService`  | Only component that imports `UserNotifications`         |
 | State           | `AppState`             | All state flows through here; views never write to it   |
 | Entitlements    | `cc_hdrm.entitlements` | **Protected file** — do not modify without instruction  |
@@ -196,6 +202,7 @@ Do **not** add third-party packages without explicit approval.
 | ------------------- | ------------------------------------------------ | -------------------- |
 | Usage API           | `GET https://api.anthropic.com/api/oauth/usage`  | Fetch headroom data  |
 | Token Refresh       | `POST https://platform.claude.com/v1/oauth/token`| Refresh expired OAuth|
+| GitHub Releases     | `GET https://api.github.com/repos/{owner}/{repo}/releases/latest` | Update check (once per launch) |
 | Keychain            | macOS Security framework                         | Read/write credentials|
 
 **Required Headers (Usage API):**
