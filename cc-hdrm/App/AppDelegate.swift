@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     internal var preferencesManager: PreferencesManager?
     internal var launchAtLoginService: (any LaunchAtLoginServiceProtocol)?
     private var notificationService: (any NotificationServiceProtocol)?
+    private var updateCheckService: (any UpdateCheckServiceProtocol)?
     private var observationTask: Task<Void, Never>?
     private var eventMonitor: Any?
     private var previousAccessibilityValue: String?
@@ -120,10 +121,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         startObservingAppState()
 
+        // Create UpdateCheckService for app update detection
+        if updateCheckService == nil {
+            updateCheckService = UpdateCheckService(appState: state, preferencesManager: preferences)
+        }
+
         Task {
             await pollingEngine?.start()
             await freshnessMonitor?.start()
             await notificationService?.requestAuthorization()
+        }
+
+        // Fire-and-forget update check — do not block app launch
+        Task {
+            await updateCheckService?.checkForUpdate()
         }
     }
 

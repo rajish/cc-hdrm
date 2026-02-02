@@ -44,6 +44,7 @@ final class AppState {
     private(set) var lastUpdated: Date?
     private(set) var subscriptionTier: String?
     private(set) var statusMessage: StatusMessage?
+    private(set) var availableUpdate: AvailableUpdate?
 
     /// Counter incremented every 60 seconds to trigger observation-based re-renders of countdown text.
     private(set) var countdownTick: UInt = 0
@@ -140,6 +141,11 @@ final class AppState {
     /// Updates or clears the status message shown to the user.
     func updateStatusMessage(_ message: StatusMessage?) {
         self.statusMessage = message
+    }
+
+    /// Updates or clears the available update info.
+    func updateAvailableUpdate(_ update: AvailableUpdate?) {
+        self.availableUpdate = update
     }
 
     /// Sets `lastUpdated` to an arbitrary date. Test use only — not available in release builds.
