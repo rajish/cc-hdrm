@@ -91,7 +91,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) 
 - **Source of truth:** `CFBundleShortVersionString` in `cc-hdrm/Info.plist`
 - **Git tags:** `v{major}.{minor}.{patch}` (e.g., `v1.0.0`)
 - **Changelog:** [CHANGELOG.md](CHANGELOG.md) follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format with an `[Unreleased]` section for pending changes
-- **Release keywords:** Include `[patch]`, `[minor]`, or `[major]` in PR titles to signal the version bump type (used by CI/CD workflows)
+- **Release keywords:** Include `[patch]`, `[minor]`, or `[major]` in PR titles to signal the version bump type (will be used by CI/CD workflows — not yet automated)
 
 ## Status
 

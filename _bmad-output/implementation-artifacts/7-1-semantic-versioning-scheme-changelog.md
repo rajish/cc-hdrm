@@ -1,6 +1,6 @@
 # Story 7.1: Semantic Versioning Scheme & CHANGELOG
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -96,7 +96,7 @@ Custom preamble text here
 
 ### Previous Story Intelligence (6.4)
 
-- 341 tests passing, zero regressions. This story adds no Swift code, so test count should remain unchanged.
+- 340 tests passing, zero regressions. This story adds no Swift code, so test count should remain unchanged.
 - Project was recently flattened: Xcode project moved to repo root (commit `a6f115f`).
 - CHANGELOG.md was created during earlier development but hasn't been versioned with tags yet.
 
@@ -182,6 +182,7 @@ claude-opus-4-5 (anthropic/claude-opus-4-5)
 ### Change Log
 
 - 2026-02-02: Story 7.1 implemented — semver versioning baseline established with v1.0.0 tag
+- 2026-02-02: Code review fixes applied — fixed nested HTML comment in CHANGELOG.md, added missing Epic 5&6 features to [1.0.0] changelog section, fixed test count discrepancy (341→340), clarified CI/CD not yet active in README, corrected epic statuses in sprint-status.yaml
 
 ### File List
 

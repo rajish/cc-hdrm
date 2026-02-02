@@ -9,10 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Release notes convention: When creating a release PR, include optional
   preamble content between these markers in the PR body:
 
-    <!-- release-notes-start -->
+    < !-- release-notes-start -- >
     Your release summary here
-    <!-- release-notes-end -->
+    < !-- release-notes-end -- >
 
+  (Remove spaces from the marker tags above when using them.)
   This content will appear as a preamble above the auto-generated PR list
   in the changelog entry for that release.
 -->
@@ -33,6 +34,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - API client for Anthropic usage endpoint
 - Keychain credential discovery (reads Claude Code OAuth tokens)
 - Automatic token expiry detection and refresh
+- Notification permission service with system authorization
+- Threshold state machine with warning notifications at configurable levels
+- Critical threshold persistent notifications
+- Settings view UI with click-away dismiss
+- Preferences manager with UserDefaults persistence
+- Configurable notification thresholds
+- Launch at login via SMAppService
 - Xcode project with XcodeGen configuration
 
 [Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.0.0...HEAD

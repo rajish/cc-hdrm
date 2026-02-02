@@ -35,24 +35,24 @@ tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
 
 development_status:
-  epic-1: in-progress
+  epic-1: done
   1-1-xcode-project-initialization-menu-bar-shell: done
   1-2-keychain-credential-discovery: done
   1-3-token-expiry-detection-refresh: done
   epic-1-retrospective: optional
 
-  epic-2: in-progress
+  epic-2: done
   2-1-api-client-usage-data-fetch: done
   2-2-background-polling-engine: done
   2-3-data-freshness-tracking: done
   epic-2-retrospective: optional
 
-  epic-3: in-progress
+  epic-3: done
   3-1-menu-bar-headroom-display-with-color-weight: done
   3-2-context-adaptive-display-tighter-constraint-promotion: done
   epic-3-retrospective: optional
 
-  epic-4: in-progress
+  epic-4: done
   4-1-popover-shell-click-to-expand: done
   4-2-5-hour-headroom-ring-gauge-with-countdown: done
   4-3-7-day-headroom-ring-gauge-with-countdown: done
@@ -60,13 +60,13 @@ development_status:
   4-5-status-messages-for-error-states: done
   epic-4-retrospective: optional
 
-  epic-5: in-progress
+  epic-5: done
   5-1-notification-permission-service-setup: done
   5-2-threshold-state-machine-warning-notifications: done
   5-3-critical-threshold-persistent-notifications: done
   epic-5-retrospective: optional
 
-  epic-6: in-progress
+  epic-6: done
   6-1-preferences-manager-userdefaults-persistence: done
   6-2-settings-view-ui: done
   6-3-configurable-notification-thresholds: done
@@ -74,7 +74,7 @@ development_status:
   epic-6-retrospective: optional
 
   epic-7: in-progress
-  7-1-semantic-versioning-scheme-changelog: review
+  7-1-semantic-versioning-scheme-changelog: done
   7-2-pre-merge-version-bump-workflow: backlog
   7-3-post-merge-release-publish-workflow: backlog
   epic-7-retrospective: optional
