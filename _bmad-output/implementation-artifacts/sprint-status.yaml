@@ -72,3 +72,9 @@ development_status:
   6-3-configurable-notification-thresholds: done
   6-4-launch-at-login: done
   epic-6-retrospective: optional
+
+  epic-7: in-progress
+  7-1-semantic-versioning-scheme-changelog: review
+  7-2-pre-merge-version-bump-workflow: backlog
+  7-3-post-merge-release-publish-workflow: backlog
+  epic-7-retrospective: optional

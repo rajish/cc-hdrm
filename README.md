@@ -84,6 +84,15 @@ sequenceDiagram
 
 cc-hdrm reads the OAuth credentials that Claude Code stores in macOS Keychain. It never stores tokens on disk, never caches them between poll cycles, and never prompts you to log in. If you're logged into Claude Code, cc-hdrm works automatically.
 
+## Versioning
+
+This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (`major.minor.patch`).
+
+- **Source of truth:** `CFBundleShortVersionString` in `cc-hdrm/Info.plist`
+- **Git tags:** `v{major}.{minor}.{patch}` (e.g., `v1.0.0`)
+- **Changelog:** [CHANGELOG.md](CHANGELOG.md) follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format with an `[Unreleased]` section for pending changes
+- **Release keywords:** Include `[patch]`, `[minor]`, or `[major]` in PR titles to signal the version bump type (used by CI/CD workflows)
+
 ## Status
 
 This project is in active development. Core functionality (menu bar headroom display, background polling, token refresh, popover with ring gauges) is implemented and working. Notification support for low-headroom thresholds is planned.

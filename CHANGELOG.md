@@ -2,9 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+<!--
+  Release notes convention: When creating a release PR, include optional
+  preamble content between these markers in the PR body:
+
+    <!-- release-notes-start -->
+    Your release summary here
+    <!-- release-notes-end -->
+
+  This content will appear as a preamble above the auto-generated PR list
+  in the changelog entry for that release.
+-->
 
 ## [Unreleased]
+
+## [1.0.0] - 2026-02-02
 
 ### Added
 
@@ -20,4 +35,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Automatic token expiry detection and refresh
 - Xcode project with XcodeGen configuration
 
-[Unreleased]: https://github.com/rajish/cc-hdrm/commits/master
+[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/rajish/cc-hdrm/releases/tag/v1.0.0
