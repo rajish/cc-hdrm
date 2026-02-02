@@ -30,6 +30,16 @@ struct PopoverView: View {
                     .padding(.vertical, 8)
             }
 
+            if let update = appState.availableUpdate {
+                Divider()
+                UpdateBadgeView(update: update) {
+                    preferencesManager.dismissedVersion = update.version
+                    appState.updateAvailableUpdate(nil)
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 6)
+            }
+
             Divider()
 
             PopoverFooterView(appState: appState, preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, onThresholdChange: onThresholdChange)

@@ -79,10 +79,13 @@ final class UpdateCheckService: UpdateCheckServiceProtocol, @unchecked Sendable 
                 return
             }
 
-            // Find ZIP asset for macOS, fall back to release page URL
+            // Find DMG asset first, then ZIP, fall back to release page URL
             let downloadURL: URL
-            if let zipAsset = release.assets.first(where: { $0.name.contains("macos.zip") }),
-               let assetURL = URL(string: zipAsset.browserDownloadUrl) {
+            if let dmgAsset = release.assets.first(where: { $0.name.hasSuffix(".dmg") }),
+               let assetURL = URL(string: dmgAsset.browserDownloadUrl) {
+                downloadURL = assetURL
+            } else if let zipAsset = release.assets.first(where: { $0.name.hasSuffix(".zip") }),
+                      let assetURL = URL(string: zipAsset.browserDownloadUrl) {
                 downloadURL = assetURL
             } else if let fallbackURL = URL(string: release.htmlUrl) {
                 downloadURL = fallbackURL

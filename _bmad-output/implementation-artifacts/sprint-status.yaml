@@ -77,4 +77,9 @@ development_status:
   7-1-semantic-versioning-scheme-changelog: done
   7-2-pre-merge-version-bump-workflow: done
   7-3-post-merge-release-publish-workflow: done
-  epic-7-retrospective: optional
+  epic-7-retrospective: done
+
+  epic-8: in-progress
+  8-1-update-check-service: review
+  8-2-dismissable-update-badge-download-link: done
+  epic-8-retrospective: optional

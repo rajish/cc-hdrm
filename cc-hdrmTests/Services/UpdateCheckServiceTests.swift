@@ -13,6 +13,7 @@ struct UpdateCheckServiceTests {
         tagName: String = "v2.0.0",
         htmlUrl: String = "https://github.com/rajish/cc-usage/releases/tag/v2.0.0",
         assets: [[String: String]] = [
+            ["name": "cc-hdrm-2.0.0.dmg", "browser_download_url": "https://github.com/rajish/cc-usage/releases/download/v2.0.0/cc-hdrm-2.0.0.dmg"],
             ["name": "cc-hdrm-v2.0.0-macos.zip", "browser_download_url": "https://github.com/rajish/cc-usage/releases/download/v2.0.0/cc-hdrm-v2.0.0-macos.zip"]
         ]
     ) -> String {
@@ -71,7 +72,7 @@ struct UpdateCheckServiceTests {
 
     // MARK: - Newer version available → sets availableUpdate
 
-    @Test("newer version sets availableUpdate with ZIP asset URL")
+    @Test("newer version sets availableUpdate with DMG asset URL (preferred over ZIP)")
     @MainActor
     func newerVersionSetsUpdate() async {
         let json = Self.makeRelease(tagName: "v2.0.0")
@@ -80,7 +81,7 @@ struct UpdateCheckServiceTests {
         await sut.checkForUpdate()
 
         #expect(appState.availableUpdate?.version == "2.0.0")
-        #expect(appState.availableUpdate?.downloadURL.absoluteString == "https://github.com/rajish/cc-usage/releases/download/v2.0.0/cc-hdrm-v2.0.0-macos.zip")
+        #expect(appState.availableUpdate?.downloadURL.absoluteString == "https://github.com/rajish/cc-usage/releases/download/v2.0.0/cc-hdrm-2.0.0.dmg")
     }
 
     // MARK: - Same version → nil
@@ -136,13 +137,13 @@ struct UpdateCheckServiceTests {
 
     // MARK: - Missing assets → falls back to htmlUrl
 
-    @Test("missing ZIP asset falls back to htmlUrl")
+    @Test("missing DMG and ZIP assets falls back to htmlUrl")
     @MainActor
     func missingAssetsFallback() async {
         let json = Self.makeRelease(
             tagName: "v2.0.0",
             htmlUrl: "https://github.com/rajish/cc-usage/releases/tag/v2.0.0",
-            assets: [["name": "something-else.dmg", "browser_download_url": "https://example.com/other.dmg"]]
+            assets: [["name": "something-else.tar.gz", "browser_download_url": "https://example.com/other.tar.gz"]]
         )
         let (sut, appState, _) = Self.makeSUT(json: json, currentVersion: "1.0.0")
 
@@ -150,6 +151,23 @@ struct UpdateCheckServiceTests {
 
         #expect(appState.availableUpdate?.version == "2.0.0")
         #expect(appState.availableUpdate?.downloadURL.absoluteString == "https://github.com/rajish/cc-usage/releases/tag/v2.0.0")
+    }
+
+    // MARK: - No DMG → falls back to ZIP
+
+    @Test("missing DMG asset falls back to ZIP asset")
+    @MainActor
+    func missingDMGFallsBackToZip() async {
+        let json = Self.makeRelease(
+            tagName: "v2.0.0",
+            assets: [["name": "cc-hdrm-v2.0.0-macos.zip", "browser_download_url": "https://github.com/rajish/cc-usage/releases/download/v2.0.0/cc-hdrm-v2.0.0-macos.zip"]]
+        )
+        let (sut, appState, _) = Self.makeSUT(json: json, currentVersion: "1.0.0")
+
+        await sut.checkForUpdate()
+
+        #expect(appState.availableUpdate?.version == "2.0.0")
+        #expect(appState.availableUpdate?.downloadURL.absoluteString == "https://github.com/rajish/cc-usage/releases/download/v2.0.0/cc-hdrm-v2.0.0-macos.zip")
     }
 
     // MARK: - Dismissed version → nil
