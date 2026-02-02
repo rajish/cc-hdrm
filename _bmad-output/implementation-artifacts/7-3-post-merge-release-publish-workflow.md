@@ -362,6 +362,10 @@ claude-opus-4-5 (anthropic/claude-opus-4-5)
 - Removed `.github/workflows/release.yml` — replaced by `release-publish.yml` to prevent duplicate releases on tag push.
 - Updated `README.md` Versioning section with post-merge release pipeline documentation including changelog generation and release notes preamble convention.
 - No Swift code changes. 341 existing tests pass with zero regressions.
+- **CI fix:** Upgraded CI runner to Xcode 26.2 (Swift 6.2) via `xcode-select` step in `ci.yml` and `release-publish.yml`. Resolved Swift 6.0 strict concurrency errors that caused persistent CI build failures on Xcode 16.4 (default on `macos-15`).
+- **Test fix:** Refactored `NotificationCenterProtocol` — replaced `notificationSettings() -> UNNotificationSettings` with `authorizationStatus() -> UNAuthorizationStatus`. The original method delegated to the real `UNUserNotificationCenter` in tests, which returned `.denied` on CI (no notification permissions), causing `isAuthorized` to stay `false` and 3 notification tests to fail.
+- **Scheme fix:** Added explicit scheme definition in `project.yml` with test target, and updated `ci.yml` to use `-scheme cc-hdrm` (unified scheme) instead of non-existent `-scheme cc-hdrmTests`.
+- **First automated release:** Successfully executed end-to-end release pipeline — PR #1 with `[patch]` keyword triggered version bump to 1.0.1, merge triggered release-publish.yml which tagged, built universal binary (arm64 + x86_64), packaged ZIP/DMG with checksums, and created GitHub Release v1.0.1.
 
 ### Architecture Deviations
 
@@ -369,6 +373,10 @@ claude-opus-4-5 (anthropic/claude-opus-4-5)
 
 ### Change Log
 
+- 2026-02-02: First automated release v1.0.1 — end-to-end pipeline validated (PR #1 → version bump → merge → tag → build → GitHub Release)
+- 2026-02-02: Fixed notification tests — refactored NotificationCenterProtocol to use authorizationStatus() instead of unmockable UNNotificationSettings
+- 2026-02-02: Upgraded CI to Xcode 26.2, reverted Swift 6.0 concurrency workarounds, fixed test scheme discovery
+- 2026-02-02: CI fix — Swift 6 strict concurrency errors (AppDelegate.swift, NotificationCenterProtocol.swift), test scheme
 - 2026-02-02: Code review fixes — H1 (documented ordering deviation), H2 (CHANGELOG.md guard), H3 ([skip ci] on changelog commit), M2 (artifact naming), M3 (PR lookup robustness)
 - 2026-02-02: Implemented Story 7.3 — post-merge release publish workflow
 
@@ -376,5 +384,11 @@ claude-opus-4-5 (anthropic/claude-opus-4-5)
 
 - `.github/workflows/release-publish.yml` (CREATED)
 - `.github/workflows/release.yml` (REMOVED)
+- `.github/workflows/ci.yml` (MODIFIED — added Xcode 26.2 select step, fixed test scheme)
 - `README.md` (MODIFIED)
+- `project.yml` (MODIFIED — added explicit scheme with test target)
+- `cc-hdrm/App/AppDelegate.swift` (MODIFIED — reverted concurrency workarounds after Xcode upgrade)
+- `cc-hdrm/Services/NotificationCenterProtocol.swift` (MODIFIED — replaced notificationSettings() with authorizationStatus())
+- `cc-hdrm/Services/NotificationService.swift` (MODIFIED — uses authorizationStatus() protocol method)
+- `cc-hdrmTests/Mocks/SpyNotificationCenter.swift` (MODIFIED — returns stubbed authorizationStatus)
 - `_bmad-output/implementation-artifacts/sprint-status.yaml` (MODIFIED)
