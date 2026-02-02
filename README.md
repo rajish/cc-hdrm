@@ -113,6 +113,26 @@ The [`release-prepare.yml`](.github/workflows/release-prepare.yml) GitHub Action
 - Keywords are case-insensitive (`[Patch]`, `[MINOR]`, etc.)
 - The workflow is idempotent — re-runs read the version from the PR's base branch (typically `master`), not the PR branch
 
+### Automated Post-Merge Release
+
+The [`release-publish.yml`](.github/workflows/release-publish.yml) GitHub Actions workflow runs on every push to `master`. When it detects a version bump commit (from the pre-merge workflow above), it automatically builds, packages, and publishes a release.
+
+**Pipeline steps:**
+
+1. Detect the `chore: bump version to {version}` commit in the push
+2. Validate the version matches `CFBundleShortVersionString` in `cc-hdrm/Info.plist`
+3. Auto-generate a changelog entry from commit messages since the previous tag
+4. Update `CHANGELOG.md` and commit to `master`
+5. Tag the changelog commit with `v{version}`
+6. Build a universal binary (arm64 + x86\_64) via `xcodebuild archive`
+7. Package as ZIP (`cc-hdrm-{version}-macos.zip`) and DMG (`cc-hdrm-{version}.dmg`)
+8. Compute SHA256 checksums
+9. Create a GitHub Release with the changelog entry as body and ZIP/DMG/checksums as assets
+
+**Changelog generation:** Commit messages since the previous tag are collected automatically, excluding automation commits. If the merged PR body contains content between `<!-- release-notes-start -->` and `<!-- release-notes-end -->` markers, that content is prepended as a release summary.
+
+**No version bump = no release.** If a push to `master` doesn't include a version bump commit, the workflow exits cleanly.
+
 ## Status
 
 This project is in active development. Core functionality (menu bar headroom display, background polling, token refresh, popover with ring gauges) is implemented and working. Notification support for low-headroom thresholds is planned.

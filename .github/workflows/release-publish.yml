@@ -1,0 +1,281 @@
+name: Release Publish
+
+on:
+  push:
+    branches: [master]
+
+concurrency:
+  group: release-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Detect version bump commit
+        id: detect
+        run: |
+          BEFORE="${{ github.event.before }}"
+          SHA="${{ github.sha }}"
+
+          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            echo "Initial or force push — checking HEAD commit only."
+            VERSION_BUMP_COMMIT=$(git log -1 --format='%s' | grep -m1 '^chore: bump version to ' || true)
+          else
+            VERSION_BUMP_COMMIT=$(git log --format='%s' "${BEFORE}..${SHA}" | grep -m1 '^chore: bump version to ' || true)
+          fi
+
+          if [ -z "$VERSION_BUMP_COMMIT" ]; then
+            echo "No version bump commit found. Skipping release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          NEW_VERSION="${VERSION_BUMP_COMMIT//chore: bump version to /}"
+          echo "Detected version: ${NEW_VERSION}"
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate version against Info.plist
+        if: steps.detect.outputs.release == 'true'
+        env:
+          NEW_VERSION: ${{ steps.detect.outputs.version }}
+        run: |
+          PLIST_VERSION=$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' cc-hdrm/Info.plist)
+          if [ "$NEW_VERSION" != "$PLIST_VERSION" ]; then
+            echo "::error::Version mismatch: commit says ${NEW_VERSION} but Info.plist says ${PLIST_VERSION}"
+            exit 1
+          fi
+          echo "Version validated: ${NEW_VERSION}"
+
+      - name: Check tag does not already exist
+        if: steps.detect.outputs.release == 'true'
+        env:
+          NEW_VERSION: ${{ steps.detect.outputs.version }}
+        run: |
+          if git rev-parse "v${NEW_VERSION}" >/dev/null 2>&1; then
+            echo "::error::Tag v${NEW_VERSION} already exists. Aborting to prevent duplicate release."
+            exit 1
+          fi
+
+      - name: Retrieve merged PR for release notes preamble
+        if: steps.detect.outputs.release == 'true'
+        id: pr-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Find the merge commit's associated PR
+          # Try matching by merge commit OID first
+          PR_NUMBER=$(gh pr list --state merged --base master --json number,mergeCommit \
+            --jq ".[] | select(.mergeCommit.oid == \"${{ github.sha }}\") | .number" 2>/dev/null || echo "")
+
+          # Fallback: parse PR number from merge commit message (e.g., "Merge pull request #42 from ...")
+          if [ -z "$PR_NUMBER" ]; then
+            PR_NUMBER=$(git log -1 --format='%s' | grep -oP '(?<=#)\d+' | head -1 || true)
+          fi
+
+          PREAMBLE=""
+          if [ -n "$PR_NUMBER" ]; then
+            PR_BODY=$(gh pr view "$PR_NUMBER" --json body --jq '.body' 2>/dev/null || echo "")
+            if [ -n "$PR_BODY" ]; then
+              PREAMBLE=$(echo "$PR_BODY" | sed -n '/<!-- release-notes-start -->/,/<!-- release-notes-end -->/{ /<!--/d; p; }')
+            fi
+          fi
+
+          # Write preamble to file to preserve newlines
+          echo "$PREAMBLE" > /tmp/release-preamble.txt
+          echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate changelog entry
+        if: steps.detect.outputs.release == 'true'
+        id: changelog
+        env:
+          NEW_VERSION: ${{ steps.detect.outputs.version }}
+        run: |
+          DATE=$(date +%Y-%m-%d)
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)
+
+          # Get commit subjects since previous tag, excluding automation commits
+          ENTRIES=$(git log "${PREV_TAG}..HEAD^" --oneline --no-merges \
+            | grep -v 'chore: bump version to' \
+            | grep -v 'chore: update changelog' \
+            | sed 's/^[a-f0-9]* /- /' || true)
+
+          PREAMBLE=$(cat /tmp/release-preamble.txt)
+
+          # Build changelog section
+          {
+            echo "## [${NEW_VERSION}] - ${DATE}"
+            echo ""
+            if [ -n "$PREAMBLE" ]; then
+              echo "$PREAMBLE"
+              echo ""
+            fi
+            echo "### Changed"
+            echo ""
+            if [ -n "$ENTRIES" ]; then
+              echo "$ENTRIES"
+            else
+              echo "- Release ${NEW_VERSION}"
+            fi
+          } > /tmp/changelog-entry.txt
+
+          # Build release body (same content)
+          cat /tmp/changelog-entry.txt > /tmp/release-body.txt
+
+          echo "Generated changelog entry for v${NEW_VERSION}"
+
+      - name: Update CHANGELOG.md
+        if: steps.detect.outputs.release == 'true'
+        env:
+          NEW_VERSION: ${{ steps.detect.outputs.version }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          python3 - "$NEW_VERSION" "$GH_REPO" "$PREV_TAG" <<'PYEOF'
+          import sys, os
+
+          version = sys.argv[1]
+          repo = sys.argv[2]
+          prev_tag = sys.argv[3] if len(sys.argv) > 3 else ""
+
+          entry_path = "/tmp/changelog-entry.txt"
+          with open(entry_path) as f:
+              entry = f.read().rstrip()
+
+          if not os.path.exists("CHANGELOG.md"):
+              # Bootstrap CHANGELOG.md if it doesn't exist
+              with open("CHANGELOG.md", "w") as f:
+                  f.write("# Changelog\n\n## [Unreleased]\n")
+
+          with open("CHANGELOG.md") as f:
+              lines = f.readlines()
+
+          out = []
+          link_lines = []
+          in_links = False
+
+          for line in lines:
+              stripped = line.rstrip("\n")
+              # Insert entry after ## [Unreleased]
+              if stripped.startswith("## [Unreleased]"):
+                  out.append(line)
+                  out.append("\n")
+                  out.append(entry + "\n")
+                  continue
+              # Collect link reference lines at bottom
+              if stripped.startswith("[Unreleased]:"):
+                  in_links = True
+                  # Update unreleased link
+                  out.append(f"[Unreleased]: https://github.com/{repo}/compare/v{version}...HEAD\n")
+                  # Add new version link
+                  if prev_tag:
+                      out.append(f"[{version}]: https://github.com/{repo}/compare/{prev_tag}...v{version}\n")
+                  else:
+                      out.append(f"[{version}]: https://github.com/{repo}/releases/tag/v{version}\n")
+                  continue
+              if in_links and stripped.startswith(f"[{version}]:"):
+                  continue  # skip duplicate
+              out.append(line)
+
+          with open("CHANGELOG.md", "w") as f:
+              f.writelines(out)
+          PYEOF
+
+      - name: Commit changelog update
+        if: steps.detect.outputs.release == 'true'
+        env:
+          NEW_VERSION: ${{ steps.detect.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git diff --cached --quiet && { echo "No changelog changes to commit."; exit 0; }
+          git commit -m "chore: update changelog for v${NEW_VERSION} [skip ci]"
+          git push
+
+      - name: Tag release
+        if: steps.detect.outputs.release == 'true'
+        env:
+          NEW_VERSION: ${{ steps.detect.outputs.version }}
+        run: |
+          git tag "v${NEW_VERSION}"
+          git push origin "v${NEW_VERSION}"
+
+      - name: Install XcodeGen
+        if: steps.detect.outputs.release == 'true'
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        if: steps.detect.outputs.release == 'true'
+        run: xcodegen generate
+
+      - name: Build Universal Binary
+        if: steps.detect.outputs.release == 'true'
+        run: |
+          xcodebuild \
+            -project cc-hdrm.xcodeproj \
+            -scheme cc-hdrm \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -archivePath build/cc-hdrm.xcarchive \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            ONLY_ACTIVE_ARCH=NO \
+            archive
+
+      - name: Export app
+        if: steps.detect.outputs.release == 'true'
+        run: |
+          APP_PATH="build/cc-hdrm.xcarchive/Products/Applications/cc-hdrm.app"
+          mkdir -p release-staging
+          cp -R "$APP_PATH" release-staging/
+
+      - name: Create ZIP
+        if: steps.detect.outputs.release == 'true'
+        env:
+          NEW_VERSION: ${{ steps.detect.outputs.version }}
+        working-directory: release-staging
+        run: zip -r "../cc-hdrm-${NEW_VERSION}-macos.zip" cc-hdrm.app
+
+      - name: Create DMG
+        if: steps.detect.outputs.release == 'true'
+        env:
+          NEW_VERSION: ${{ steps.detect.outputs.version }}
+        run: |
+          hdiutil create -volname "cc-hdrm" \
+            -srcfolder release-staging \
+            -ov -format UDZO \
+            "cc-hdrm-${NEW_VERSION}.dmg"
+
+      - name: Compute SHA256 checksums
+        if: steps.detect.outputs.release == 'true'
+        env:
+          NEW_VERSION: ${{ steps.detect.outputs.version }}
+        run: |
+          shasum -a 256 "cc-hdrm-${NEW_VERSION}-macos.zip" >> checksums.txt
+          shasum -a 256 "cc-hdrm-${NEW_VERSION}.dmg" >> checksums.txt
+          cat checksums.txt
+
+      - name: Create GitHub Release
+        if: steps.detect.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_VERSION: ${{ steps.detect.outputs.version }}
+        run: |
+          gh release create "v${NEW_VERSION}" \
+            --title "v${NEW_VERSION}" \
+            --notes-file /tmp/release-body.txt \
+            "cc-hdrm-${NEW_VERSION}-macos.zip" \
+            "cc-hdrm-${NEW_VERSION}.dmg" \
+            checksums.txt

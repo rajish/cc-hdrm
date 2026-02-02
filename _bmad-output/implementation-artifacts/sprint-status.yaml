@@ -73,8 +73,8 @@ development_status:
   6-4-launch-at-login: done
   epic-6-retrospective: optional
 
-  epic-7: in-progress
+  epic-7: done
   7-1-semantic-versioning-scheme-changelog: done
   7-2-pre-merge-version-bump-workflow: done
-  7-3-post-merge-release-publish-workflow: backlog
+  7-3-post-merge-release-publish-workflow: done
   epic-7-retrospective: optional
