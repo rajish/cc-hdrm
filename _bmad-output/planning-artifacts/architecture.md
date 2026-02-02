@@ -715,14 +715,14 @@ cc-hdrm/
 
 ### Homebrew Tap
 
-**Repository:** Separate repo `{owner}/homebrew-tap` containing `Formula/cc-hdrm.rb`
+**Repository:** Separate repo `{owner}/homebrew-tap` containing `Casks/cc-hdrm.rb`
 
-**Formula:**
+**Cask** (not Formula — cc-hdrm is a macOS .app bundle, not a CLI binary):
 - Downloads ZIP asset from GitHub Release
-- Installs binary to `/usr/local/bin/` or Application folder
-- `brew upgrade cc-hdrm` pulls latest release
+- Installs cc-hdrm.app to `/Applications`
+- `brew upgrade --cask cc-hdrm` pulls latest release
 
-**Maintenance:** Formula updated as part of release script (or manually post-release).
+**Maintenance:** Cask file auto-updated by `release-publish.yml` workflow step on each release.
 
 ### Phase 2 Project Structure Additions
 
