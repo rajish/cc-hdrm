@@ -75,6 +75,6 @@ development_status:
 
   epic-7: in-progress
   7-1-semantic-versioning-scheme-changelog: done
-  7-2-pre-merge-version-bump-workflow: backlog
+  7-2-pre-merge-version-bump-workflow: done
   7-3-post-merge-release-publish-workflow: backlog
   epic-7-retrospective: optional

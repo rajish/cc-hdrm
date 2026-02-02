@@ -91,7 +91,27 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) 
 - **Source of truth:** `CFBundleShortVersionString` in `cc-hdrm/Info.plist`
 - **Git tags:** `v{major}.{minor}.{patch}` (e.g., `v1.0.0`)
 - **Changelog:** [CHANGELOG.md](CHANGELOG.md) follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format with an `[Unreleased]` section for pending changes
-- **Release keywords:** Include `[patch]`, `[minor]`, or `[major]` in PR titles to signal the version bump type (will be used by CI/CD workflows — not yet automated)
+- **Release keywords:** Include `[patch]`, `[minor]`, or `[major]` in PR titles to trigger an automated version bump
+
+### Automated Pre-Merge Version Bump
+
+The [`release-prepare.yml`](.github/workflows/release-prepare.yml) GitHub Actions workflow automatically bumps the version when a release keyword is detected in a PR title targeting `master`.
+
+**How it works:**
+
+1. A maintainer opens (or edits) a PR with `[patch]`, `[minor]`, or `[major]` in the title
+2. The workflow reads the current version from `master`'s `cc-hdrm/Info.plist`
+3. It computes the new semver version and commits the updated `Info.plist` back to the PR branch
+4. The commit message is `chore: bump version to {new_version}`
+
+**Trigger events:** `opened`, `edited` (title change), `synchronize` (new push)
+
+**Rules:**
+- Only maintainers can trigger version bumps — non-maintainer keywords are ignored with a PR comment
+- No keyword = no bump, workflow exits cleanly
+- If multiple keywords are present, highest precedence wins: `major` > `minor` > `patch`
+- Keywords are case-insensitive (`[Patch]`, `[MINOR]`, etc.)
+- The workflow is idempotent — re-runs read the version from the PR's base branch (typically `master`), not the PR branch
 
 ## Status
 

@@ -1,0 +1,149 @@
+name: Pre-Merge Version Bump
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+    branches: [master]
+
+concurrency:
+  group: version-bump-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  version-bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 2
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch base branch for version comparison
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: git fetch origin "$BASE_REF" --depth=1
+
+      - name: Skip if last commit is a version bump
+        id: loop-guard
+        run: |
+          LAST_COMMIT_MSG=$(git log -1 --format='%s')
+          if [[ "$LAST_COMMIT_MSG" == chore:\ bump\ version\ to\ * ]]; then
+            echo "Last commit is already a version bump. Skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Parse release keyword from PR title
+        if: steps.loop-guard.outputs.skip != 'true'
+        id: parse-keyword
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          TITLE_LOWER=$(echo "$PR_TITLE" | tr '[:upper:]' '[:lower:]')
+
+          BUMP_TYPE=""
+          # Highest precedence first: major > minor > patch
+          if [[ "$TITLE_LOWER" == *"[major]"* ]]; then
+            BUMP_TYPE="major"
+          elif [[ "$TITLE_LOWER" == *"[minor]"* ]]; then
+            BUMP_TYPE="minor"
+          elif [[ "$TITLE_LOWER" == *"[patch]"* ]]; then
+            BUMP_TYPE="patch"
+          fi
+
+          if [ -z "$BUMP_TYPE" ]; then
+            echo "No release keyword found in PR title. Skipping version bump."
+            echo "bump_type=" >> "$GITHUB_OUTPUT"
+          else
+            echo "Detected bump type: $BUMP_TYPE"
+            echo "bump_type=$BUMP_TYPE" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check maintainer permissions
+        if: steps.loop-guard.outputs.skip != 'true' && steps.parse-keyword.outputs.bump_type != ''
+        id: check-permission
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              username: context.payload.pull_request.user.login
+            });
+            const allowed = ['admin', 'maintain'].includes(data.permission);
+            core.setOutput('allowed', String(allowed));
+            if (!allowed) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: `⚠️ Release keyword detected in PR title, but @${context.payload.pull_request.user.login} does not have maintainer permissions. Version bump skipped.`
+              });
+            }
+
+      - name: Bump version in Info.plist
+        if: >-
+          steps.loop-guard.outputs.skip != 'true' &&
+          steps.parse-keyword.outputs.bump_type != '' &&
+          steps.check-permission.outputs.allowed == 'true'
+        id: bump-version
+        env:
+          BUMP_TYPE: ${{ steps.parse-keyword.outputs.bump_type }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          PLIST_PATH="cc-hdrm/Info.plist"
+
+          # Read version from base branch to prevent double-bumping
+          BASE_VERSION=$(git show "origin/${BASE_REF}:${PLIST_PATH}" | sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}')
+          echo "Base version (from ${BASE_REF}): ${BASE_VERSION}"
+
+          # Validate BASE_VERSION matches semver X.Y.Z pattern
+          if ! [[ "$BASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Failed to extract valid semver from ${BASE_REF}:${PLIST_PATH}. Got: '${BASE_VERSION}'"
+            exit 1
+          fi
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+          case "$BUMP_TYPE" in
+            major) NEW_VERSION="$((MAJOR+1)).0.0" ;;
+            minor) NEW_VERSION="${MAJOR}.$((MINOR+1)).0" ;;
+            patch) NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH+1))" ;;
+          esac
+          echo "New version: ${NEW_VERSION}"
+
+          # Check if PR branch already has this version
+          CURRENT_VERSION=$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' "$PLIST_PATH")
+          if [ "$CURRENT_VERSION" = "$NEW_VERSION" ]; then
+            echo "Version already bumped to ${NEW_VERSION}. Skipping."
+            echo "new_version=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Update Info.plist — target only CFBundleShortVersionString
+          sed -i "/<key>CFBundleShortVersionString<\/key>/{n;s|<string>.*</string>|<string>${NEW_VERSION}</string>|;}" "$PLIST_PATH"
+
+          echo "Updated ${PLIST_PATH}: ${CURRENT_VERSION} -> ${NEW_VERSION}"
+          echo "new_version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push version bump
+        if: >-
+          steps.loop-guard.outputs.skip != 'true' &&
+          steps.parse-keyword.outputs.bump_type != '' &&
+          steps.check-permission.outputs.allowed == 'true' &&
+          steps.bump-version.outputs.new_version != ''
+        env:
+          NEW_VERSION: ${{ steps.bump-version.outputs.new_version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add cc-hdrm/Info.plist
+          git diff --cached --quiet && { echo "No changes to commit."; exit 0; }
+          git commit -m "chore: bump version to ${NEW_VERSION}"
+          git push
