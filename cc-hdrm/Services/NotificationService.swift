@@ -215,9 +215,9 @@ final class NotificationService: NotificationServiceProtocol {
     // MARK: - Authorization
 
     func requestAuthorization() async {
-        let settings = await notificationCenter.notificationSettings()
+        let status = await notificationCenter.authorizationStatus()
 
-        switch settings.authorizationStatus {
+        switch status {
         case .authorized, .provisional:
             isAuthorized = true
             Self.logger.info("Notification authorization already granted")

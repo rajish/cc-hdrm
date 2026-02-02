@@ -9,19 +9,13 @@ final class SpyNotificationCenter: NotificationCenterProtocol {
     var addedRequests: [UNNotificationRequest] = []
     /// Value returned by `requestAuthorization`.
     var grantAuthorization = false
-    /// Authorization status reported by `notificationSettings()`.
+    /// Authorization status reported by `authorizationStatus()`.
     var stubbedAuthorizationStatus: UNAuthorizationStatus = .notDetermined
 
     // MARK: - NotificationCenterProtocol
 
-    func notificationSettings() async -> UNNotificationSettings {
-        // UNNotificationSettings can't be constructed directly.
-        // Return a settings object via the real center for the stubbed status.
-        // Workaround: encode/decode trick isn't available either.
-        // Instead we use a minimal subclass approach — but UNNotificationSettings is not subclass-able.
-        // Pragmatic solution: store the status and let tests check addedRequests instead.
-        // For authorization flow tests, the real NotificationService tests already cover this.
-        await UNUserNotificationCenter.current().notificationSettings()
+    func authorizationStatus() async -> UNAuthorizationStatus {
+        stubbedAuthorizationStatus
     }
 
     func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool {
