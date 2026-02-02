@@ -4,6 +4,7 @@ import SwiftUI
 /// Observes `AppState` via `@Observable` — re-renders automatically when data changes (AC #5).
 struct PopoverView: View {
     let appState: AppState
+    let preferencesManager: PreferencesManagerProtocol
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,7 +30,7 @@ struct PopoverView: View {
 
             Divider()
 
-            PopoverFooterView(appState: appState)
+            PopoverFooterView(appState: appState, preferencesManager: preferencesManager)
                 .padding(.horizontal)
                 .padding(.vertical, 8)
         }

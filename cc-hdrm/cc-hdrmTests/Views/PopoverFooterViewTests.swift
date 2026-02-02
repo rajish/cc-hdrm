@@ -16,7 +16,7 @@ struct PopoverFooterViewTests {
             fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
             sevenDay: nil
         )
-        let view = PopoverFooterView(appState: appState)
+        let view = PopoverFooterView(appState: appState, preferencesManager: MockPreferencesManager())
         _ = view.body
     }
 
@@ -26,7 +26,7 @@ struct PopoverFooterViewTests {
         let appState = AppState()
         appState.updateConnectionStatus(.connected)
         // subscriptionTier is nil by default
-        let view = PopoverFooterView(appState: appState)
+        let view = PopoverFooterView(appState: appState, preferencesManager: MockPreferencesManager())
         _ = view.body
         #expect(appState.subscriptionTier == nil)
     }
@@ -42,7 +42,7 @@ struct PopoverFooterViewTests {
         )
         // lastUpdated is set to Date() by updateWindows, so dataFreshness == .fresh
         #expect(appState.dataFreshness == .fresh)
-        let view = PopoverFooterView(appState: appState)
+        let view = PopoverFooterView(appState: appState, preferencesManager: MockPreferencesManager())
         _ = view.body
     }
 
@@ -58,7 +58,7 @@ struct PopoverFooterViewTests {
         // Set lastUpdated to 90 seconds ago to trigger stale state
         appState.setLastUpdated(Date().addingTimeInterval(-90))
         #expect(appState.dataFreshness == .stale)
-        let view = PopoverFooterView(appState: appState)
+        let view = PopoverFooterView(appState: appState, preferencesManager: MockPreferencesManager())
         _ = view.body
     }
 
@@ -69,7 +69,7 @@ struct PopoverFooterViewTests {
         // Default is disconnected
         #expect(appState.connectionStatus == .disconnected)
         #expect(appState.dataFreshness == .unknown)
-        let view = PopoverFooterView(appState: appState)
+        let view = PopoverFooterView(appState: appState, preferencesManager: MockPreferencesManager())
         _ = view.body
     }
 
@@ -81,7 +81,7 @@ struct PopoverFooterViewTests {
 
         let expectation = OSAllocatedUnfairLock(initialState: false)
         withObservationTracking {
-            let view = PopoverFooterView(appState: appState)
+            let view = PopoverFooterView(appState: appState, preferencesManager: MockPreferencesManager())
             _ = view.body
         } onChange: {
             expectation.withLock { $0 = true }
@@ -101,7 +101,7 @@ struct PopoverFooterViewTests {
 
         let expectation = OSAllocatedUnfairLock(initialState: false)
         withObservationTracking {
-            let view = PopoverFooterView(appState: appState)
+            let view = PopoverFooterView(appState: appState, preferencesManager: MockPreferencesManager())
             _ = view.body
         } onChange: {
             expectation.withLock { $0 = true }

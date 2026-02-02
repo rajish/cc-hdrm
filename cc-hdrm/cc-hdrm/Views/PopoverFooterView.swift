@@ -4,6 +4,7 @@ import SwiftUI
 /// Read-only observer of AppState — does not write any state.
 struct PopoverFooterView: View {
     let appState: AppState
+    let preferencesManager: PreferencesManagerProtocol
 
     var body: some View {
         // Access countdownTick to register observation for periodic re-renders
@@ -23,7 +24,7 @@ struct PopoverFooterView: View {
             Spacer()
 
             // Right: gear menu (AC #3)
-            GearMenuView()
+            GearMenuView(preferencesManager: preferencesManager)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)

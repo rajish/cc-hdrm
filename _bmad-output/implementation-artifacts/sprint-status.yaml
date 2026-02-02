@@ -68,7 +68,7 @@ development_status:
 
   epic-6: in-progress
   6-1-preferences-manager-userdefaults-persistence: done
-  6-2-settings-view-ui: backlog
+  6-2-settings-view-ui: done
   6-3-configurable-notification-thresholds: backlog
   6-4-launch-at-login: backlog
   epic-6-retrospective: optional

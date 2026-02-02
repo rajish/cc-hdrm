@@ -186,6 +186,38 @@ struct AppDelegatePopoverTests {
     }
 }
 
+// MARK: - PreferencesManager Wiring Tests (Story 6.2)
+
+@Suite("AppDelegate PreferencesManager Wiring Tests")
+struct AppDelegatePreferencesManagerTests {
+
+    @Test("applicationDidFinishLaunching creates PreferencesManager instance")
+    @MainActor
+    func launchCreatesPreferencesManager() async {
+        let mockEngine = MockPollingEngine()
+        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
+
+        #expect(delegate.preferencesManager == nil, "PreferencesManager should be nil before launch")
+
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+
+        #expect(delegate.preferencesManager != nil, "PreferencesManager should be created during launch")
+    }
+
+    @Test("Popover contentViewController hosts PopoverView wired with PreferencesManager")
+    @MainActor
+    func popoverReceivesPreferencesManager() async {
+        let mockEngine = MockPollingEngine()
+        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
+
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+
+        // Verify popover hosts a PopoverView (which requires preferencesManager in its init)
+        let hostingController = delegate.popover?.contentViewController as? NSHostingController<PopoverView>
+        #expect(hostingController != nil, "Popover should host PopoverView (which requires preferencesManager)")
+    }
+}
+
 // MARK: - Menu Bar Display Tests (Task 8)
 
 @Suite("AppDelegate Menu Bar Display Tests")

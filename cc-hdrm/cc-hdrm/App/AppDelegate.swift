@@ -9,8 +9,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     internal var popover: NSPopover?
     private var pollingEngine: (any PollingEngineProtocol)?
     private var freshnessMonitor: (any FreshnessMonitorProtocol)?
+    internal var preferencesManager: PreferencesManager?
     private var notificationService: (any NotificationServiceProtocol)?
     private var observationTask: Task<Void, Never>?
+    private var eventMonitor: Any?
     private var previousAccessibilityValue: String?
     private var previousDisplayedWindow: DisplayedWindow?
     private var previousShowingCountdown: Bool = false
@@ -48,11 +50,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Initial render from current state (disconnected placeholder)
         updateMenuBarDisplay()
 
+        // Create PreferencesManager — shared across services for hot-reconfigurable reads
+        let preferences = PreferencesManager()
+        self.preferencesManager = preferences
+
         // Configure NSPopover with SwiftUI content
         let pop = NSPopover()
         pop.contentSize = NSSize(width: 220, height: 0) // width hint only; SwiftUI determines height
         pop.behavior = .transient
-        pop.contentViewController = NSHostingController(rootView: PopoverView(appState: state))
+        pop.contentViewController = NSHostingController(rootView: PopoverView(appState: state, preferencesManager: preferences))
         pop.animates = true
         self.popover = pop
 
@@ -61,10 +67,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem?.button?.target = self
         statusItem?.button?.sendAction(on: .leftMouseUp)
 
-        Self.logger.info("Menu bar status item configured")
+        // Close main popover when settings view dismisses
+        NotificationCenter.default.addObserver(
+            forName: .dismissPopover,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, let popover = self.popover, popover.isShown else { return }
+            Self.popoverLogger.info("Popover closing via settings dismiss")
+            popover.performClose(nil)
+            self.removeEventMonitor()
+        }
 
-        // Create PreferencesManager — shared across services for hot-reconfigurable reads
-        let preferences = PreferencesManager()
+        Self.logger.info("Menu bar status item configured")
 
         // Create NotificationService if not already injected (test path)
         if notificationService == nil {
@@ -102,6 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         freshnessMonitor?.stop()
         observationTask?.cancel()
         observationTask = nil
+        removeEventMonitor()
     }
 
     // MARK: - Popover Toggle
@@ -114,12 +130,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if popover.isShown {
             Self.popoverLogger.info("Popover closing")
             popover.performClose(sender)
+            removeEventMonitor()
         } else if let button = statusItem?.button {
             Self.popoverLogger.info("Popover opening")
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            installEventMonitor()
         } else {
             Self.popoverLogger.warning("togglePopover called but statusItem button is nil")
         }
+    }
+
+    // MARK: - Click-Outside Dismiss
+
+    /// Installs a global event monitor that closes the popover when the user clicks outside it.
+    /// NSPopover.transient does not reliably dismiss for status-bar popovers, so this provides
+    /// the expected click-away-to-close behavior.
+    private func installEventMonitor() {
+        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            guard let self, let popover = self.popover, popover.isShown else { return }
+            Self.popoverLogger.info("Popover closing via click-outside")
+            popover.performClose(nil)
+            self.removeEventMonitor()
+        }
+    }
+
+    private func removeEventMonitor() {
+        if let eventMonitor {
+            NSEvent.removeMonitor(eventMonitor)
+        }
+        eventMonitor = nil
     }
 
     // MARK: - Menu Bar Display

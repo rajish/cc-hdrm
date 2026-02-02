@@ -10,7 +10,7 @@ enum PreferencesDefaults {
 
 /// Protocol for the preferences manager that handles reading/writing user preferences.
 /// PreferencesManager is the ONLY component that reads/writes UserDefaults for preferences.
-protocol PreferencesManagerProtocol {
+protocol PreferencesManagerProtocol: AnyObject {
     var warningThreshold: Double { get set }
     var criticalThreshold: Double { get set }
     var pollInterval: TimeInterval { get set }
