@@ -9,6 +9,7 @@ extension Notification.Name {
 /// Accepts a PreferencesManagerProtocol to pass to SettingsView.
 struct GearMenuView: View {
     let preferencesManager: PreferencesManagerProtocol
+    let launchAtLoginService: LaunchAtLoginServiceProtocol
     var onThresholdChange: (() -> Void)?
     @State private var showingSettings = false
 
@@ -30,7 +31,7 @@ struct GearMenuView: View {
         .fixedSize()
         .accessibilityLabel("Settings")
         .popover(isPresented: $showingSettings, arrowEdge: .bottom) {
-            SettingsView(preferencesManager: preferencesManager, onDone: {
+            SettingsView(preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, onDone: {
                 showingSettings = false
             }, onThresholdChange: onThresholdChange)
             .onDisappear {

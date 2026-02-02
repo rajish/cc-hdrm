@@ -218,6 +218,37 @@ struct AppDelegatePreferencesManagerTests {
     }
 }
 
+// MARK: - LaunchAtLoginService Wiring Tests (Story 6.4)
+
+@Suite("AppDelegate LaunchAtLoginService Wiring Tests")
+struct AppDelegateLaunchAtLoginTests {
+
+    @Test("applicationDidFinishLaunching creates LaunchAtLoginService when not injected")
+    @MainActor
+    func launchCreatesLaunchAtLoginService() async {
+        let mockEngine = MockPollingEngine()
+        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
+
+        #expect(delegate.launchAtLoginService == nil, "launchAtLoginService should be nil before launch")
+
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+
+        #expect(delegate.launchAtLoginService != nil, "launchAtLoginService should be created during launch")
+    }
+
+    @Test("applicationDidFinishLaunching uses injected LaunchAtLoginService")
+    @MainActor
+    func launchUsesInjectedService() async {
+        let mockEngine = MockPollingEngine()
+        let mockLaunch = MockLaunchAtLoginService()
+        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService(), launchAtLoginService: mockLaunch)
+
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+
+        #expect(delegate.launchAtLoginService === mockLaunch, "Should use the injected mock, not create a new one")
+    }
+}
+
 // MARK: - Menu Bar Display Tests (Task 8)
 
 @Suite("AppDelegate Menu Bar Display Tests")

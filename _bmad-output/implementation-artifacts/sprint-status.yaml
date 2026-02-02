@@ -70,5 +70,5 @@ development_status:
   6-1-preferences-manager-userdefaults-persistence: done
   6-2-settings-view-ui: done
   6-3-configurable-notification-thresholds: done
-  6-4-launch-at-login: backlog
+  6-4-launch-at-login: done
   epic-6-retrospective: optional

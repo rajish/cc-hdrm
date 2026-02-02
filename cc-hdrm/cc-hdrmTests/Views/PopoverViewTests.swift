@@ -10,7 +10,7 @@ struct PopoverViewTests {
     @MainActor
     func instantiationDoesNotCrash() {
         let appState = AppState()
-        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager())
+        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
         // Verify it produces a body (SwiftUI view renders without error)
         _ = view.body
     }
@@ -19,7 +19,7 @@ struct PopoverViewTests {
     @MainActor
     func bodyRendersPlaceholderStructure() {
         let appState = AppState()
-        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager())
+        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
         // Verify the view can be hosted in an NSHostingController (the actual integration path)
         let hostingController = NSHostingController(rootView: view)
         #expect(hostingController.view.frame.size.width >= 0, "Hosting controller should create a valid view")
@@ -41,7 +41,7 @@ struct PopoverViewLiveUpdateTests {
         let expectation = OSAllocatedUnfairLock(initialState: false)
         withObservationTracking {
             // Evaluate the view body — this registers tracked property access
-            let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager())
+            let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
             _ = view.body
         } onChange: {
             expectation.withLock { $0 = true }
@@ -64,7 +64,7 @@ struct PopoverViewLiveUpdateTests {
         let appState = AppState()
         // Disconnected state — footer should render with "—" placeholders
         #expect(appState.connectionStatus == .disconnected)
-        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager())
+        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
         let controller = NSHostingController(rootView: view)
         _ = controller.view // force layout
 
@@ -77,7 +77,7 @@ struct PopoverViewLiveUpdateTests {
         )
         #expect(appState.connectionStatus == .connected)
         #expect(appState.dataFreshness == .fresh)
-        let view2 = PopoverView(appState: appState, preferencesManager: MockPreferencesManager())
+        let view2 = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
         let controller2 = NSHostingController(rootView: view2)
         _ = controller2.view
     }
@@ -92,7 +92,7 @@ struct PopoverViewLiveUpdateTests {
             fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
             sevenDay: nil
         )
-        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager())
+        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
         let controller = NSHostingController(rootView: view)
         _ = controller.view
         #expect(appState.subscriptionTier == "Max")
@@ -106,7 +106,7 @@ struct PopoverViewLiveUpdateTests {
 
         let expectation = OSAllocatedUnfairLock(initialState: false)
         withObservationTracking {
-            let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager())
+            let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
             _ = view.body
         } onChange: {
             expectation.withLock { $0 = true }
@@ -134,7 +134,7 @@ struct PopoverViewStatusMessageTests {
         let appState = AppState()
         // Default state is .disconnected
         #expect(appState.connectionStatus == .disconnected)
-        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager())
+        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
         let controller = NSHostingController(rootView: view)
         _ = controller.view
     }
@@ -144,7 +144,7 @@ struct PopoverViewStatusMessageTests {
     func rendersInTokenExpiredState() {
         let appState = AppState()
         appState.updateConnectionStatus(.tokenExpired)
-        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager())
+        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
         let controller = NSHostingController(rootView: view)
         _ = controller.view
     }
@@ -154,7 +154,7 @@ struct PopoverViewStatusMessageTests {
     func rendersInNoCredentialsState() {
         let appState = AppState()
         appState.updateConnectionStatus(.noCredentials)
-        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager())
+        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
         let controller = NSHostingController(rootView: view)
         _ = controller.view
     }
@@ -171,7 +171,7 @@ struct PopoverViewStatusMessageTests {
         // Make data very stale (> 5 minutes old)
         appState.setLastUpdated(Date().addingTimeInterval(-400))
         #expect(appState.dataFreshness == .veryStale)
-        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager())
+        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
         let controller = NSHostingController(rootView: view)
         _ = controller.view
     }
@@ -186,7 +186,7 @@ struct PopoverViewStatusMessageTests {
             sevenDay: nil
         )
         #expect(appState.dataFreshness == .fresh)
-        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager())
+        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
         let controller = NSHostingController(rootView: view)
         _ = controller.view
     }
@@ -199,7 +199,7 @@ struct PopoverViewStatusMessageTests {
 
         let expectation = OSAllocatedUnfairLock(initialState: false)
         withObservationTracking {
-            let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager())
+            let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
             _ = view.body
         } onChange: {
             expectation.withLock { $0 = true }
@@ -227,7 +227,7 @@ struct PopoverView5hGaugeTests {
             fiveHour: WindowState(utilization: 17.0, resetsAt: Date().addingTimeInterval(47 * 60)),
             sevenDay: nil
         )
-        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager())
+        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
         let controller = NSHostingController(rootView: view)
         _ = controller.view
         #expect(appState.fiveHour != nil)
@@ -238,7 +238,7 @@ struct PopoverView5hGaugeTests {
     func nilFiveHourData() {
         let appState = AppState()
         // Default: no fiveHour data, disconnected
-        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager())
+        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
         let controller = NSHostingController(rootView: view)
         _ = controller.view
         #expect(appState.fiveHour == nil)
@@ -284,7 +284,7 @@ struct PopoverView7dGaugeTests {
             fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
             sevenDay: WindowState(utilization: 35.0, resetsAt: Date().addingTimeInterval(2 * 86400))
         )
-        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager())
+        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
         let controller = NSHostingController(rootView: view)
         _ = controller.view
         #expect(appState.sevenDay != nil)
@@ -299,7 +299,7 @@ struct PopoverView7dGaugeTests {
             fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
             sevenDay: nil
         )
-        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager())
+        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
         let controller = NSHostingController(rootView: view)
         _ = controller.view
         #expect(appState.sevenDay == nil)
@@ -318,7 +318,7 @@ struct PopoverView7dGaugeTests {
 
         let expectation = OSAllocatedUnfairLock(initialState: false)
         withObservationTracking {
-            let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager())
+            let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
             _ = view.body
         } onChange: {
             expectation.withLock { $0 = true }

@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pollingEngine: (any PollingEngineProtocol)?
     private var freshnessMonitor: (any FreshnessMonitorProtocol)?
     internal var preferencesManager: PreferencesManager?
+    internal var launchAtLoginService: (any LaunchAtLoginServiceProtocol)?
     private var notificationService: (any NotificationServiceProtocol)?
     private var observationTask: Task<Void, Never>?
     private var eventMonitor: Any?
@@ -32,10 +33,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Test-only initializer for injecting mock services.
-    init(pollingEngine: any PollingEngineProtocol, freshnessMonitor: (any FreshnessMonitorProtocol)? = nil, notificationService: (any NotificationServiceProtocol)? = nil) {
+    init(pollingEngine: any PollingEngineProtocol, freshnessMonitor: (any FreshnessMonitorProtocol)? = nil, notificationService: (any NotificationServiceProtocol)? = nil, launchAtLoginService: (any LaunchAtLoginServiceProtocol)? = nil) {
         self.pollingEngine = pollingEngine
         self.freshnessMonitor = freshnessMonitor
         self.notificationService = notificationService
+        self.launchAtLoginService = launchAtLoginService
         super.init()
     }
 
@@ -60,7 +62,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pop.behavior = .transient
         // Task wrapper required: onThresholdChange is a synchronous closure (called from SwiftUI
         // .onChange), but reevaluateThresholds() is async — Task bridges sync→async context.
-        pop.contentViewController = NSHostingController(rootView: PopoverView(appState: state, preferencesManager: preferences, onThresholdChange: { [weak self] in
+        if launchAtLoginService == nil {
+            launchAtLoginService = LaunchAtLoginService()
+        }
+
+        pop.contentViewController = NSHostingController(rootView: PopoverView(appState: state, preferencesManager: preferences, launchAtLoginService: launchAtLoginService!, onThresholdChange: { [weak self] in
             guard let self else { return }
             Task { @MainActor in
                 await self.notificationService?.reevaluateThresholds()

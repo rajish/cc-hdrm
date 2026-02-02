@@ -5,6 +5,7 @@ import SwiftUI
 struct PopoverFooterView: View {
     let appState: AppState
     let preferencesManager: PreferencesManagerProtocol
+    let launchAtLoginService: LaunchAtLoginServiceProtocol
     var onThresholdChange: (() -> Void)?
 
     var body: some View {
@@ -25,7 +26,7 @@ struct PopoverFooterView: View {
             Spacer()
 
             // Right: gear menu (AC #3)
-            GearMenuView(preferencesManager: preferencesManager, onThresholdChange: onThresholdChange)
+            GearMenuView(preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, onThresholdChange: onThresholdChange)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)

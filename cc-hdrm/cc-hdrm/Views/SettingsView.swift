@@ -4,6 +4,7 @@ import SwiftUI
 /// Reads/writes through PreferencesManagerProtocol — never touches UserDefaults directly.
 struct SettingsView: View {
     let preferencesManager: PreferencesManagerProtocol
+    let launchAtLoginService: LaunchAtLoginServiceProtocol
     var onDone: (() -> Void)?
     var onThresholdChange: (() -> Void)?
 
@@ -16,14 +17,16 @@ struct SettingsView: View {
     /// Discrete poll interval options per AC #2.
     private static let pollIntervalOptions: [TimeInterval] = [10, 15, 30, 60, 120, 300]
 
-    init(preferencesManager: PreferencesManagerProtocol, onDone: (() -> Void)? = nil, onThresholdChange: (() -> Void)? = nil) {
+    init(preferencesManager: PreferencesManagerProtocol, launchAtLoginService: LaunchAtLoginServiceProtocol, onDone: (() -> Void)? = nil, onThresholdChange: (() -> Void)? = nil) {
         self.preferencesManager = preferencesManager
+        self.launchAtLoginService = launchAtLoginService
         self.onDone = onDone
         self.onThresholdChange = onThresholdChange
         _warningThreshold = State(initialValue: preferencesManager.warningThreshold)
         _criticalThreshold = State(initialValue: preferencesManager.criticalThreshold)
         _pollInterval = State(initialValue: preferencesManager.pollInterval)
-        _launchAtLogin = State(initialValue: preferencesManager.launchAtLogin)
+        // AC #3: Initialize from SMAppService reality, not stored preference
+        _launchAtLogin = State(initialValue: launchAtLoginService.isEnabled)
     }
 
     var body: some View {
@@ -98,13 +101,20 @@ struct SettingsView: View {
                 .accessibilityLabel("Poll interval, \(Self.formatInterval(pollInterval))")
             }
 
-            // Launch at login toggle (AC #2: default off)
+            // Launch at login toggle (AC #1, #2, #3: wired to SMAppService via LaunchAtLoginService)
             Toggle("Launch at login", isOn: $launchAtLogin)
                 .onChange(of: launchAtLogin) { _, newValue in
                     guard !isUpdating else { return }
                     isUpdating = true
-                    preferencesManager.launchAtLogin = newValue
-                    launchAtLogin = preferencesManager.launchAtLogin
+                    if newValue {
+                        launchAtLoginService.register()
+                    } else {
+                        launchAtLoginService.unregister()
+                    }
+                    // Re-read actual state — handles permission denial / registration failure (Task 3)
+                    let actualState = launchAtLoginService.isEnabled
+                    launchAtLogin = actualState
+                    preferencesManager.launchAtLogin = actualState
                     isUpdating = false
                 }
                 .accessibilityLabel("Launch at login, \(launchAtLogin ? "on" : "off")")
@@ -116,10 +126,12 @@ struct SettingsView: View {
                 Spacer()
                 Button("Reset to Defaults") {
                     preferencesManager.resetToDefaults()
+                    launchAtLoginService.unregister()
                     warningThreshold = preferencesManager.warningThreshold
                     criticalThreshold = preferencesManager.criticalThreshold
                     pollInterval = preferencesManager.pollInterval
-                    launchAtLogin = preferencesManager.launchAtLogin
+                    launchAtLogin = launchAtLoginService.isEnabled
+                    preferencesManager.launchAtLogin = launchAtLogin
                     onThresholdChange?()
                 }
                 .accessibilityLabel("Reset all settings to default values")

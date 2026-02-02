@@ -9,14 +9,16 @@ struct SettingsViewTests {
     @Test("SettingsView renders without crash")
     func rendersWithoutCrash() {
         let mock = MockPreferencesManager()
-        let view = SettingsView(preferencesManager: mock)
+        let mockLaunch = MockLaunchAtLoginService()
+        let view = SettingsView(preferencesManager: mock, launchAtLoginService: mockLaunch)
         _ = view.body
     }
 
     @Test("SettingsView renders in NSHostingController without crash")
     func rendersInHostingController() {
         let mock = MockPreferencesManager()
-        let view = SettingsView(preferencesManager: mock)
+        let mockLaunch = MockLaunchAtLoginService()
+        let view = SettingsView(preferencesManager: mock, launchAtLoginService: mockLaunch)
         let controller = NSHostingController(rootView: view)
         #expect(controller.view.frame.size.width >= 0)
     }
@@ -24,22 +26,25 @@ struct SettingsViewTests {
     @Test("SettingsView initializes with default preference values")
     func initializesWithDefaults() {
         let mock = MockPreferencesManager()
+        let mockLaunch = MockLaunchAtLoginService()
         #expect(mock.warningThreshold == PreferencesDefaults.warningThreshold)
         #expect(mock.criticalThreshold == PreferencesDefaults.criticalThreshold)
         #expect(mock.pollInterval == PreferencesDefaults.pollInterval)
         #expect(mock.launchAtLogin == PreferencesDefaults.launchAtLogin)
-        let view = SettingsView(preferencesManager: mock)
+        let view = SettingsView(preferencesManager: mock, launchAtLoginService: mockLaunch)
         _ = view.body
     }
 
     @Test("SettingsView initializes with custom preference values")
     func initializesWithCustomValues() {
         let mock = MockPreferencesManager()
+        let mockLaunch = MockLaunchAtLoginService()
         mock.warningThreshold = 30.0
         mock.criticalThreshold = 10.0
         mock.pollInterval = 60
         mock.launchAtLogin = true
-        let view = SettingsView(preferencesManager: mock)
+        mockLaunch.isEnabled = true
+        let view = SettingsView(preferencesManager: mock, launchAtLoginService: mockLaunch)
         _ = view.body
     }
 
@@ -56,8 +61,9 @@ struct SettingsViewTests {
     @Test("SettingsView onThresholdChange closure is accepted and stored")
     func onThresholdChangeClosureAccepted() {
         let mock = MockPreferencesManager()
+        let mockLaunch = MockLaunchAtLoginService()
         var callCount = 0
-        let view = SettingsView(preferencesManager: mock, onThresholdChange: { callCount += 1 })
+        let view = SettingsView(preferencesManager: mock, launchAtLoginService: mockLaunch, onThresholdChange: { callCount += 1 })
         _ = view.body
         // Verify the view accepts the closure without crash — actual invocation
         // requires SwiftUI onChange which cannot be triggered in unit tests.
@@ -74,14 +80,16 @@ struct GearMenuViewSettingsTests {
     @Test("GearMenuView renders with preferencesManager parameter without crash")
     func rendersWithPreferencesManager() {
         let mock = MockPreferencesManager()
-        let view = GearMenuView(preferencesManager: mock)
+        let mockLaunch = MockLaunchAtLoginService()
+        let view = GearMenuView(preferencesManager: mock, launchAtLoginService: mockLaunch)
         _ = view.body
     }
 
     @Test("GearMenuView renders in NSHostingController with preferencesManager")
     func rendersInHostingController() {
         let mock = MockPreferencesManager()
-        let view = GearMenuView(preferencesManager: mock)
+        let mockLaunch = MockLaunchAtLoginService()
+        let view = GearMenuView(preferencesManager: mock, launchAtLoginService: mockLaunch)
         let controller = NSHostingController(rootView: view)
         #expect(controller.view.frame.size.width >= 0)
     }
@@ -95,7 +103,8 @@ struct PopoverFooterViewPreferencesTests {
     func acceptsPreferencesManager() {
         let appState = AppState()
         let mock = MockPreferencesManager()
-        let view = PopoverFooterView(appState: appState, preferencesManager: mock)
+        let mockLaunch = MockLaunchAtLoginService()
+        let view = PopoverFooterView(appState: appState, preferencesManager: mock, launchAtLoginService: mockLaunch)
         _ = view.body
     }
 }
@@ -108,7 +117,8 @@ struct PopoverViewPreferencesTests {
     func acceptsPreferencesManager() {
         let appState = AppState()
         let mock = MockPreferencesManager()
-        let view = PopoverView(appState: appState, preferencesManager: mock)
+        let mockLaunch = MockLaunchAtLoginService()
+        let view = PopoverView(appState: appState, preferencesManager: mock, launchAtLoginService: mockLaunch)
         _ = view.body
     }
 
@@ -121,7 +131,8 @@ struct PopoverViewPreferencesTests {
             sevenDay: nil
         )
         let mock = MockPreferencesManager()
-        let view = PopoverView(appState: appState, preferencesManager: mock)
+        let mockLaunch = MockLaunchAtLoginService()
+        let view = PopoverView(appState: appState, preferencesManager: mock, launchAtLoginService: mockLaunch)
         let controller = NSHostingController(rootView: view)
         #expect(controller.view.frame.size.width >= 0)
     }

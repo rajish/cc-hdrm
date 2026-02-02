@@ -8,14 +8,14 @@ struct GearMenuViewTests {
     @Test("GearMenuView renders without crash")
     @MainActor
     func rendersWithoutCrash() {
-        let view = GearMenuView(preferencesManager: MockPreferencesManager())
+        let view = GearMenuView(preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
         _ = view.body
     }
 
     @Test("GearMenuView produces a valid body via NSHostingController")
     @MainActor
     func producesValidBody() {
-        let view = GearMenuView(preferencesManager: MockPreferencesManager())
+        let view = GearMenuView(preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
         let controller = NSHostingController(rootView: view)
         #expect(controller.view.frame.size.width >= 0, "Hosting controller should create a valid view")
     }
