@@ -20,6 +20,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-02-02
+
+### Changed
+
+- Fix notification tests: replace unmockable UNNotificationSettings with authorizationStatus() protocol method
+- Upgrade CI to Xcode 26.2 and revert Swift 6.0 concurrency workarounds
+- Fix CI: Swift 6 strict concurrency errors and test scheme discovery
+- Add story 7.3: post-merge release publish workflow with code review fixes
+- Add story 7.2: pre-merge version bump workflow with code review fixes
+- Fix story 7.1 code review issues: changelog completeness, nested comments, sprint status cleanup
+
 ## [1.0.0] - 2026-02-02
 
 ### Added
@@ -43,5 +54,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Launch at login via SMAppService
 - Xcode project with XcodeGen configuration
 
-[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/rajish/cc-hdrm/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/rajish/cc-hdrm/releases/tag/v1.0.0
