@@ -63,9 +63,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         Self.logger.info("Menu bar status item configured")
 
+        // Create PreferencesManager — shared across services for hot-reconfigurable reads
+        let preferences = PreferencesManager()
+
         // Create NotificationService if not already injected (test path)
         if notificationService == nil {
-            notificationService = NotificationService()
+            notificationService = NotificationService(preferencesManager: preferences)
         }
 
         // Create PollingEngine with production services if not already injected (test path)
@@ -75,7 +78,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 tokenRefreshService: TokenRefreshService(),
                 apiClient: APIClient(),
                 appState: state,
-                notificationService: notificationService
+                notificationService: notificationService,
+                preferencesManager: preferences
             )
         }
 

@@ -7,24 +7,63 @@ final class NotificationService: NotificationServiceProtocol {
     private(set) var fiveHourThresholdState: ThresholdState = .aboveWarning
     private(set) var sevenDayThresholdState: ThresholdState = .aboveWarning
     private let notificationCenter: any NotificationCenterProtocol
+    private let preferencesManager: any PreferencesManagerProtocol
+
+    /// Tracks last-used thresholds for change detection and re-arming.
+    private var lastWarningThreshold: Double
+    private var lastCriticalThreshold: Double
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
         category: "notification"
     )
 
-    init(notificationCenter: any NotificationCenterProtocol = UNUserNotificationCenter.current()) {
+    init(
+        notificationCenter: any NotificationCenterProtocol = UNUserNotificationCenter.current(),
+        preferencesManager: any PreferencesManagerProtocol = PreferencesManager()
+    ) {
         self.notificationCenter = notificationCenter
+        self.preferencesManager = preferencesManager
+        self.lastWarningThreshold = preferencesManager.warningThreshold
+        self.lastCriticalThreshold = preferencesManager.criticalThreshold
     }
 
     // MARK: - Threshold Evaluation
 
     func evaluateThresholds(fiveHour: WindowState?, sevenDay: WindowState?) async {
+        let currentWarning = preferencesManager.warningThreshold
+        let currentCritical = preferencesManager.criticalThreshold
+
+        // Detect threshold changes and re-arm if headroom is above new thresholds
+        if currentWarning != lastWarningThreshold || currentCritical != lastCriticalThreshold {
+            Self.logger.info("Thresholds changed: warning \(self.lastWarningThreshold)→\(currentWarning), critical \(self.lastCriticalThreshold)→\(currentCritical)")
+
+            if let fiveHour {
+                let headroom = 100.0 - fiveHour.utilization
+                if headroom >= currentWarning && (fiveHourThresholdState == .warned20 || fiveHourThresholdState == .warned5) {
+                    Self.logger.info("5h re-arming: headroom \(headroom, format: .fixed(precision: 1))% >= new warning \(currentWarning)%")
+                    fiveHourThresholdState = .aboveWarning
+                }
+            }
+            if let sevenDay {
+                let headroom = 100.0 - sevenDay.utilization
+                if headroom >= currentWarning && (sevenDayThresholdState == .warned20 || sevenDayThresholdState == .warned5) {
+                    Self.logger.info("7d re-arming: headroom \(headroom, format: .fixed(precision: 1))% >= new warning \(currentWarning)%")
+                    sevenDayThresholdState = .aboveWarning
+                }
+            }
+
+            lastWarningThreshold = currentWarning
+            lastCriticalThreshold = currentCritical
+        }
+
         if let fiveHour {
             let headroom = 100.0 - fiveHour.utilization
             let (newState, shouldFireWarning, shouldFireCritical) = evaluateWindow(
                 currentState: fiveHourThresholdState,
-                headroom: headroom
+                headroom: headroom,
+                warningThreshold: currentWarning,
+                criticalThreshold: currentCritical
             )
             if newState != fiveHourThresholdState {
                 Self.logger.info("5h threshold: \(self.fiveHourThresholdState.rawValue, privacy: .public) → \(newState.rawValue, privacy: .public) (headroom \(headroom, format: .fixed(precision: 1))%)")
@@ -42,7 +81,9 @@ final class NotificationService: NotificationServiceProtocol {
             let headroom = 100.0 - sevenDay.utilization
             let (newState, shouldFireWarning, shouldFireCritical) = evaluateWindow(
                 currentState: sevenDayThresholdState,
-                headroom: headroom
+                headroom: headroom,
+                warningThreshold: currentWarning,
+                criticalThreshold: currentCritical
             )
             if newState != sevenDayThresholdState {
                 Self.logger.info("7d threshold: \(self.sevenDayThresholdState.rawValue, privacy: .public) → \(newState.rawValue, privacy: .public) (headroom \(headroom, format: .fixed(precision: 1))%)")
@@ -61,28 +102,30 @@ final class NotificationService: NotificationServiceProtocol {
     /// Internal (not private) for direct unit-test access.
     func evaluateWindow(
         currentState: ThresholdState,
-        headroom: Double
+        headroom: Double,
+        warningThreshold: Double = PreferencesDefaults.warningThreshold,
+        criticalThreshold: Double = PreferencesDefaults.criticalThreshold
     ) -> (ThresholdState, shouldFireWarning: Bool, shouldFireCritical: Bool) {
         switch currentState {
         case .aboveWarning:
-            if headroom < 5 {
+            if headroom < criticalThreshold {
                 // Skip warning, go straight to critical
                 return (.warned5, shouldFireWarning: false, shouldFireCritical: true)
             }
-            if headroom < 20 {
+            if headroom < warningThreshold {
                 return (.warned20, shouldFireWarning: true, shouldFireCritical: false)
             }
             return (.aboveWarning, shouldFireWarning: false, shouldFireCritical: false)
         case .warned20:
-            if headroom >= 20 {
+            if headroom >= warningThreshold {
                 return (.aboveWarning, shouldFireWarning: false, shouldFireCritical: false)
             }
-            if headroom < 5 {
+            if headroom < criticalThreshold {
                 return (.warned5, shouldFireWarning: false, shouldFireCritical: true)
             }
             return (.warned20, shouldFireWarning: false, shouldFireCritical: false)
         case .warned5:
-            if headroom >= 20 {
+            if headroom >= warningThreshold {
                 return (.aboveWarning, shouldFireWarning: false, shouldFireCritical: false)
             }
             return (.warned5, shouldFireWarning: false, shouldFireCritical: false)

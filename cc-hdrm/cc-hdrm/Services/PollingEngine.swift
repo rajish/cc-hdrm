@@ -11,6 +11,7 @@ final class PollingEngine: PollingEngineProtocol {
     private let apiClient: any APIClientProtocol
     private let appState: AppState
     private let notificationService: (any NotificationServiceProtocol)?
+    private let preferencesManager: any PreferencesManagerProtocol
     private var pollingTask: Task<Void, Never>?
 
     private static let logger = Logger(
@@ -23,13 +24,15 @@ final class PollingEngine: PollingEngineProtocol {
         tokenRefreshService: any TokenRefreshServiceProtocol,
         apiClient: any APIClientProtocol,
         appState: AppState,
-        notificationService: (any NotificationServiceProtocol)? = nil
+        notificationService: (any NotificationServiceProtocol)? = nil,
+        preferencesManager: any PreferencesManagerProtocol = PreferencesManager()
     ) {
         self.keychainService = keychainService
         self.tokenRefreshService = tokenRefreshService
         self.apiClient = apiClient
         self.appState = appState
         self.notificationService = notificationService
+        self.preferencesManager = preferencesManager
     }
 
     func start() async {
@@ -38,7 +41,8 @@ final class PollingEngine: PollingEngineProtocol {
 
         pollingTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(30))
+                let interval = self?.preferencesManager.pollInterval ?? PreferencesDefaults.pollInterval
+                try? await Task.sleep(for: .seconds(interval))
                 guard !Task.isCancelled else { break }
                 Self.logger.debug("Poll cycle triggered")
                 await self?.performPollCycle()

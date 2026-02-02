@@ -1,11 +1,11 @@
 /// Threshold state for a single time window's headroom level.
 /// Tracks whether warning/critical notifications have been fired to enforce fire-once semantics.
 enum ThresholdState: String, Sendable {
-    /// Headroom >= 20%, both thresholds armed.
+    /// Headroom >= warning threshold, both thresholds armed.
     case aboveWarning
-    /// Warning fired, headroom < 20%, critical armed.
+    /// Warning fired, headroom < warning threshold, critical armed.
     case warned20
-    /// Critical fired (Story 5.3), headroom < 5%.
+    /// Critical fired (Story 5.3), headroom < critical threshold.
     case warned5
 }
 
