@@ -22,16 +22,16 @@ so that I have real headroom data to display.
 ## Tasks / Subtasks
 
 - [x] Task 1: Create `UsageResponse` Codable model (AC: #2, #3, #4)
-  - [x] Create `cc-hdrm/cc-hdrm/Models/UsageResponse.swift`
+  - [x] Create `cc-hdrm/Models/UsageResponse.swift`
   - [x] Define `UsageResponse` with optional `fiveHour`, `sevenDay`, `sevenDaySonnet`, `extraUsage` fields
   - [x] Define `WindowUsage` with optional `utilization: Double?` and `resetsAt: String?`
   - [x] Define `ExtraUsage` with optional `isEnabled: Bool?`, `monthlyLimit: Double?`, `usedCredits: Double?`, `utilization: Double?`
   - [x] Add `CodingKeys` enums mapping snake_case JSON to camelCase Swift (e.g., `five_hour` → `fiveHour`, `resets_at` → `resetsAt`, `is_enabled` → `isEnabled`)
   - [x] All structs conform to `Codable, Sendable`
 - [x] Task 2: Create `APIClientProtocol` and `APIClient` (AC: #1, #5, #7, #8)
-  - [x] Create `cc-hdrm/cc-hdrm/Services/APIClientProtocol.swift`
+  - [x] Create `cc-hdrm/Services/APIClientProtocol.swift`
   - [x] Define `protocol APIClientProtocol: Sendable` with `func fetchUsage(token: String) async throws -> UsageResponse`
-  - [x] Create `cc-hdrm/cc-hdrm/Services/APIClient.swift`
+  - [x] Create `cc-hdrm/Services/APIClient.swift`
   - [x] Implement using `URLSession` with injectable `dataLoader` closure for testability (same pattern as `TokenRefreshService`)
   - [x] Build `URLRequest` with GET method, URL `https://api.anthropic.com/api/oauth/usage`
   - [x] Set headers: `Authorization: Bearer <token>`, `anthropic-beta: oauth-2025-04-20`, `User-Agent: claude-code/1.0`
@@ -195,19 +195,19 @@ When the API returns 401:
 
 New files to create:
 ```
-cc-hdrm/cc-hdrm/Models/UsageResponse.swift
-cc-hdrm/cc-hdrm/Services/APIClientProtocol.swift
-cc-hdrm/cc-hdrm/Services/APIClient.swift
-cc-hdrm/cc-hdrm/Extensions/Date+Formatting.swift
-cc-hdrm/cc-hdrmTests/Models/UsageResponseTests.swift
-cc-hdrm/cc-hdrmTests/Services/APIClientTests.swift
-cc-hdrm/cc-hdrmTests/Extensions/DateFormattingTests.swift
+cc-hdrm/Models/UsageResponse.swift
+cc-hdrm/Services/APIClientProtocol.swift
+cc-hdrm/Services/APIClient.swift
+cc-hdrm/Extensions/Date+Formatting.swift
+cc-hdrmTests/Models/UsageResponseTests.swift
+cc-hdrmTests/Services/APIClientTests.swift
+cc-hdrmTests/Extensions/DateFormattingTests.swift
 ```
 
 Files to modify:
 ```
-cc-hdrm/cc-hdrm/App/AppDelegate.swift               # Add APIClient dependency, integrate fetch into polling
-cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift       # Add API fetch integration tests
+cc-hdrm/App/AppDelegate.swift               # Add APIClient dependency, integrate fetch into polling
+cc-hdrmTests/App/AppDelegateTests.swift       # Add API fetch integration tests
 ```
 
 ### Testing Requirements
@@ -271,14 +271,14 @@ claude-opus-4-5 (anthropic/claude-opus-4-5)
 ### File List
 
 **New files:**
-- `cc-hdrm/cc-hdrm/Models/UsageResponse.swift`
-- `cc-hdrm/cc-hdrm/Services/APIClientProtocol.swift`
-- `cc-hdrm/cc-hdrm/Services/APIClient.swift`
-- `cc-hdrm/cc-hdrm/Extensions/Date+Formatting.swift`
-- `cc-hdrm/cc-hdrmTests/Models/UsageResponseTests.swift`
-- `cc-hdrm/cc-hdrmTests/Services/APIClientTests.swift`
-- `cc-hdrm/cc-hdrmTests/Extensions/DateFormattingTests.swift`
+- `cc-hdrm/Models/UsageResponse.swift`
+- `cc-hdrm/Services/APIClientProtocol.swift`
+- `cc-hdrm/Services/APIClient.swift`
+- `cc-hdrm/Extensions/Date+Formatting.swift`
+- `cc-hdrmTests/Models/UsageResponseTests.swift`
+- `cc-hdrmTests/Services/APIClientTests.swift`
+- `cc-hdrmTests/Extensions/DateFormattingTests.swift`
 
 **Modified files:**
-- `cc-hdrm/cc-hdrm/App/AppDelegate.swift`
-- `cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift`
+- `cc-hdrm/App/AppDelegate.swift`
+- `cc-hdrmTests/App/AppDelegateTests.swift`

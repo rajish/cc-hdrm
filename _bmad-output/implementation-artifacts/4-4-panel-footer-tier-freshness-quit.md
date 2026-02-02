@@ -24,7 +24,7 @@ so that I have full context about my account and can control the app.
 ## Tasks / Subtasks
 
 - [x] Task 1: Create PopoverFooterView.swift -- footer view for popover (AC: #1-#4)
-  - [x] Create `cc-hdrm/cc-hdrm/Views/PopoverFooterView.swift`
+  - [x] Create `cc-hdrm/Views/PopoverFooterView.swift`
   - [x] SwiftUI `View` struct with parameter: `appState: AppState`
   - [x] Layout: `HStack` with three elements:
     1. Left: subscription tier `Text(appState.subscriptionTier ?? "—")` in `.caption` size, `.tertiary` foreground style (AC #1)
@@ -39,7 +39,7 @@ so that I have full context about my account and can control the app.
   - [x] VoiceOver: `.accessibilityElement(children: .combine)` so the footer reads as a single element: "Subscription tier [tier], updated [X] seconds ago"
 
 - [x] Task 2: Create GearMenuView.swift -- gear icon with quit menu (AC: #5-#8)
-  - [x] Create `cc-hdrm/cc-hdrm/Views/GearMenuView.swift`
+  - [x] Create `cc-hdrm/Views/GearMenuView.swift`
   - [x] SwiftUI `View` struct, no parameters (self-contained)
   - [x] Implementation: `Menu { Button("Quit cc-hdrm") { NSApplication.shared.terminate(nil) } } label: { Image(systemName: "gearshape").foregroundStyle(.secondary) }`
   - [x] Standard SwiftUI `Menu` dropdown behavior (AC #7)
@@ -47,7 +47,7 @@ so that I have full context about my account and can control the app.
   - [x] `.accessibilityLabel("Settings")` on the gear icon
 
 - [x] Task 3: Update PopoverView.swift to replace footer placeholder (AC: #1-#4)
-  - [x] In `cc-hdrm/cc-hdrm/Views/PopoverView.swift`:
+  - [x] In `cc-hdrm/Views/PopoverView.swift`:
   - [x] Replace the `Text(status == .disconnected ? "disconnected" : "footer")` placeholder block (lines 30-33) with:
     ```swift
     PopoverFooterView(appState: appState)
@@ -58,7 +58,7 @@ so that I have full context about my account and can control the app.
   - [x] Actually, keep `let _ = appState.countdownTick` on line 13 if the FiveHourGaugeSection or SevenDayGaugeSection rely on PopoverView registering that observation. Check: FiveHourGaugeSection and SevenDayGaugeSection both read `appState.countdownTick` in their own body, so PopoverView's read is redundant. However, `connectionStatus` IS read by PopoverView's body to check `appState.sevenDay != nil` condition -- actually no, `appState.sevenDay` is read directly. The `status` variable was only used for the placeholder. Safe to remove both `let status` and `let _` lines.
 
 - [x] Task 4: Write PopoverFooterView tests (AC: #1-#4)
-  - [x] Create `cc-hdrm/cc-hdrmTests/Views/PopoverFooterViewTests.swift`
+  - [x] Create `cc-hdrmTests/Views/PopoverFooterViewTests.swift`
   - [x] Test: Footer renders with subscription tier data -- no crash
   - [x] Test: Footer renders with nil subscription tier -- shows "—"
   - [x] Test: Footer renders with fresh data (dataFreshness == .fresh)
@@ -69,13 +69,13 @@ so that I have full context about my account and can control the app.
   - [x] Use `@MainActor`, `@Test`, Swift Testing framework, consistent with previous story patterns
 
 - [x] Task 5: Write GearMenuView tests (AC: #5-#8)
-  - [x] Create `cc-hdrm/cc-hdrmTests/Views/GearMenuViewTests.swift`
+  - [x] Create `cc-hdrmTests/Views/GearMenuViewTests.swift`
   - [x] Test: GearMenuView renders without crash
   - [x] Test: GearMenuView produces a valid body (instantiation test)
   - [x] Note: Testing actual menu interaction (tap -> quit) requires UI testing and is out of scope for unit tests. The quit action uses `NSApplication.shared.terminate(nil)` which is a well-known AppKit API.
 
 - [x] Task 6: Update PopoverView integration tests (AC: #1-#4)
-  - [x] Extend `cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift`:
+  - [x] Extend `cc-hdrmTests/Views/PopoverViewTests.swift`:
   - [x] Test: PopoverView with subscription tier renders footer without crash
   - [x] Test: PopoverView observation triggers on subscriptionTier change
   - [x] Update or remove the `footerReflectsDisconnectedState` test to match new footer implementation (no longer checks for "disconnected"/"footer" text)
@@ -134,24 +134,24 @@ Recent commits follow pattern: one commit per story with code review fixes. Xcod
 ### Project Structure Notes
 
 - `Views/` directory contains: PopoverView, HeadroomRingGauge, CountdownLabel, FiveHourGaugeSection, SevenDayGaugeSection
-- New files go in `cc-hdrm/cc-hdrm/Views/PopoverFooterView.swift` and `cc-hdrm/cc-hdrm/Views/GearMenuView.swift`
-- New test files go in `cc-hdrm/cc-hdrmTests/Views/`
+- New files go in `cc-hdrm/Views/PopoverFooterView.swift` and `cc-hdrm/Views/GearMenuView.swift`
+- New test files go in `cc-hdrmTests/Views/`
 - `StatusMessageView.swift` and `MenuBarTextRenderer.swift` do NOT exist yet -- they are in future stories (4.5 for StatusMessageView, 3.1 used NSAttributedString directly). Do NOT create them in this story.
 
 ### File Structure Requirements
 
 New files to create:
 ```
-cc-hdrm/cc-hdrm/Views/PopoverFooterView.swift           # NEW -- footer with tier, freshness, gear menu
-cc-hdrm/cc-hdrm/Views/GearMenuView.swift                 # NEW -- gear icon with quit menu
-cc-hdrm/cc-hdrmTests/Views/PopoverFooterViewTests.swift   # NEW -- footer tests
-cc-hdrm/cc-hdrmTests/Views/GearMenuViewTests.swift        # NEW -- gear menu tests
+cc-hdrm/Views/PopoverFooterView.swift           # NEW -- footer with tier, freshness, gear menu
+cc-hdrm/Views/GearMenuView.swift                 # NEW -- gear icon with quit menu
+cc-hdrmTests/Views/PopoverFooterViewTests.swift   # NEW -- footer tests
+cc-hdrmTests/Views/GearMenuViewTests.swift        # NEW -- gear menu tests
 ```
 
 Files to modify:
 ```
-cc-hdrm/cc-hdrm/Views/PopoverView.swift                  # REPLACE footer placeholder with PopoverFooterView
-cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift         # UPDATE footer integration tests
+cc-hdrm/Views/PopoverView.swift                  # REPLACE footer placeholder with PopoverFooterView
+cc-hdrmTests/Views/PopoverViewTests.swift         # UPDATE footer integration tests
 ```
 
 ### Testing Requirements
@@ -178,7 +178,7 @@ cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift         # UPDATE footer integr
 - DO NOT create a separate "freshness timer" -- use existing `countdownTick` observation pattern
 - DO NOT store freshness state as a separate property -- use the derived `appState.dataFreshness` computed property
 - DO NOT create StatusMessageView in this story -- that's story 4.5
-- DO NOT modify `cc-hdrm/cc-hdrm/cc_hdrm.entitlements` -- protected file
+- DO NOT modify `cc-hdrm/cc_hdrm.entitlements` -- protected file
 - DO NOT use `DispatchQueue` or timers -- use existing countdownTick observation pattern
 - DO NOT use `print()` -- use `os.Logger` if logging is needed (shouldn't be in views)
 - DO NOT hardcode colors -- use semantic color tokens from Color+Headroom.swift and HeadroomState+SwiftUI.swift
@@ -239,9 +239,9 @@ None required.
 
 ### File List
 
-- cc-hdrm/cc-hdrm/Views/PopoverFooterView.swift (NEW)
-- cc-hdrm/cc-hdrm/Views/GearMenuView.swift (NEW)
-- cc-hdrm/cc-hdrm/Views/PopoverView.swift (MODIFIED)
-- cc-hdrm/cc-hdrmTests/Views/PopoverFooterViewTests.swift (NEW)
-- cc-hdrm/cc-hdrmTests/Views/GearMenuViewTests.swift (NEW)
-- cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift (MODIFIED)
+- cc-hdrm/Views/PopoverFooterView.swift (NEW)
+- cc-hdrm/Views/GearMenuView.swift (NEW)
+- cc-hdrm/Views/PopoverView.swift (MODIFIED)
+- cc-hdrmTests/Views/PopoverFooterViewTests.swift (NEW)
+- cc-hdrmTests/Views/GearMenuViewTests.swift (NEW)
+- cc-hdrmTests/Views/PopoverViewTests.swift (MODIFIED)

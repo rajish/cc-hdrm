@@ -21,7 +21,7 @@ so that I can see the full picture when I need more context than the glance prov
 ## Tasks / Subtasks
 
 - [x] Task 1: Create PopoverView.swift — the SwiftUI root view for the popover (AC: #3, #5)
-  - [x] Create `cc-hdrm/cc-hdrm/Views/PopoverView.swift`
+  - [x] Create `cc-hdrm/Views/PopoverView.swift`
   - [x] `PopoverView` is a SwiftUI `View` struct that takes an `AppState` parameter (observed via `@Observable`)
   - [x] Layout: vertical `VStack` with placeholder sections for future stories:
     - Placeholder text "5h gauge" (will be replaced by Story 4.2)
@@ -57,12 +57,12 @@ so that I can see the full picture when I need more context than the glance prov
   - [x] If needed, ensure the button's `sendAction(on:)` is set to `.leftMouseUp` to handle clicks properly while still displaying attributed text
 
 - [x] Task 4: Write PopoverView tests (AC: #3, #5)
-  - [x] Create `cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift`
+  - [x] Create `cc-hdrmTests/Views/PopoverViewTests.swift`
   - [x] Test: PopoverView can be instantiated with an AppState (no crash, renders without error)
   - [x] Test: PopoverView body contains expected placeholder structure (verify view hierarchy if feasible, or just verify it renders)
 
 - [x] Task 5: Write AppDelegate popover toggle tests (AC: #1, #4)
-  - [x] In `cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift` (extend existing):
+  - [x] In `cc-hdrmTests/App/AppDelegateTests.swift` (extend existing):
   - [x] Test: After `applicationDidFinishLaunching`, `popover` is non-nil
   - [x] Test: After `applicationDidFinishLaunching`, `statusItem?.button?.action` is set to `togglePopover:` selector
   - [x] Test: Calling `togglePopover` when popover is not shown → popover.isShown becomes true (may require mocking NSPopover or testing via integration)
@@ -70,7 +70,7 @@ so that I can see the full picture when I need more context than the glance prov
   - [x] Note: NSPopover behavior in test environments can be tricky — if `show(relativeTo:)` fails without a real window, use a mock or test the toggle logic in isolation
 
 - [x] Task 6: Write live update integration test (AC: #5)
-  - [x] In `cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift`:
+  - [x] In `cc-hdrmTests/Views/PopoverViewTests.swift`:
   - [x] Test: Create AppState, create PopoverView, update AppState properties → verify view would re-render (use `@Observable` tracking test pattern if available, otherwise just verify AppState observation works)
 
 ## Dev Notes
@@ -125,7 +125,7 @@ The key architectural decision is using `NSPopover` (AppKit) rather than SwiftUI
 - Remove dead code / unused properties before committing
 - Add call counters to mocks for verifying interaction patterns
 - Make services `@MainActor` when they hold `AppState` reference
-- DO NOT modify `cc-hdrm/cc-hdrm/cc_hdrm.entitlements` — protected file
+- DO NOT modify `cc-hdrm/cc_hdrm.entitlements` — protected file
 
 ### Git Intelligence
 
@@ -142,14 +142,14 @@ Recent commits show pattern: one commit per story with code review fixes include
 
 New files to create:
 ```
-cc-hdrm/cc-hdrm/Views/PopoverView.swift                    # NEW — SwiftUI popover root view
-cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift           # NEW — PopoverView tests
+cc-hdrm/Views/PopoverView.swift                    # NEW — SwiftUI popover root view
+cc-hdrmTests/Views/PopoverViewTests.swift           # NEW — PopoverView tests
 ```
 
 Files to modify:
 ```
-cc-hdrm/cc-hdrm/App/AppDelegate.swift                      # Add NSPopover, togglePopover, wire button action
-cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift             # Add popover toggle tests
+cc-hdrm/App/AppDelegate.swift                      # Add NSPopover, togglePopover, wire button action
+cc-hdrmTests/App/AppDelegateTests.swift             # Add popover toggle tests
 ```
 
 No other files need modification. This story is intentionally minimal — it creates the shell that stories 4.2-4.5 will fill in.
@@ -176,7 +176,7 @@ No other files need modification. This story is intentionally minimal — it cre
 - DO NOT store popover open/closed state in `AppState` — popover visibility is UI state, not app state. `NSPopover.isShown` is the source of truth.
 - DO NOT create a custom `NSPanel` or `NSWindow` — `NSPopover` is the correct macOS pattern for status item expansion
 - DO NOT add popover content beyond placeholders — stories 4.2-4.5 will add gauges, footer, and status messages
-- DO NOT modify `cc-hdrm/cc-hdrm/cc_hdrm.entitlements` — protected file
+- DO NOT modify `cc-hdrm/cc_hdrm.entitlements` — protected file
 - DO NOT break existing menu bar display — the `attributedTitle` observation loop must continue working after adding button action
 - DO NOT use `NSMenu` instead of `NSPopover` — the requirement is a rich SwiftUI panel, not a dropdown menu
 
@@ -226,8 +226,8 @@ None — clean implementation, no debugging needed.
 
 ### File List
 
-- `cc-hdrm/cc-hdrm/Views/PopoverView.swift` (NEW)
-- `cc-hdrm/cc-hdrm/App/AppDelegate.swift` (MODIFIED — added NSPopover, togglePopover, popover logger, sendAction)
-- `cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift` (NEW)
-- `cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift` (MODIFIED — added popover test suite)
+- `cc-hdrm/Views/PopoverView.swift` (NEW)
+- `cc-hdrm/App/AppDelegate.swift` (MODIFIED — added NSPopover, togglePopover, popover logger, sendAction)
+- `cc-hdrmTests/Views/PopoverViewTests.swift` (NEW)
+- `cc-hdrmTests/App/AppDelegateTests.swift` (MODIFIED — added popover test suite)
 - `_bmad-output/implementation-artifacts/sprint-status.yaml` (MODIFIED — story status sync)

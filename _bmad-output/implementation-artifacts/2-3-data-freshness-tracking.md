@@ -23,7 +23,7 @@ so that I never see a number I can't trust as current.
 ## Tasks / Subtasks
 
 - [x] Task 1: Create `DataFreshness` enum (AC: #1, #2, #4)
-  - [x] Create `cc-hdrm/cc-hdrm/Models/DataFreshness.swift`
+  - [x] Create `cc-hdrm/Models/DataFreshness.swift`
   - [x] Define `enum DataFreshness: String, CaseIterable, Sendable` with cases: `.fresh`, `.stale`, `.veryStale`, `.unknown`
   - [x] Add `init(lastUpdated: Date?)` that computes freshness from elapsed time:
     - `nil` → `.unknown`
@@ -32,25 +32,25 @@ so that I never see a number I can't trust as current.
     - > 300s → `.veryStale`
   - [x] Add thresholds as static constants: `staleThreshold: TimeInterval = 60`, `veryStaleThreshold: TimeInterval = 300`
 - [x] Task 2: Add `dataFreshness` computed property to `AppState` (AC: #1, #2, #4, #6, #7)
-  - [x] In `cc-hdrm/cc-hdrm/State/AppState.swift`, add a computed property `var dataFreshness: DataFreshness` that derives from `lastUpdated`
+  - [x] In `cc-hdrm/State/AppState.swift`, add a computed property `var dataFreshness: DataFreshness` that derives from `lastUpdated`
   - [x] This is a **derived** property (computed, never stored) — same pattern as `WindowState.headroomState`
   - [x] When `connectionStatus` is not `.connected`, return `.unknown` regardless of `lastUpdated`
 - [x] Task 3: Add freshness-aware status message logic to `PollingEngine` (AC: #4, #5)
-  - [x] In `cc-hdrm/cc-hdrm/Services/PollingEngine.swift`, after each successful fetch cycle, do NOT set a stale status message — freshness is a time-based concern, not a fetch-cycle concern
+  - [x] In `cc-hdrm/Services/PollingEngine.swift`, after each successful fetch cycle, do NOT set a stale status message — freshness is a time-based concern, not a fetch-cycle concern
   - [x] Instead, create a `FreshnessMonitor` that runs a timer to check staleness periodically
-  - [x] Create `cc-hdrm/cc-hdrm/Services/FreshnessMonitor.swift`
+  - [x] Create `cc-hdrm/Services/FreshnessMonitor.swift`
   - [x] `FreshnessMonitor` accepts `AppState`, checks `appState.dataFreshness` every 15 seconds via `Task.sleep`
   - [x] When freshness transitions to `.veryStale` and `connectionStatus` is `.connected`: set `appState.updateStatusMessage(StatusMessage(title: "Data may be outdated", detail: "Last updated: Xm ago"))`
   - [x] When freshness returns to `.fresh` (after a successful poll): clear the status message (PollingEngine already does this on success)
   - [x] When freshness is `.stale`: do NOT set a status message — stale state is communicated only through the popover timestamp color (implemented in Story 4.4)
   - [x] `FreshnessMonitor` conforms to a `FreshnessMonitorProtocol` for testability
-  - [x] Create `cc-hdrm/cc-hdrm/Services/FreshnessMonitorProtocol.swift`
+  - [x] Create `cc-hdrm/Services/FreshnessMonitorProtocol.swift`
 - [x] Task 4: Wire `FreshnessMonitor` into `AppDelegate` (AC: #4, #5)
-  - [x] In `cc-hdrm/cc-hdrm/App/AppDelegate.swift`, create `FreshnessMonitor` alongside `PollingEngine`
+  - [x] In `cc-hdrm/App/AppDelegate.swift`, create `FreshnessMonitor` alongside `PollingEngine`
   - [x] Start the monitor in `applicationDidFinishLaunching` after starting `PollingEngine`
   - [x] Stop the monitor in `applicationWillTerminate`
 - [x] Task 5: Add relative time formatting to `Date+Formatting.swift` (AC: #3, #5)
-  - [x] In `cc-hdrm/cc-hdrm/Extensions/Date+Formatting.swift`, add `func relativeTimeAgo() -> String` extension on `Date`
+  - [x] In `cc-hdrm/Extensions/Date+Formatting.swift`, add `func relativeTimeAgo() -> String` extension on `Date`
   - [x] Formatting rules (from UX spec):
     - < 60s: `"just now"` or `"Xs ago"`
     - 60s–3600s: `"Xm ago"`
@@ -58,7 +58,7 @@ so that I never see a number I can't trust as current.
     - > 86400s: `"Xd Xh ago"`
   - [x] This is the same formatting pattern used by CountdownLabel (Story 4.2) — establish the pattern now
 - [x] Task 6: Write `DataFreshness` tests (AC: #1, #2, #4)
-  - [x] Create `cc-hdrm/cc-hdrmTests/Models/DataFreshnessTests.swift`
+  - [x] Create `cc-hdrmTests/Models/DataFreshnessTests.swift`
   - [x] Test: `nil` lastUpdated → `.unknown`
   - [x] Test: 0 seconds ago → `.fresh`
   - [x] Test: 30 seconds ago → `.fresh`
@@ -69,20 +69,20 @@ so that I never see a number I can't trust as current.
   - [x] Test: 300 seconds ago → `.veryStale`
   - [x] Test: 600 seconds ago → `.veryStale`
 - [x] Task 7: Write `AppState.dataFreshness` tests (AC: #1, #2, #4, #6)
-  - [x] In `cc-hdrm/cc-hdrmTests/State/AppStateTests.swift` (create if not exists)
+  - [x] In `cc-hdrmTests/State/AppStateTests.swift` (create if not exists)
   - [x] Test: `lastUpdated` is nil → `.unknown`
   - [x] Test: `lastUpdated` is recent + connected → `.fresh`
   - [x] Test: `lastUpdated` is recent + disconnected → `.unknown` (connection status overrides)
   - [x] Test: `lastUpdated` is old + connected → `.veryStale`
 - [x] Task 8: Write `FreshnessMonitor` tests (AC: #4, #5)
-  - [x] Create `cc-hdrm/cc-hdrmTests/Services/FreshnessMonitorTests.swift`
+  - [x] Create `cc-hdrmTests/Services/FreshnessMonitorTests.swift`
   - [x] Test: when `dataFreshness` is `.veryStale` and connected, status message is set to "Data may be outdated"
   - [x] Test: when `dataFreshness` is `.fresh`, no status message is set
   - [x] Test: when `dataFreshness` is `.stale`, no status message is set (stale only affects popover timestamp color)
   - [x] Test: when `connectionStatus` is not `.connected`, no stale message is set even if data is old
   - [x] Test: `stop()` cancels the monitor task
 - [x] Task 9: Write `Date.relativeTimeAgo()` tests (AC: #3, #5)
-  - [x] In `cc-hdrm/cc-hdrmTests/Extensions/DateFormattingTests.swift` (create or extend existing)
+  - [x] In `cc-hdrmTests/Extensions/DateFormattingTests.swift` (create or extend existing)
   - [x] Test: 5 seconds ago → `"5s ago"`
   - [x] Test: 45 seconds ago → `"45s ago"`
   - [x] Test: 90 seconds ago → `"1m ago"`
@@ -287,21 +287,21 @@ Recent commits show:
 
 New files to create:
 ```
-cc-hdrm/cc-hdrm/Models/DataFreshness.swift
-cc-hdrm/cc-hdrm/Services/FreshnessMonitor.swift
-cc-hdrm/cc-hdrm/Services/FreshnessMonitorProtocol.swift
-cc-hdrm/cc-hdrmTests/Models/DataFreshnessTests.swift
-cc-hdrm/cc-hdrmTests/Services/FreshnessMonitorTests.swift
+cc-hdrm/Models/DataFreshness.swift
+cc-hdrm/Services/FreshnessMonitor.swift
+cc-hdrm/Services/FreshnessMonitorProtocol.swift
+cc-hdrmTests/Models/DataFreshnessTests.swift
+cc-hdrmTests/Services/FreshnessMonitorTests.swift
 ```
 
 Files to modify:
 ```
-cc-hdrm/cc-hdrm/State/AppState.swift                   # Add dataFreshness computed property
-cc-hdrm/cc-hdrm/Extensions/Date+Formatting.swift        # Add relativeTimeAgo()
-cc-hdrm/cc-hdrm/App/AppDelegate.swift                   # Wire FreshnessMonitor
-cc-hdrm/cc-hdrmTests/State/AppStateTests.swift           # Add dataFreshness tests (create if needed)
-cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift          # Add FreshnessMonitor wiring tests
-cc-hdrm/cc-hdrmTests/Extensions/DateFormattingTests.swift # Add relativeTimeAgo tests (create if needed)
+cc-hdrm/State/AppState.swift                   # Add dataFreshness computed property
+cc-hdrm/Extensions/Date+Formatting.swift        # Add relativeTimeAgo()
+cc-hdrm/App/AppDelegate.swift                   # Wire FreshnessMonitor
+cc-hdrmTests/State/AppStateTests.swift           # Add dataFreshness tests (create if needed)
+cc-hdrmTests/App/AppDelegateTests.swift          # Add FreshnessMonitor wiring tests
+cc-hdrmTests/Extensions/DateFormattingTests.swift # Add relativeTimeAgo tests (create if needed)
 ```
 
 ### Testing Requirements
@@ -320,7 +320,7 @@ cc-hdrm/cc-hdrmTests/Extensions/DateFormattingTests.swift # Add relativeTimeAgo 
 - DO NOT set stale status messages when disconnected — disconnection messages take precedence
 - DO NOT clear non-freshness status messages from `FreshnessMonitor` — only clear messages that `FreshnessMonitor` itself set
 - DO NOT log timestamps or dates that could leak usage patterns — keep logs factual and minimal
-- DO NOT modify `cc-hdrm/cc-hdrm/cc_hdrm.entitlements` — protected file
+- DO NOT modify `cc-hdrm/cc_hdrm.entitlements` — protected file
 
 ### References
 
@@ -361,18 +361,18 @@ No debug issues encountered. Build and tests passed on first attempt after xcode
 ### File List
 
 New files:
-- cc-hdrm/cc-hdrm/Models/DataFreshness.swift
-- cc-hdrm/cc-hdrm/Services/FreshnessMonitor.swift
-- cc-hdrm/cc-hdrm/Services/FreshnessMonitorProtocol.swift
-- cc-hdrm/cc-hdrmTests/Models/DataFreshnessTests.swift
-- cc-hdrm/cc-hdrmTests/Services/FreshnessMonitorTests.swift
+- cc-hdrm/Models/DataFreshness.swift
+- cc-hdrm/Services/FreshnessMonitor.swift
+- cc-hdrm/Services/FreshnessMonitorProtocol.swift
+- cc-hdrmTests/Models/DataFreshnessTests.swift
+- cc-hdrmTests/Services/FreshnessMonitorTests.swift
 
 Modified files:
-- cc-hdrm/cc-hdrm/State/AppState.swift
-- cc-hdrm/cc-hdrm/Extensions/Date+Formatting.swift
-- cc-hdrm/cc-hdrm/App/AppDelegate.swift
-- cc-hdrm/cc-hdrmTests/State/AppStateTests.swift
-- cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift
-- cc-hdrm/cc-hdrmTests/Extensions/DateFormattingTests.swift
-- cc-hdrm/cc-hdrmTests/Models/DataFreshnessTests.swift
+- cc-hdrm/State/AppState.swift
+- cc-hdrm/Extensions/Date+Formatting.swift
+- cc-hdrm/App/AppDelegate.swift
+- cc-hdrmTests/State/AppStateTests.swift
+- cc-hdrmTests/App/AppDelegateTests.swift
+- cc-hdrmTests/Extensions/DateFormattingTests.swift
+- cc-hdrmTests/Models/DataFreshnessTests.swift
 - _bmad-output/implementation-artifacts/sprint-status.yaml

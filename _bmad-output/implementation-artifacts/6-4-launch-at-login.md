@@ -21,8 +21,8 @@ so that usage monitoring is always running without me remembering to launch it.
 ## Tasks / Subtasks
 
 - [x] Task 1: Create LaunchAtLoginService with SMAppService integration (AC: #1, #2)
-  - [x] Create `LaunchAtLoginServiceProtocol` in `cc-hdrm/cc-hdrm/Services/LaunchAtLoginServiceProtocol.swift`
-  - [x] Create `LaunchAtLoginService` in `cc-hdrm/cc-hdrm/Services/LaunchAtLoginService.swift`
+  - [x] Create `LaunchAtLoginServiceProtocol` in `cc-hdrm/Services/LaunchAtLoginServiceProtocol.swift`
+  - [x] Create `LaunchAtLoginService` in `cc-hdrm/Services/LaunchAtLoginService.swift`
   - [x] Implement `register()` calling `SMAppService.mainApp.register()`
   - [x] Implement `unregister()` calling `SMAppService.mainApp.unregister()`
   - [x] Implement `isEnabled` computed property that reads `SMAppService.mainApp.status == .enabled`
@@ -47,7 +47,7 @@ so that usage monitoring is always running without me remembering to launch it.
   - [x] Update toggle state to reflect actual `isEnabled` after unregister
 
 - [x] Task 5: Write tests for launch at login (AC: #1, #2, #3)
-  - [x] Create `MockLaunchAtLoginService` in `cc-hdrm/cc-hdrmTests/Mocks/MockLaunchAtLoginService.swift`
+  - [x] Create `MockLaunchAtLoginService` in `cc-hdrmTests/Mocks/MockLaunchAtLoginService.swift`
   - [x] Test: `register()` sets `isEnabled` to true
   - [x] Test: `unregister()` sets `isEnabled` to false
   - [x] Test: SettingsView initializes toggle from `launchAtLoginService.isEnabled`, not `preferencesManager.launchAtLogin`
@@ -140,11 +140,11 @@ The toggle must re-read `isEnabled` after the call to detect if the operation ac
 - Use `isUpdating` guard in the launchAtLogin `.onChange` handler to prevent re-entrancy
 
 **What exists for launchAtLogin already:**
-- `PreferencesManager.launchAtLogin` property — reads/writes UserDefaults (lines 111-120 of `cc-hdrm/cc-hdrm/Services/PreferencesManager.swift`)
-- `PreferencesManagerProtocol.launchAtLogin` — declared in protocol (line 17 of `cc-hdrm/cc-hdrm/Services/PreferencesManagerProtocol.swift`)
-- `PreferencesDefaults.launchAtLogin = false` — default value (line 8 of `cc-hdrm/cc-hdrm/Services/PreferencesManagerProtocol.swift`)
-- `SettingsView` already has a `Toggle("Launch at login", ...)` with `.onChange` handler (lines 102-109 of `cc-hdrm/cc-hdrm/Views/SettingsView.swift`) — this writes to `preferencesManager.launchAtLogin` but does NOT call SMAppService
-- `MockPreferencesManager.launchAtLogin` — already supports `launchAtLogin` (line 9 of `cc-hdrm/cc-hdrmTests/Mocks/MockPreferencesManager.swift`)
+- `PreferencesManager.launchAtLogin` property — reads/writes UserDefaults (lines 111-120 of `cc-hdrm/Services/PreferencesManager.swift`)
+- `PreferencesManagerProtocol.launchAtLogin` — declared in protocol (line 17 of `cc-hdrm/Services/PreferencesManagerProtocol.swift`)
+- `PreferencesDefaults.launchAtLogin = false` — default value (line 8 of `cc-hdrm/Services/PreferencesManagerProtocol.swift`)
+- `SettingsView` already has a `Toggle("Launch at login", ...)` with `.onChange` handler (lines 102-109 of `cc-hdrm/Views/SettingsView.swift`) — this writes to `preferencesManager.launchAtLogin` but does NOT call SMAppService
+- `MockPreferencesManager.launchAtLogin` — already supports `launchAtLogin` (line 9 of `cc-hdrmTests/Mocks/MockPreferencesManager.swift`)
 - `resetToDefaults()` resets `launchAtLogin` to false — needs to also call `unregister()` in this story
 
 ### Git Intelligence
@@ -158,40 +158,40 @@ Last 3 commits: Stories 6.1, 6.2, 6.3. Key patterns:
 ### Project Structure Notes
 
 - `LaunchAtLoginService.swift` follows the same Service + Protocol pattern as all other services
-- Placed in `cc-hdrm/cc-hdrm/Services/` alongside existing services
-- Test mock in `cc-hdrm/cc-hdrmTests/Mocks/`
-- Tests in `cc-hdrm/cc-hdrmTests/Services/LaunchAtLoginServiceTests.swift`
+- Placed in `cc-hdrm/Services/` alongside existing services
+- Test mock in `cc-hdrmTests/Mocks/`
+- Tests in `cc-hdrmTests/Services/LaunchAtLoginServiceTests.swift`
 
 ### File Structure Requirements
 
 Files to CREATE:
 ```
-cc-hdrm/cc-hdrm/Services/LaunchAtLoginServiceProtocol.swift    # NEW — protocol + isEnabled, register(), unregister()
-cc-hdrm/cc-hdrm/Services/LaunchAtLoginService.swift            # NEW — SMAppService wrapper, os.Logger
-cc-hdrm/cc-hdrmTests/Mocks/MockLaunchAtLoginService.swift      # NEW — in-memory mock for tests
-cc-hdrm/cc-hdrmTests/Services/LaunchAtLoginServiceTests.swift   # NEW — tests for mock behavior and integration
+cc-hdrm/Services/LaunchAtLoginServiceProtocol.swift    # NEW — protocol + isEnabled, register(), unregister()
+cc-hdrm/Services/LaunchAtLoginService.swift            # NEW — SMAppService wrapper, os.Logger
+cc-hdrmTests/Mocks/MockLaunchAtLoginService.swift      # NEW — in-memory mock for tests
+cc-hdrmTests/Services/LaunchAtLoginServiceTests.swift   # NEW — tests for mock behavior and integration
 ```
 
 Files to MODIFY:
 ```
-cc-hdrm/cc-hdrm/Views/SettingsView.swift                       # MODIFY — add launchAtLoginService dependency, wire toggle to register/unregister, init from isEnabled
-cc-hdrm/cc-hdrm/Views/GearMenuView.swift                       # MODIFY — add launchAtLoginService pass-through
-cc-hdrm/cc-hdrm/Views/PopoverFooterView.swift                  # MODIFY — add launchAtLoginService pass-through
-cc-hdrm/cc-hdrm/Views/PopoverView.swift                        # MODIFY — add launchAtLoginService pass-through
-cc-hdrm/cc-hdrm/App/AppDelegate.swift                          # MODIFY — create LaunchAtLoginService, pass to PopoverView
-cc-hdrm/cc-hdrmTests/Views/SettingsViewTests.swift              # MODIFY — update tests with launchAtLoginService parameter
-cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift               # MODIFY — update PopoverView init calls if needed
-cc-hdrm/cc-hdrmTests/Views/PopoverFooterViewTests.swift         # MODIFY — update init calls if needed
-cc-hdrm/cc-hdrmTests/Views/GearMenuViewTests.swift              # MODIFY — update init calls if needed
-cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift                 # MODIFY — verify LaunchAtLoginService creation if needed
+cc-hdrm/Views/SettingsView.swift                       # MODIFY — add launchAtLoginService dependency, wire toggle to register/unregister, init from isEnabled
+cc-hdrm/Views/GearMenuView.swift                       # MODIFY — add launchAtLoginService pass-through
+cc-hdrm/Views/PopoverFooterView.swift                  # MODIFY — add launchAtLoginService pass-through
+cc-hdrm/Views/PopoverView.swift                        # MODIFY — add launchAtLoginService pass-through
+cc-hdrm/App/AppDelegate.swift                          # MODIFY — create LaunchAtLoginService, pass to PopoverView
+cc-hdrmTests/Views/SettingsViewTests.swift              # MODIFY — update tests with launchAtLoginService parameter
+cc-hdrmTests/Views/PopoverViewTests.swift               # MODIFY — update PopoverView init calls if needed
+cc-hdrmTests/Views/PopoverFooterViewTests.swift         # MODIFY — update init calls if needed
+cc-hdrmTests/Views/GearMenuViewTests.swift              # MODIFY — update init calls if needed
+cc-hdrmTests/App/AppDelegateTests.swift                 # MODIFY — verify LaunchAtLoginService creation if needed
 ```
 
 Files NOT to modify:
 ```
-cc-hdrm/cc-hdrm/cc_hdrm.entitlements                           # PROTECTED — do not touch
-cc-hdrm/cc-hdrm/Services/PreferencesManager.swift              # No changes needed — launchAtLogin property stays as-is for UserDefaults sync
-cc-hdrm/cc-hdrm/Services/PreferencesManagerProtocol.swift       # No changes needed
-cc-hdrm/cc-hdrm/Services/NotificationService.swift              # No changes needed
+cc-hdrm/cc_hdrm.entitlements                           # PROTECTED — do not touch
+cc-hdrm/Services/PreferencesManager.swift              # No changes needed — launchAtLogin property stays as-is for UserDefaults sync
+cc-hdrm/Services/PreferencesManagerProtocol.swift       # No changes needed
+cc-hdrm/Services/NotificationService.swift              # No changes needed
 ```
 
 ### Testing Requirements
@@ -221,7 +221,7 @@ cc-hdrm/cc-hdrm/Services/NotificationService.swift              # No changes nee
 - DO NOT call `SMAppService.mainApp.register()` directly from SettingsView — go through `LaunchAtLoginService`
 - DO NOT import `ServiceManagement` in any file other than `LaunchAtLoginService.swift`
 - DO NOT use `preferencesManager.launchAtLogin` as the source of truth for toggle state — use `launchAtLoginService.isEnabled`
-- DO NOT modify `cc-hdrm/cc-hdrm/cc_hdrm.entitlements` — protected file
+- DO NOT modify `cc-hdrm/cc_hdrm.entitlements` — protected file
 - DO NOT use `DispatchQueue` or GCD — structured concurrency only
 - DO NOT use `print()` — use `os.Logger`
 - DO NOT skip the `isUpdating` re-entrancy guard in the toggle `.onChange` handler
@@ -233,15 +233,15 @@ cc-hdrm/cc-hdrm/Services/NotificationService.swift              # No changes nee
 - [Source: `_bmad-output/planning-artifacts/epics.md` #Story 6.4] — Full acceptance criteria for Launch at Login
 - [Source: `_bmad-output/planning-artifacts/architecture.md` #Launch at Login] — SMAppService decision, macOS 13+ availability (lines 660-665)
 - [Source: `_bmad-output/planning-artifacts/architecture.md` #Phase 2 Requirements to Structure Mapping] — FR29 mapped to PreferencesManager + SettingsView (line 756)
-- [Source: `cc-hdrm/cc-hdrm/Services/PreferencesManager.swift` lines 109-120] — Existing `launchAtLogin` UserDefaults property
-- [Source: `cc-hdrm/cc-hdrm/Services/PreferencesManagerProtocol.swift` line 8] — `PreferencesDefaults.launchAtLogin = false`
-- [Source: `cc-hdrm/cc-hdrm/Services/PreferencesManagerProtocol.swift` line 17] — `launchAtLogin` in protocol
-- [Source: `cc-hdrm/cc-hdrm/Views/SettingsView.swift` lines 102-109] — Existing launch at login toggle with `.onChange`
-- [Source: `cc-hdrm/cc-hdrm/Views/SettingsView.swift` lines 19-27] — SettingsView init with dependency injection pattern
-- [Source: `cc-hdrm/cc-hdrm/Views/SettingsView.swift` lines 117-124] — Reset to Defaults button handler
-- [Source: `cc-hdrm/cc-hdrm/App/AppDelegate.swift` lines 54-68] — PopoverView creation with service wiring pattern
-- [Source: `cc-hdrm/cc-hdrmTests/Mocks/MockPreferencesManager.swift`] — Existing mock pattern to follow
-- [Source: `cc-hdrm/cc-hdrmTests/Views/SettingsViewTests.swift`] — Existing SettingsView tests to update
+- [Source: `cc-hdrm/Services/PreferencesManager.swift` lines 109-120] — Existing `launchAtLogin` UserDefaults property
+- [Source: `cc-hdrm/Services/PreferencesManagerProtocol.swift` line 8] — `PreferencesDefaults.launchAtLogin = false`
+- [Source: `cc-hdrm/Services/PreferencesManagerProtocol.swift` line 17] — `launchAtLogin` in protocol
+- [Source: `cc-hdrm/Views/SettingsView.swift` lines 102-109] — Existing launch at login toggle with `.onChange`
+- [Source: `cc-hdrm/Views/SettingsView.swift` lines 19-27] — SettingsView init with dependency injection pattern
+- [Source: `cc-hdrm/Views/SettingsView.swift` lines 117-124] — Reset to Defaults button handler
+- [Source: `cc-hdrm/App/AppDelegate.swift` lines 54-68] — PopoverView creation with service wiring pattern
+- [Source: `cc-hdrmTests/Mocks/MockPreferencesManager.swift`] — Existing mock pattern to follow
+- [Source: `cc-hdrmTests/Views/SettingsViewTests.swift`] — Existing SettingsView tests to update
 - [Source: `_bmad-output/implementation-artifacts/6-3-configurable-notification-thresholds.md`] — Previous story with view hierarchy threading pattern
 - [Source: `_bmad-output/planning-artifacts/project-context.md`] — Architecture overview, coding patterns
 
@@ -287,20 +287,20 @@ None — clean implementation, no issues encountered.
 ### File List
 
 **Created:**
-- `cc-hdrm/cc-hdrm/Services/LaunchAtLoginServiceProtocol.swift`
-- `cc-hdrm/cc-hdrm/Services/LaunchAtLoginService.swift`
-- `cc-hdrm/cc-hdrmTests/Mocks/MockLaunchAtLoginService.swift`
-- `cc-hdrm/cc-hdrmTests/Services/LaunchAtLoginServiceTests.swift`
+- `cc-hdrm/Services/LaunchAtLoginServiceProtocol.swift`
+- `cc-hdrm/Services/LaunchAtLoginService.swift`
+- `cc-hdrmTests/Mocks/MockLaunchAtLoginService.swift`
+- `cc-hdrmTests/Services/LaunchAtLoginServiceTests.swift`
 
 **Modified:**
-- `cc-hdrm/cc-hdrm/Views/SettingsView.swift`
-- `cc-hdrm/cc-hdrm/Views/GearMenuView.swift`
-- `cc-hdrm/cc-hdrm/Views/PopoverFooterView.swift`
-- `cc-hdrm/cc-hdrm/Views/PopoverView.swift`
-- `cc-hdrm/cc-hdrm/App/AppDelegate.swift`
-- `cc-hdrm/cc-hdrmTests/Views/SettingsViewTests.swift`
-- `cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift`
-- `cc-hdrm/cc-hdrmTests/Views/PopoverFooterViewTests.swift`
-- `cc-hdrm/cc-hdrmTests/Views/GearMenuViewTests.swift`
-- `cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift`
+- `cc-hdrm/Views/SettingsView.swift`
+- `cc-hdrm/Views/GearMenuView.swift`
+- `cc-hdrm/Views/PopoverFooterView.swift`
+- `cc-hdrm/Views/PopoverView.swift`
+- `cc-hdrm/App/AppDelegate.swift`
+- `cc-hdrmTests/Views/SettingsViewTests.swift`
+- `cc-hdrmTests/Views/PopoverViewTests.swift`
+- `cc-hdrmTests/Views/PopoverFooterViewTests.swift`
+- `cc-hdrmTests/Views/GearMenuViewTests.swift`
+- `cc-hdrmTests/App/AppDelegateTests.swift`
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`

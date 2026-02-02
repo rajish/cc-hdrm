@@ -25,7 +25,7 @@ so that I can make informed decisions about which Claude sessions to prioritize.
 ## Tasks / Subtasks
 
 - [x] Task 1: Define ThresholdState enum and extend NotificationServiceProtocol (AC: #1-#4)
-  - [x] Create `ThresholdState` enum in `cc-hdrm/cc-hdrm/Services/NotificationServiceProtocol.swift`: `aboveWarning`, `warned20`, `warned5`
+  - [x] Create `ThresholdState` enum in `cc-hdrm/Services/NotificationServiceProtocol.swift`: `aboveWarning`, `warned20`, `warned5`
   - [x] Extend `NotificationServiceProtocol` with `evaluateThresholds(fiveHour:sevenDay:)` method
   - [x] Add read-only state accessors for testability: `fiveHourThresholdState`, `sevenDayThresholdState`
 
@@ -48,8 +48,8 @@ so that I can make informed decisions about which Claude sessions to prioritize.
     - `body`: `"Claude [window] headroom at [X]% — resets in [relative] (at [absolute])"` where:
       - `[window]` = `""` for 5h (implied), `"7-day "` for 7d
       - `[X]` = headroom integer
-      - `[relative]` = `resetsAt.countdownString()` (from `cc-hdrm/cc-hdrm/Extensions/Date+Formatting.swift`)
-      - `[absolute]` = `resetsAt.absoluteTimeString()` (from `cc-hdrm/cc-hdrm/Extensions/Date+Formatting.swift`)
+      - `[relative]` = `resetsAt.countdownString()` (from `cc-hdrm/Extensions/Date+Formatting.swift`)
+      - `[absolute]` = `resetsAt.absoluteTimeString()` (from `cc-hdrm/Extensions/Date+Formatting.swift`)
     - `sound`: `nil` (standard notification, no sound — sound is for Story 5.3 critical)
   - [x] Create `UNNotificationRequest` with unique identifier per window (e.g., `"headroom-warning-5h"`, `"headroom-warning-7d"`)
   - [x] Deliver via `notificationCenter.add(request)`
@@ -192,7 +192,7 @@ protocol NotificationServiceProtocol: Sendable {
 - NotificationServiceProtocol with `requestAuthorization()` and `isAuthorized`
 - NotificationService with full authorization flow handling (authorized, denied, notDetermined, ephemeral)
 - Injectable `notificationCenter` parameter for testability
-- MockNotificationService in `cc-hdrm/cc-hdrmTests/Mocks/`
+- MockNotificationService in `cc-hdrmTests/Mocks/`
 - AppDelegate wired: creates NotificationService, calls `requestAuthorization()` in Task block
 - 235 tests passing, zero regressions
 
@@ -215,23 +215,23 @@ XcodeGen auto-discovers new files — run `xcodegen generate` after adding files
 
 ### Project Structure Notes
 
-- NotificationService.swift EXISTS at `cc-hdrm/cc-hdrm/Services/NotificationService.swift` (54 lines) — will be MODIFIED to add threshold logic
-- NotificationServiceProtocol.swift EXISTS at `cc-hdrm/cc-hdrm/Services/NotificationServiceProtocol.swift` (10 lines) — will be MODIFIED to add threshold methods
-- MockNotificationService.swift EXISTS at `cc-hdrm/cc-hdrmTests/Mocks/MockNotificationService.swift` — will need UPDATING to conform to extended protocol
-- PollingEngine.swift EXISTS at `cc-hdrm/cc-hdrm/Services/PollingEngine.swift` — will be MODIFIED to call evaluateThresholds
-- AppDelegate.swift EXISTS at `cc-hdrm/cc-hdrm/App/AppDelegate.swift` — will be MODIFIED to pass notificationService to PollingEngine
+- NotificationService.swift EXISTS at `cc-hdrm/Services/NotificationService.swift` (54 lines) — will be MODIFIED to add threshold logic
+- NotificationServiceProtocol.swift EXISTS at `cc-hdrm/Services/NotificationServiceProtocol.swift` (10 lines) — will be MODIFIED to add threshold methods
+- MockNotificationService.swift EXISTS at `cc-hdrmTests/Mocks/MockNotificationService.swift` — will need UPDATING to conform to extended protocol
+- PollingEngine.swift EXISTS at `cc-hdrm/Services/PollingEngine.swift` — will be MODIFIED to call evaluateThresholds
+- AppDelegate.swift EXISTS at `cc-hdrm/App/AppDelegate.swift` — will be MODIFIED to pass notificationService to PollingEngine
 
 ### File Structure Requirements
 
 Files to modify:
 ```
-cc-hdrm/cc-hdrm/Services/NotificationServiceProtocol.swift   # EXTEND — add evaluateThresholds, threshold state accessors
-cc-hdrm/cc-hdrm/Services/NotificationService.swift            # EXTEND — add ThresholdState enum, state machine, notification delivery
-cc-hdrm/cc-hdrm/Services/PollingEngine.swift                  # MODIFY — add notificationService dependency, call evaluateThresholds after fetch
-cc-hdrm/cc-hdrm/Services/PollingEngineProtocol.swift           # MODIFY if init signature changes
-cc-hdrm/cc-hdrm/App/AppDelegate.swift                         # MODIFY — pass notificationService to PollingEngine
-cc-hdrm/cc-hdrmTests/Mocks/MockNotificationService.swift       # EXTEND — add threshold mock properties
-cc-hdrm/cc-hdrmTests/Services/NotificationServiceTests.swift   # EXTEND — add threshold state machine tests
+cc-hdrm/Services/NotificationServiceProtocol.swift   # EXTEND — add evaluateThresholds, threshold state accessors
+cc-hdrm/Services/NotificationService.swift            # EXTEND — add ThresholdState enum, state machine, notification delivery
+cc-hdrm/Services/PollingEngine.swift                  # MODIFY — add notificationService dependency, call evaluateThresholds after fetch
+cc-hdrm/Services/PollingEngineProtocol.swift           # MODIFY if init signature changes
+cc-hdrm/App/AppDelegate.swift                         # MODIFY — pass notificationService to PollingEngine
+cc-hdrmTests/Mocks/MockNotificationService.swift       # EXTEND — add threshold mock properties
+cc-hdrmTests/Services/NotificationServiceTests.swift   # EXTEND — add threshold state machine tests
 ```
 
 No new files to create.
@@ -247,8 +247,8 @@ No new files to create.
 
 ### Library & Framework Requirements
 
-- `UserNotifications` — already imported in `cc-hdrm/cc-hdrm/Services/NotificationService.swift` (Story 5.1). No new framework imports needed.
-- `cc-hdrm/cc-hdrm/Extensions/Date+Formatting.swift` — `countdownString()` and `absoluteTimeString()` already exist and will be used for notification body.
+- `UserNotifications` — already imported in `cc-hdrm/Services/NotificationService.swift` (Story 5.1). No new framework imports needed.
+- `cc-hdrm/Extensions/Date+Formatting.swift` — `countdownString()` and `absoluteTimeString()` already exist and will be used for notification body.
 - No new external dependencies. Zero external packages.
 
 ### Anti-Patterns to Avoid
@@ -258,7 +258,7 @@ No new files to create.
 - DO NOT fire notifications repeatedly for the same crossing — state machine enforces fire-once semantics
 - DO NOT add sound to warning notifications — sound is for critical (5%) threshold in Story 5.3
 - DO NOT implement the critical (5%) notification delivery in this story — only the state transition to `warned5` (delivery is Story 5.3)
-- DO NOT modify `cc-hdrm/cc-hdrm/cc_hdrm.entitlements` — protected file
+- DO NOT modify `cc-hdrm/cc_hdrm.entitlements` — protected file
 - DO NOT use `DispatchQueue` or GCD — use async/await
 - DO NOT use `print()` — use `os.Logger`
 - DO NOT cache or persist threshold state across app launches — threshold state resets on launch (starts at `aboveWarning`)
@@ -274,14 +274,14 @@ No new files to create.
 - [Source: _bmad-output/planning-artifacts/ux-design-specification.md#Notification Content Pattern] — "Claude [window] headroom at [X]% — resets in [relative] (at [absolute])"
 - [Source: _bmad-output/planning-artifacts/ux-design-specification.md#Notification Persistence] — Warning (20%): standard notification; Critical (5%): persistent with sound (Story 5.3)
 - [Source: _bmad-output/planning-artifacts/ux-design-specification.md#Threshold State Machine] — ABOVE_20 → WARNED_20 → WARNED_5, re-arm on recovery above 20%
-- [Source: cc-hdrm/cc-hdrm/Services/NotificationService.swift] — Existing authorization logic, injectable notificationCenter
-- [Source: cc-hdrm/cc-hdrm/Services/NotificationServiceProtocol.swift] — Current protocol with requestAuthorization and isAuthorized
-- [Source: cc-hdrm/cc-hdrm/State/AppState.swift:14-22] — WindowState struct with utilization and resetsAt
-- [Source: cc-hdrm/cc-hdrm/Models/HeadroomState.swift:24-35] — Headroom thresholds: >40% normal, 20-40% caution, 5-20% warning, <5% critical, 0% exhausted
-- [Source: cc-hdrm/cc-hdrm/Extensions/Date+Formatting.swift:42-65] — countdownString() for notification body
-- [Source: cc-hdrm/cc-hdrm/Extensions/Date+Formatting.swift:82-88] — absoluteTimeString() for notification body
-- [Source: cc-hdrm/cc-hdrm/App/AppDelegate.swift:82-84] — NotificationService creation and wiring
-- [Source: cc-hdrm/cc-hdrm/App/AppDelegate.swift:66-73] — PollingEngine creation with service injection
+- [Source: cc-hdrm/Services/NotificationService.swift] — Existing authorization logic, injectable notificationCenter
+- [Source: cc-hdrm/Services/NotificationServiceProtocol.swift] — Current protocol with requestAuthorization and isAuthorized
+- [Source: cc-hdrm/State/AppState.swift:14-22] — WindowState struct with utilization and resetsAt
+- [Source: cc-hdrm/Models/HeadroomState.swift:24-35] — Headroom thresholds: >40% normal, 20-40% caution, 5-20% warning, <5% critical, 0% exhausted
+- [Source: cc-hdrm/Extensions/Date+Formatting.swift:42-65] — countdownString() for notification body
+- [Source: cc-hdrm/Extensions/Date+Formatting.swift:82-88] — absoluteTimeString() for notification body
+- [Source: cc-hdrm/App/AppDelegate.swift:82-84] — NotificationService creation and wiring
+- [Source: cc-hdrm/App/AppDelegate.swift:66-73] — PollingEngine creation with service injection
 - [Source: _bmad-output/planning-artifacts/project-context.md#Architectural Boundaries] — NotificationService boundary: only component importing UserNotifications
 
 ## Dev Agent Record
@@ -316,12 +316,12 @@ claude-opus-4-5
 
 ### File List
 
-- cc-hdrm/cc-hdrm/Services/NotificationServiceProtocol.swift (modified — added ThresholdState enum, evaluateThresholds, threshold accessors)
-- cc-hdrm/cc-hdrm/Services/NotificationService.swift (modified — added state machine, evaluateThresholds, sendNotification)
-- cc-hdrm/cc-hdrm/Services/PollingEngine.swift (modified — added notificationService parameter, evaluateThresholds call)
-- cc-hdrm/cc-hdrm/App/AppDelegate.swift (modified — moved NotificationService creation before PollingEngine, injected into PollingEngine)
-- cc-hdrm/cc-hdrmTests/Mocks/MockNotificationService.swift (modified — added threshold state, evaluateThresholds tracking)
-- cc-hdrm/cc-hdrmTests/Services/ThresholdStateMachineTests.swift (new — 14 threshold + 11 review tests = 25 total)
-- cc-hdrm/cc-hdrm/Services/NotificationCenterProtocol.swift (new — protocol abstraction over UNUserNotificationCenter)
-- cc-hdrm/cc-hdrmTests/Mocks/SpyNotificationCenter.swift (new — spy for notification delivery verification)
+- cc-hdrm/Services/NotificationServiceProtocol.swift (modified — added ThresholdState enum, evaluateThresholds, threshold accessors)
+- cc-hdrm/Services/NotificationService.swift (modified — added state machine, evaluateThresholds, sendNotification)
+- cc-hdrm/Services/PollingEngine.swift (modified — added notificationService parameter, evaluateThresholds call)
+- cc-hdrm/App/AppDelegate.swift (modified — moved NotificationService creation before PollingEngine, injected into PollingEngine)
+- cc-hdrmTests/Mocks/MockNotificationService.swift (modified — added threshold state, evaluateThresholds tracking)
+- cc-hdrmTests/Services/ThresholdStateMachineTests.swift (new — 14 threshold + 11 review tests = 25 total)
+- cc-hdrm/Services/NotificationCenterProtocol.swift (new — protocol abstraction over UNUserNotificationCenter)
+- cc-hdrmTests/Mocks/SpyNotificationCenter.swift (new — spy for notification delivery verification)
 - _bmad-output/implementation-artifacts/sprint-status.yaml (modified — story 5.2 status update)

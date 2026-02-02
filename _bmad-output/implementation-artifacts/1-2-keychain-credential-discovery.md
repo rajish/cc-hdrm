@@ -161,28 +161,28 @@ Note: The Keychain stores a top-level JSON object with `claudeAiOauth` as a key.
 **Last commit:** `c2a74e4 Add story 1.1 implementation: Xcode project initialization & menu bar shell`
 
 Files established:
-- `cc-hdrm/project.yml` — XcodeGen spec (add new files here, NOT manually in .xcodeproj)
-- `cc-hdrm/cc-hdrm/App/AppDelegate.swift` — will be modified to wire KeychainService
-- `cc-hdrm/cc-hdrm/App/cc_hdrmApp.swift` — entry point, may need AppState injection
-- `cc-hdrm/cc-hdrm/Models/AppError.swift` — already has keychain error cases
-- `cc-hdrm/cc-hdrm/State/AppState.swift` — needs statusMessage property added
+- `project.yml` — XcodeGen spec (add new files here, NOT manually in .xcodeproj)
+- `cc-hdrm/App/AppDelegate.swift` — will be modified to wire KeychainService
+- `cc-hdrm/App/cc_hdrmApp.swift` — entry point, may need AppState injection
+- `cc-hdrm/Models/AppError.swift` — already has keychain error cases
+- `cc-hdrm/State/AppState.swift` — needs statusMessage property added
 
 ### File Structure Requirements
 
 New files to create:
 ```
-cc-hdrm/cc-hdrm/Models/KeychainCredentials.swift    # Codable struct
-cc-hdrm/cc-hdrm/Services/KeychainServiceProtocol.swift
-cc-hdrm/cc-hdrm/Services/KeychainService.swift
+cc-hdrm/Models/KeychainCredentials.swift    # Codable struct
+cc-hdrm/Services/KeychainServiceProtocol.swift
+cc-hdrm/Services/KeychainService.swift
 cc-hdrmTests/Models/KeychainCredentialsTests.swift
 cc-hdrmTests/Services/KeychainServiceTests.swift
 ```
 
 Files to modify:
 ```
-cc-hdrm/cc-hdrm/App/AppDelegate.swift               # Wire KeychainService, add polling loop
-cc-hdrm/cc-hdrm/State/AppState.swift                 # Add statusMessage property + method
-cc-hdrm/project.yml                                  # Add new source files to XcodeGen spec
+cc-hdrm/App/AppDelegate.swift               # Wire KeychainService, add polling loop
+cc-hdrm/State/AppState.swift                 # Add statusMessage property + method
+project.yml                                  # Add new source files to XcodeGen spec
 ```
 
 ### Testing Requirements
@@ -246,14 +246,14 @@ None — clean implementation, no debugging required.
 ### File List
 
 New files:
-- cc-hdrm/cc-hdrm/Models/KeychainCredentials.swift
-- cc-hdrm/cc-hdrm/Services/KeychainServiceProtocol.swift
-- cc-hdrm/cc-hdrm/Services/KeychainService.swift
-- cc-hdrm/cc-hdrmTests/Models/KeychainCredentialsTests.swift
-- cc-hdrm/cc-hdrmTests/Services/KeychainServiceTests.swift
+- cc-hdrm/Models/KeychainCredentials.swift
+- cc-hdrm/Services/KeychainServiceProtocol.swift
+- cc-hdrm/Services/KeychainService.swift
+- cc-hdrmTests/Models/KeychainCredentialsTests.swift
+- cc-hdrmTests/Services/KeychainServiceTests.swift
 
 Modified files:
-- cc-hdrm/cc-hdrm/App/AppDelegate.swift
-- cc-hdrm/cc-hdrm/State/AppState.swift
-- cc-hdrm/cc-hdrm/cc_hdrm.entitlements
-- cc-hdrm/cc-hdrmTests/State/AppStateTests.swift
+- cc-hdrm/App/AppDelegate.swift
+- cc-hdrm/State/AppState.swift
+- cc-hdrm/cc_hdrm.entitlements
+- cc-hdrmTests/State/AppStateTests.swift

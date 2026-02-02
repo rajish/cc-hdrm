@@ -196,35 +196,35 @@ let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
 - `c2a74e4` Add story 1.1 implementation: Xcode project initialization & menu bar shell
 
 **Key files to modify:**
-- `cc-hdrm/cc-hdrm/App/AppDelegate.swift` — integrate token expiry check + refresh into polling loop
-- `cc-hdrm/cc-hdrm/Services/KeychainServiceProtocol.swift` — add `writeCredentials` method
-- `cc-hdrm/cc-hdrm/Services/KeychainService.swift` — implement `writeCredentials`
+- `cc-hdrm/App/AppDelegate.swift` — integrate token expiry check + refresh into polling loop
+- `cc-hdrm/Services/KeychainServiceProtocol.swift` — add `writeCredentials` method
+- `cc-hdrm/Services/KeychainService.swift` — implement `writeCredentials`
 
 **Key files to create:**
-- `cc-hdrm/cc-hdrm/Services/TokenRefreshServiceProtocol.swift`
-- `cc-hdrm/cc-hdrm/Services/TokenRefreshService.swift`
-- `cc-hdrm/cc-hdrm/Services/TokenExpiryChecker.swift`
-- `cc-hdrm/cc-hdrmTests/Services/TokenRefreshServiceTests.swift`
-- `cc-hdrm/cc-hdrmTests/Services/TokenExpiryCheckerTests.swift`
+- `cc-hdrm/Services/TokenRefreshServiceProtocol.swift`
+- `cc-hdrm/Services/TokenRefreshService.swift`
+- `cc-hdrm/Services/TokenExpiryChecker.swift`
+- `cc-hdrmTests/Services/TokenRefreshServiceTests.swift`
+- `cc-hdrmTests/Services/TokenExpiryCheckerTests.swift`
 
 ### File Structure Requirements
 
 New files to create:
 ```
-cc-hdrm/cc-hdrm/Services/TokenRefreshServiceProtocol.swift
-cc-hdrm/cc-hdrm/Services/TokenRefreshService.swift
-cc-hdrm/cc-hdrm/Services/TokenExpiryChecker.swift
-cc-hdrm/cc-hdrmTests/Services/TokenRefreshServiceTests.swift
-cc-hdrm/cc-hdrmTests/Services/TokenExpiryCheckerTests.swift
+cc-hdrm/Services/TokenRefreshServiceProtocol.swift
+cc-hdrm/Services/TokenRefreshService.swift
+cc-hdrm/Services/TokenExpiryChecker.swift
+cc-hdrmTests/Services/TokenRefreshServiceTests.swift
+cc-hdrmTests/Services/TokenExpiryCheckerTests.swift
 ```
 
 Files to modify:
 ```
-cc-hdrm/cc-hdrm/App/AppDelegate.swift               # Add token expiry check + refresh to polling
-cc-hdrm/cc-hdrm/Services/KeychainServiceProtocol.swift  # Add writeCredentials method
-cc-hdrm/cc-hdrm/Services/KeychainService.swift          # Implement writeCredentials
-cc-hdrm/cc-hdrmTests/Services/KeychainServiceTests.swift # Add write tests
-cc-hdrm/cc-hdrmTests/State/AppStateTests.swift           # Add tokenExpired status tests
+cc-hdrm/App/AppDelegate.swift               # Add token expiry check + refresh to polling
+cc-hdrm/Services/KeychainServiceProtocol.swift  # Add writeCredentials method
+cc-hdrm/Services/KeychainService.swift          # Implement writeCredentials
+cc-hdrmTests/Services/KeychainServiceTests.swift # Add write tests
+cc-hdrmTests/State/AppStateTests.swift           # Add tokenExpired status tests
 ```
 
 ### Testing Requirements
@@ -297,18 +297,18 @@ No debug issues encountered.
 ### File List
 
 New files:
-- cc-hdrm/cc-hdrm/Services/TokenRefreshServiceProtocol.swift
-- cc-hdrm/cc-hdrm/Services/TokenRefreshService.swift
-- cc-hdrm/cc-hdrm/Services/TokenExpiryChecker.swift
-- cc-hdrm/cc-hdrmTests/Services/TokenRefreshServiceTests.swift
-- cc-hdrm/cc-hdrmTests/Services/TokenExpiryCheckerTests.swift
-- cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift
+- cc-hdrm/Services/TokenRefreshServiceProtocol.swift
+- cc-hdrm/Services/TokenRefreshService.swift
+- cc-hdrm/Services/TokenExpiryChecker.swift
+- cc-hdrmTests/Services/TokenRefreshServiceTests.swift
+- cc-hdrmTests/Services/TokenExpiryCheckerTests.swift
+- cc-hdrmTests/App/AppDelegateTests.swift
 
 Modified files:
-- cc-hdrm/cc-hdrm/App/AppDelegate.swift
-- cc-hdrm/cc-hdrm/Services/KeychainServiceProtocol.swift
-- cc-hdrm/cc-hdrm/Services/KeychainService.swift
-- cc-hdrm/cc-hdrm/Services/TokenRefreshService.swift
-- cc-hdrm/cc-hdrm/Models/AppError.swift
-- cc-hdrm/cc-hdrm/cc_hdrm.entitlements
-- cc-hdrm/cc-hdrmTests/Services/KeychainServiceTests.swift
+- cc-hdrm/App/AppDelegate.swift
+- cc-hdrm/Services/KeychainServiceProtocol.swift
+- cc-hdrm/Services/KeychainService.swift
+- cc-hdrm/Services/TokenRefreshService.swift
+- cc-hdrm/Models/AppError.swift
+- cc-hdrm/cc_hdrm.entitlements
+- cc-hdrmTests/Services/KeychainServiceTests.swift

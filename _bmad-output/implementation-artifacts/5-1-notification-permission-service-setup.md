@@ -18,7 +18,7 @@ so that threshold alerts can be delivered when headroom drops.
 ## Tasks / Subtasks
 
 - [x] Task 1: Create NotificationServiceProtocol.swift (AC: #1-#2)
-  - [x] Create `cc-hdrm/cc-hdrm/Services/NotificationServiceProtocol.swift`
+  - [x] Create `cc-hdrm/Services/NotificationServiceProtocol.swift`
   - [x] Define protocol:
     ```swift
     @MainActor
@@ -30,7 +30,7 @@ so that threshold alerts can be delivered when headroom drops.
   - [x] Keep protocol minimal — threshold evaluation will be added in Story 5.2
 
 - [x] Task 2: Create NotificationService.swift (AC: #1-#2)
-  - [x] Create `cc-hdrm/cc-hdrm/Services/NotificationService.swift`
+  - [x] Create `cc-hdrm/Services/NotificationService.swift`
   - [x] Import `UserNotifications` and `os`
   - [x] `@MainActor final class NotificationService: NotificationServiceProtocol`
   - [x] Private properties:
@@ -50,7 +50,7 @@ so that threshold alerts can be delivered when headroom drops.
   - [x] Use `os.Logger` with `notification` category
 
 - [x] Task 3: Wire NotificationService into AppDelegate (AC: #1-#2)
-  - [x] In `cc-hdrm/cc-hdrm/App/AppDelegate.swift`:
+  - [x] In `cc-hdrm/App/AppDelegate.swift`:
   - [x] Add property: `private var notificationService: (any NotificationServiceProtocol)?`
   - [x] In `applicationDidFinishLaunching`:
     - After PollingEngine/FreshnessMonitor creation, before `Task { ... }`:
@@ -60,7 +60,7 @@ so that threshold alerts can be delivered when headroom drops.
   - [x] Update test-only initializer to accept optional `notificationService` parameter
 
 - [x] Task 4: Write NotificationService tests (AC: #1-#2)
-  - [x] Create `cc-hdrm/cc-hdrmTests/Services/NotificationServiceTests.swift`
+  - [x] Create `cc-hdrmTests/Services/NotificationServiceTests.swift`
   - [x] Use `@Test`, `@Suite`, `#expect` from Swift Testing framework
   - [x] `@MainActor` on all tests (NotificationService is @MainActor)
   - [x] Test: NotificationService can be instantiated — verify `isAuthorized` defaults to `false`
@@ -69,7 +69,7 @@ so that threshold alerts can be delivered when headroom drops.
   - [x] Note: Full authorization flow testing requires mock UNUserNotificationCenter which is non-trivial — defer comprehensive mocking to Story 5.2 when threshold logic needs it
 
 - [x] Task 5: Write MockNotificationService for testing (AC: #1-#2)
-  - [x] Create `cc-hdrm/cc-hdrmTests/Mocks/MockNotificationService.swift`
+  - [x] Create `cc-hdrmTests/Mocks/MockNotificationService.swift`
   - [x] Implement `NotificationServiceProtocol` with controllable properties:
     ```swift
     @MainActor
@@ -213,15 +213,15 @@ Last commit: `c004e48 Add story 4.5: status messages for error states and code r
 
 New files to create:
 ```
-cc-hdrm/cc-hdrm/Services/NotificationServiceProtocol.swift    # NEW — protocol definition
-cc-hdrm/cc-hdrm/Services/NotificationService.swift             # NEW — UserNotifications authorization
-cc-hdrm/cc-hdrmTests/Services/NotificationServiceTests.swift   # NEW — service tests
-cc-hdrm/cc-hdrmTests/Mocks/MockNotificationService.swift       # NEW — mock for future test use
+cc-hdrm/Services/NotificationServiceProtocol.swift    # NEW — protocol definition
+cc-hdrm/Services/NotificationService.swift             # NEW — UserNotifications authorization
+cc-hdrmTests/Services/NotificationServiceTests.swift   # NEW — service tests
+cc-hdrmTests/Mocks/MockNotificationService.swift       # NEW — mock for future test use
 ```
 
 Files to modify:
 ```
-cc-hdrm/cc-hdrm/App/AppDelegate.swift                         # ADD NotificationService wiring
+cc-hdrm/App/AppDelegate.swift                         # ADD NotificationService wiring
 ```
 
 ### Testing Requirements
@@ -248,7 +248,7 @@ cc-hdrm/cc-hdrm/App/AppDelegate.swift                         # ADD Notification
 - DO NOT crash or show error if permission denied — app functions fully without notifications
 - DO NOT add threshold logic to this story — that's Story 5.2
 - DO NOT give NotificationService an AppState dependency yet — that's Story 5.2
-- DO NOT modify `cc-hdrm/cc-hdrm/cc_hdrm.entitlements` — protected file, and UserNotifications does NOT require an entitlement
+- DO NOT modify `cc-hdrm/cc_hdrm.entitlements` — protected file, and UserNotifications does NOT require an entitlement
 - DO NOT use `DispatchQueue` or GCD — use async/await
 - DO NOT use `print()` — use `os.Logger`
 - DO NOT cache authorization status across app launches — always check fresh on init
@@ -300,9 +300,9 @@ claude-opus-4-5 (anthropic/claude-opus-4-5)
 
 ### File List
 
-- cc-hdrm/cc-hdrm/Services/NotificationServiceProtocol.swift (NEW, review-fixed)
-- cc-hdrm/cc-hdrm/Services/NotificationService.swift (NEW)
-- cc-hdrm/cc-hdrm/App/AppDelegate.swift (MODIFIED)
-- cc-hdrm/cc-hdrmTests/Services/NotificationServiceTests.swift (NEW, review-fixed)
-- cc-hdrm/cc-hdrmTests/Mocks/MockNotificationService.swift (NEW)
-- cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift (MODIFIED — review fix L2)
+- cc-hdrm/Services/NotificationServiceProtocol.swift (NEW, review-fixed)
+- cc-hdrm/Services/NotificationService.swift (NEW)
+- cc-hdrm/App/AppDelegate.swift (MODIFIED)
+- cc-hdrmTests/Services/NotificationServiceTests.swift (NEW, review-fixed)
+- cc-hdrmTests/Mocks/MockNotificationService.swift (NEW)
+- cc-hdrmTests/App/AppDelegateTests.swift (MODIFIED — review fix L2)

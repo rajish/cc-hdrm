@@ -25,13 +25,13 @@ so that I have maximum warning to wrap up before hitting the limit.
 ## Tasks / Subtasks
 
 - [x] Task 1: Update `evaluateWindow` state machine for critical threshold notification firing (AC: #1, #2)
-  - [x] In `cc-hdrm/cc-hdrm/Services/NotificationService.swift`, modify `evaluateWindow` to return a second flag `shouldFireCritical: Bool`
+  - [x] In `cc-hdrm/Services/NotificationService.swift`, modify `evaluateWindow` to return a second flag `shouldFireCritical: Bool`
   - [x] `warned20` + headroom < 5% → transition to `warned5`, return `shouldFireCritical: true`
   - [x] `aboveWarning` + headroom < 5% → transition directly to `warned5`, return `shouldFireCritical: true` (skip warning)
   - [x] `aboveWarning` + headroom < 5% → `shouldFireWarning: false` (do NOT fire both — only critical)
 
 - [x] Task 2: Create `sendCriticalNotification` delivery method (AC: #1)
-  - [x] Create private `sendCriticalNotification(window:headroom:resetsAt:)` in `cc-hdrm/cc-hdrm/Services/NotificationService.swift`
+  - [x] Create private `sendCriticalNotification(window:headroom:resetsAt:)` in `cc-hdrm/Services/NotificationService.swift`
   - [x] Build `UNMutableNotificationContent`:
     - `title`: `"cc-hdrm"`
     - `body`: `"Claude [window] headroom at [X]% — resets in [relative] (at [absolute])"` (same format as warning)
@@ -41,7 +41,7 @@ so that I have maximum warning to wrap up before hitting the limit.
   - [x] Log delivery success/failure via `os.Logger`
 
 - [x] Task 3: Wire critical notification in `evaluateThresholds` (AC: #1-#4)
-  - [x] Update `evaluateThresholds(fiveHour:sevenDay:)` in `cc-hdrm/cc-hdrm/Services/NotificationService.swift` to handle the new `shouldFireCritical` return value
+  - [x] Update `evaluateThresholds(fiveHour:sevenDay:)` in `cc-hdrm/Services/NotificationService.swift` to handle the new `shouldFireCritical` return value
   - [x] Call `sendCriticalNotification` when `shouldFireCritical` is true
   - [x] Ensure re-arm logic (AC #4) continues working — recovery above 20% resets to `aboveWarning`, re-arming both thresholds
 
@@ -184,7 +184,7 @@ func evaluateThresholds(fiveHour: WindowState?, sevenDay: WindowState?) async {
 ### Previous Story Intelligence (5.2)
 
 **What was built:**
-- ThresholdState enum: `aboveWarning`, `warned20`, `warned5` — defined in `cc-hdrm/cc-hdrm/Services/NotificationServiceProtocol.swift`
+- ThresholdState enum: `aboveWarning`, `warned20`, `warned5` — defined in `cc-hdrm/Services/NotificationServiceProtocol.swift`
 - Full state machine in `evaluateWindow` (internal visibility for testing)
 - Warning notification delivery via `sendNotification` — no sound, identifier `"headroom-warning-5h"` / `"headroom-warning-7d"`
 - `evaluateThresholds(fiveHour:sevenDay:)` wired into PollingEngine
@@ -211,21 +211,21 @@ XcodeGen auto-discovers new files — run `xcodegen generate` after adding files
 
 ### Project Structure Notes
 
-- `cc-hdrm/cc-hdrm/Services/NotificationService.swift` (155 lines) — will be MODIFIED to update `evaluateWindow` return type and add `sendCriticalNotification`
-- `cc-hdrm/cc-hdrm/Services/NotificationServiceProtocol.swift` (30 lines) — NO changes needed (protocol and ThresholdState already support this story)
-- `cc-hdrm/cc-hdrm/Services/PollingEngine.swift` — NO changes needed (already calls `evaluateThresholds`)
-- `cc-hdrm/cc-hdrm/App/AppDelegate.swift` — NO changes needed (already wired)
-- `cc-hdrm/cc-hdrmTests/Mocks/MockNotificationService.swift` — NO changes needed (already conforms to protocol)
-- `cc-hdrm/cc-hdrmTests/Services/ThresholdStateMachineTests.swift` — will be EXTENDED with critical threshold tests
-- `cc-hdrm/cc-hdrmTests/Mocks/SpyNotificationCenter.swift` — NO changes needed (already captures requests)
-- `cc-hdrm/cc-hdrm/Services/NotificationCenterProtocol.swift` — NO changes needed
+- `cc-hdrm/Services/NotificationService.swift` (155 lines) — will be MODIFIED to update `evaluateWindow` return type and add `sendCriticalNotification`
+- `cc-hdrm/Services/NotificationServiceProtocol.swift` (30 lines) — NO changes needed (protocol and ThresholdState already support this story)
+- `cc-hdrm/Services/PollingEngine.swift` — NO changes needed (already calls `evaluateThresholds`)
+- `cc-hdrm/App/AppDelegate.swift` — NO changes needed (already wired)
+- `cc-hdrmTests/Mocks/MockNotificationService.swift` — NO changes needed (already conforms to protocol)
+- `cc-hdrmTests/Services/ThresholdStateMachineTests.swift` — will be EXTENDED with critical threshold tests
+- `cc-hdrmTests/Mocks/SpyNotificationCenter.swift` — NO changes needed (already captures requests)
+- `cc-hdrm/Services/NotificationCenterProtocol.swift` — NO changes needed
 
 ### File Structure Requirements
 
 Files to modify:
 ```
-cc-hdrm/cc-hdrm/Services/NotificationService.swift            # MODIFY — update evaluateWindow return type, add sendCriticalNotification, update evaluateThresholds
-cc-hdrm/cc-hdrmTests/Services/ThresholdStateMachineTests.swift # EXTEND — add critical threshold tests
+cc-hdrm/Services/NotificationService.swift            # MODIFY — update evaluateWindow return type, add sendCriticalNotification, update evaluateThresholds
+cc-hdrmTests/Services/ThresholdStateMachineTests.swift # EXTEND — add critical threshold tests
 ```
 
 No new files to create. No other files need modification.
@@ -241,8 +241,8 @@ No new files to create. No other files need modification.
 
 ### Library & Framework Requirements
 
-- `UserNotifications` — already imported in `cc-hdrm/cc-hdrm/Services/NotificationService.swift`. No new framework imports needed.
-- `cc-hdrm/cc-hdrm/Extensions/Date+Formatting.swift` — `countdownString()` and `absoluteTimeString()` already exist and will be used for notification body.
+- `UserNotifications` — already imported in `cc-hdrm/Services/NotificationService.swift`. No new framework imports needed.
+- `cc-hdrm/Extensions/Date+Formatting.swift` — `countdownString()` and `absoluteTimeString()` already exist and will be used for notification body.
 - No new external dependencies. Zero external packages.
 
 ### Anti-Patterns to Avoid
@@ -251,7 +251,7 @@ No new files to create. No other files need modification.
 - DO NOT fire both warning AND critical when dropping directly from >20% to <5% — only fire critical
 - DO NOT fire notifications repeatedly for the same crossing — state machine enforces fire-once semantics
 - DO NOT use a different notification body format for critical vs warning — same content template, only difference is sound and identifier
-- DO NOT modify `cc-hdrm/cc-hdrm/cc_hdrm.entitlements` — protected file
+- DO NOT modify `cc-hdrm/cc_hdrm.entitlements` — protected file
 - DO NOT modify PollingEngine or AppDelegate — already wired from Story 5.2
 - DO NOT use `DispatchQueue` or GCD — use async/await
 - DO NOT use `print()` — use `os.Logger`
@@ -267,13 +267,13 @@ No new files to create. No other files need modification.
 - [Source: _bmad-output/planning-artifacts/ux-design-specification.md#Threshold State Machine] — ABOVE_20 → WARNED_20 → WARNED_5, re-arm on recovery above 20%
 - [Source: _bmad-output/planning-artifacts/ux-design-specification.md#line 894] — WARNED_20 --[drops below 5%]--> WARNED_5 (fire notification)
 - [Source: _bmad-output/planning-artifacts/ux-design-specification.md#line 922] — Critical (5%): Persistent notification with sound
-- [Source: cc-hdrm/cc-hdrm/Services/NotificationService.swift] — Current implementation with evaluateWindow, sendNotification, evaluateThresholds
-- [Source: cc-hdrm/cc-hdrm/Services/NotificationServiceProtocol.swift] — ThresholdState enum, protocol with evaluateThresholds
-- [Source: cc-hdrm/cc-hdrm/Services/NotificationCenterProtocol.swift] — Protocol abstraction over UNUserNotificationCenter
-- [Source: cc-hdrm/cc-hdrmTests/Mocks/SpyNotificationCenter.swift] — Spy for notification delivery verification
-- [Source: cc-hdrm/cc-hdrmTests/Services/ThresholdStateMachineTests.swift] — Existing threshold tests to extend
-- [Source: cc-hdrm/cc-hdrm/Extensions/Date+Formatting.swift:42-65] — countdownString() for notification body
-- [Source: cc-hdrm/cc-hdrm/Extensions/Date+Formatting.swift:82-88] — absoluteTimeString() for notification body
+- [Source: cc-hdrm/Services/NotificationService.swift] — Current implementation with evaluateWindow, sendNotification, evaluateThresholds
+- [Source: cc-hdrm/Services/NotificationServiceProtocol.swift] — ThresholdState enum, protocol with evaluateThresholds
+- [Source: cc-hdrm/Services/NotificationCenterProtocol.swift] — Protocol abstraction over UNUserNotificationCenter
+- [Source: cc-hdrmTests/Mocks/SpyNotificationCenter.swift] — Spy for notification delivery verification
+- [Source: cc-hdrmTests/Services/ThresholdStateMachineTests.swift] — Existing threshold tests to extend
+- [Source: cc-hdrm/Extensions/Date+Formatting.swift:42-65] — countdownString() for notification body
+- [Source: cc-hdrm/Extensions/Date+Formatting.swift:82-88] — absoluteTimeString() for notification body
 - [Source: _bmad-output/planning-artifacts/project-context.md#Architectural Boundaries] — NotificationService boundary
 
 ## Dev Agent Record
@@ -307,5 +307,5 @@ None required.
 
 ### File List
 
-- `cc-hdrm/cc-hdrm/Services/NotificationService.swift` — MODIFIED: extended evaluateWindow return type, added sendCriticalNotification, wired in evaluateThresholds
-- `cc-hdrm/cc-hdrmTests/Services/ThresholdStateMachineTests.swift` — MODIFIED: updated 4 existing evaluateWindow tests for new return type, added 13 new critical threshold tests
+- `cc-hdrm/Services/NotificationService.swift` — MODIFIED: extended evaluateWindow return type, added sendCriticalNotification, wired in evaluateThresholds
+- `cc-hdrmTests/Services/ThresholdStateMachineTests.swift` — MODIFIED: updated 4 existing evaluateWindow tests for new return type, added 13 new critical threshold tests

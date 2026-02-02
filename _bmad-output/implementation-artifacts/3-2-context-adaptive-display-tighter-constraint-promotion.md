@@ -77,7 +77,7 @@ so that I always see the most relevant information without any manual action.
   - [x] FreshnessMonitorProtocol not updated — tick is internal to FreshnessMonitor, not a protocol contract.
 
 - [x] Task 7: Write countdown formatting tests (AC: #2)
-  - [x] In `cc-hdrm/cc-hdrmTests/Extensions/DateFormattingTests.swift` (extend existing or create):
+  - [x] In `cc-hdrmTests/Extensions/DateFormattingTests.swift` (extend existing or create):
   - [x] Test: resetsAt 30 minutes from now → `"30m"`
   - [x] Test: resetsAt 47 minutes from now → `"47m"`
   - [x] Test: resetsAt 59 minutes from now → `"59m"`
@@ -90,14 +90,14 @@ so that I always see the most relevant information without any manual action.
   - [x] Test: resetsAt exactly now → `"0m"`
 
 - [x] Task 8: Write menuBarText context-adaptive tests (AC: #1, #4)
-  - [x] In `cc-hdrm/cc-hdrmTests/State/AppStateTests.swift` (extend existing):
+  - [x] In `cc-hdrmTests/State/AppStateTests.swift` (extend existing):
   - [x] Test: 5h exhausted (utilization=100) with resetsAt 47m from now → `menuBarText == "✳ ↻ 47m"` and `menuBarHeadroomState == .exhausted`
   - [x] Test: 5h exhausted with resetsAt nil → `menuBarText == "✳ 0%"` (fallback to percentage, no countdown without reset time)
   - [x] Test: 5h normal (utilization=17) → `menuBarText == "✳ 83%"` (unchanged behavior)
   - [x] Test: 5h recovers from exhausted (utilization changes from 100 to 5) → `menuBarText` switches back to `"✳ 95%"`
 
 - [x] Task 9: Write tighter constraint promotion tests (AC: #5, #6)
-  - [x] In `cc-hdrm/cc-hdrmTests/State/AppStateTests.swift` (extend existing):
+  - [x] In `cc-hdrmTests/State/AppStateTests.swift` (extend existing):
   - [x] Test: 5h headroom 72% (.normal), 7d headroom 18% (.warning) → `menuBarHeadroomState == .warning`, `menuBarText == "✳ 18%"`, `displayedWindow == .sevenDay`
   - [x] Test: 5h headroom 72% (.normal), 7d headroom 4% (.critical) → `menuBarHeadroomState == .critical`, `menuBarText == "✳ 4%"`, `displayedWindow == .sevenDay`
   - [x] Test: 5h headroom 35% (.caution), 7d headroom 30% (.caution) → stays on 5h (7d is caution, not warning/critical), `displayedWindow == .fiveHour`
@@ -106,7 +106,7 @@ so that I always see the most relevant information without any manual action.
   - [x] Test: 7d recovers (headroom goes from 18% to 50%) → reverts to 5h display
 
 - [x] Task 10: Write VoiceOver accessibility tests for exhausted state (AC: #7)
-  - [x] In `cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift` (extend existing):
+  - [x] In `cc-hdrmTests/App/AppDelegateTests.swift` (extend existing):
   - [x] Test: after setting exhausted state with resetsAt, accessibilityLabel contains "exhausted" and "resets in"
   - [x] Test: after setting exhausted state without resetsAt, accessibilityLabel contains "exhausted" (no "resets in")
 
@@ -187,7 +187,7 @@ else:
 - Remove dead code / unused properties before committing
 - Add call counters to mocks for verifying interaction patterns
 - Make services `@MainActor` when they hold `AppState` reference
-- DO NOT modify `cc-hdrm/cc-hdrm/cc_hdrm.entitlements` — protected file
+- DO NOT modify `cc-hdrm/cc_hdrm.entitlements` — protected file
 
 ### Git Intelligence
 
@@ -209,18 +209,18 @@ Recent commits:
 
 Files to modify:
 ```
-cc-hdrm/cc-hdrm/Extensions/Date+Formatting.swift           # Add countdownString()
-cc-hdrm/cc-hdrm/State/AppState.swift                       # Add countdownTick, displayedWindow, enhance menuBarText + menuBarHeadroomState
-cc-hdrm/cc-hdrm/App/AppDelegate.swift                      # Update accessibility for exhausted state
-cc-hdrm/cc-hdrmTests/Extensions/DateFormattingTests.swift   # Add countdown formatting tests
-cc-hdrm/cc-hdrmTests/State/AppStateTests.swift              # Add context-adaptive + promotion tests
-cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift             # Add exhausted accessibility tests
+cc-hdrm/Extensions/Date+Formatting.swift           # Add countdownString()
+cc-hdrm/State/AppState.swift                       # Add countdownTick, displayedWindow, enhance menuBarText + menuBarHeadroomState
+cc-hdrm/App/AppDelegate.swift                      # Update accessibility for exhausted state
+cc-hdrmTests/Extensions/DateFormattingTests.swift   # Add countdown formatting tests
+cc-hdrmTests/State/AppStateTests.swift              # Add context-adaptive + promotion tests
+cc-hdrmTests/App/AppDelegateTests.swift             # Add exhausted accessibility tests
 ```
 
 Potentially modified (if using FreshnessMonitor for tick):
 ```
-cc-hdrm/cc-hdrm/Services/FreshnessMonitor.swift            # Add tickCountdown() call to loop
-cc-hdrm/cc-hdrmTests/Services/FreshnessMonitorTests.swift   # Verify tick behavior
+cc-hdrm/Services/FreshnessMonitor.swift            # Add tickCountdown() call to loop
+cc-hdrmTests/Services/FreshnessMonitorTests.swift   # Verify tick behavior
 ```
 
 No new files needed.
@@ -239,7 +239,7 @@ No new files needed.
 - DO NOT store `displayedWindow` as a separate stored property — it must be computed
 - DO NOT call `Date()` directly in stored properties — only in computed properties and methods
 - DO NOT create a separate countdown timer task — piggyback on the existing 60-second FreshnessMonitor loop
-- DO NOT modify `cc-hdrm/cc-hdrm/cc_hdrm.entitlements` — protected file
+- DO NOT modify `cc-hdrm/cc_hdrm.entitlements` — protected file
 - DO NOT break existing tests — `menuBarText` for non-exhausted states must remain unchanged
 - DO NOT update the countdown every second — the UX spec explicitly requires 60-second intervals (NFR4 CPU budget)
 
@@ -286,11 +286,11 @@ None — no issues encountered during implementation.
 
 ### File List
 
-- cc-hdrm/cc-hdrm/Extensions/Date+Formatting.swift (modified — added `countdownString()`)
-- cc-hdrm/cc-hdrm/State/AppState.swift (modified — added `DisplayedWindow` enum, `countdownTick`, `tickCountdown()`, `displayedWindow`, enhanced `menuBarHeadroomState` and `menuBarText`)
-- cc-hdrm/cc-hdrm/App/AppDelegate.swift (modified — updated accessibility for exhausted/countdown state, uses `displayedWindow`)
-- cc-hdrm/cc-hdrm/Services/FreshnessMonitor.swift (modified — added `countdownTickTask` for 60-second tick)
-- cc-hdrm/cc-hdrmTests/Extensions/DateFormattingTests.swift (modified — added 10 countdown formatting tests)
-- cc-hdrm/cc-hdrmTests/State/AppStateTests.swift (modified — added 11 context-adaptive + promotion + tick tests)
-- cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift (modified — added 2 exhausted accessibility tests)
+- cc-hdrm/Extensions/Date+Formatting.swift (modified — added `countdownString()`)
+- cc-hdrm/State/AppState.swift (modified — added `DisplayedWindow` enum, `countdownTick`, `tickCountdown()`, `displayedWindow`, enhanced `menuBarHeadroomState` and `menuBarText`)
+- cc-hdrm/App/AppDelegate.swift (modified — updated accessibility for exhausted/countdown state, uses `displayedWindow`)
+- cc-hdrm/Services/FreshnessMonitor.swift (modified — added `countdownTickTask` for 60-second tick)
+- cc-hdrmTests/Extensions/DateFormattingTests.swift (modified — added 10 countdown formatting tests)
+- cc-hdrmTests/State/AppStateTests.swift (modified — added 11 context-adaptive + promotion + tick tests)
+- cc-hdrmTests/App/AppDelegateTests.swift (modified — added 2 exhausted accessibility tests)
 - _bmad-output/implementation-artifacts/sprint-status.yaml (modified — story status update)

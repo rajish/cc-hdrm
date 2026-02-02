@@ -47,7 +47,7 @@ brew install xcodegen
 
 # Clone and build
 git clone https://github.com/rajish/cc-hdrm.git
-cd cc-hdrm/cc-hdrm
+cd cc-hdrm
 xcodegen generate
 open cc-hdrm.xcodeproj
 ```
@@ -57,7 +57,7 @@ Then build and run from Xcode (`Cmd+R`).
 To build from the command line:
 
 ```sh
-cd cc-hdrm/cc-hdrm
+cd cc-hdrm
 xcodegen generate
 xcodebuild -project cc-hdrm.xcodeproj -scheme cc-hdrm -configuration Release build
 ```

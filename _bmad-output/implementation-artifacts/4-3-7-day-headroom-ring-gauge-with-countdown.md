@@ -23,7 +23,7 @@ so that I can track my weekly limit alongside the session limit.
 ## Tasks / Subtasks
 
 - [x] Task 1: Create SevenDayGaugeSection.swift -- composed view for the 7d section in popover (AC: #1-#5, #7)
-  - [x] Create `cc-hdrm/cc-hdrm/Views/SevenDayGaugeSection.swift`
+  - [x] Create `cc-hdrm/Views/SevenDayGaugeSection.swift`
   - [x] SwiftUI `View` struct with parameter: `appState: AppState`
   - [x] Headroom calculation: `let headroom = appState.sevenDay.map { 100.0 - $0.utilization }` (nil when no data)
   - [x] HeadroomState derivation: `appState.sevenDay?.headroomState ?? .disconnected`
@@ -36,7 +36,7 @@ so that I can track my weekly limit alongside the session limit.
   - [x] NOTE: This view reuses `HeadroomRingGauge` and `CountdownLabel` from story 4.2 with no modifications to those components. Only the dimensions (56px/4px) and window label ("7d") differ.
 
 - [x] Task 2: Update PopoverView.swift to replace "7d gauge" placeholder (AC: #1, #6)
-  - [x] In `cc-hdrm/cc-hdrm/Views/PopoverView.swift`:
+  - [x] In `cc-hdrm/Views/PopoverView.swift`:
   - [x] Replace the `Text("7d gauge")` placeholder block (lines 21-24) with:
     ```swift
     // 7-day gauge section (hidden entirely when sevenDay is nil per AC #6)
@@ -53,7 +53,7 @@ so that I can track my weekly limit alongside the session limit.
   - [x] Ensure `appState.sevenDay` access registers observation so the section appears/disappears reactively
 
 - [x] Task 3: Write SevenDayGaugeSection tests (AC: #1-#3, #6, #7)
-  - [x] Create `cc-hdrm/cc-hdrmTests/Views/SevenDayGaugeSectionTests.swift`
+  - [x] Create `cc-hdrmTests/Views/SevenDayGaugeSectionTests.swift`
   - [x] Test: Section renders with valid sevenDay data in AppState (no crash)
   - [x] Test: Section renders with nil sevenDay (verify empty/hidden behavior)
   - [x] Test: Section renders with exhausted (0%) sevenDay data
@@ -62,7 +62,7 @@ so that I can track my weekly limit alongside the session limit.
   - [x] Use `@MainActor`, `@Test`, Swift Testing framework, consistent with story 4.2 test patterns
 
 - [x] Task 4: Write PopoverView integration test for 7d gauge (AC: #1, #6)
-  - [x] Extend `cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift`:
+  - [x] Extend `cc-hdrmTests/Views/PopoverViewTests.swift`:
   - [x] Test: PopoverView with valid sevenDay data in AppState renders 7d section without crash
   - [x] Test: PopoverView with nil sevenDay in AppState does NOT render 7d section
   - [x] Test: Updating AppState.sevenDay from nil to valid triggers observation and section appears
@@ -123,22 +123,22 @@ Recent commits: one commit per story with code review fixes. XcodeGen auto-disco
 ### Project Structure Notes
 
 - `Views/` directory already contains: PopoverView, HeadroomRingGauge, CountdownLabel, FiveHourGaugeSection, MenuBarTextRenderer, StatusMessageView
-- New file goes in `cc-hdrm/cc-hdrm/Views/SevenDayGaugeSection.swift`
-- New test file goes in `cc-hdrm/cc-hdrmTests/Views/SevenDayGaugeSectionTests.swift`
+- New file goes in `cc-hdrm/Views/SevenDayGaugeSection.swift`
+- New test file goes in `cc-hdrmTests/Views/SevenDayGaugeSectionTests.swift`
 - Existing PopoverViewTests.swift gets additional test cases
 
 ### File Structure Requirements
 
 New files to create:
 ```
-cc-hdrm/cc-hdrm/Views/SevenDayGaugeSection.swift                # NEW -- composed 7d gauge section
-cc-hdrm/cc-hdrmTests/Views/SevenDayGaugeSectionTests.swift       # NEW -- 7d gauge section tests
+cc-hdrm/Views/SevenDayGaugeSection.swift                # NEW -- composed 7d gauge section
+cc-hdrmTests/Views/SevenDayGaugeSectionTests.swift       # NEW -- 7d gauge section tests
 ```
 
 Files to modify:
 ```
-cc-hdrm/cc-hdrm/Views/PopoverView.swift                         # REPLACE "7d gauge" placeholder with conditional SevenDayGaugeSection
-cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift                # ADD 7d gauge integration tests
+cc-hdrm/Views/PopoverView.swift                         # REPLACE "7d gauge" placeholder with conditional SevenDayGaugeSection
+cc-hdrmTests/Views/PopoverViewTests.swift                # ADD 7d gauge integration tests
 ```
 
 ### Testing Requirements
@@ -161,7 +161,7 @@ cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift                # ADD 7d gauge 
 - DO NOT modify HeadroomRingGauge.swift or CountdownLabel.swift -- they're already reusable
 - DO NOT store HeadroomState as a property -- always derive from utilization
 - DO NOT add the footer in this story -- that's story 4.4
-- DO NOT modify `cc-hdrm/cc-hdrm/cc_hdrm.entitlements` -- protected file
+- DO NOT modify `cc-hdrm/cc_hdrm.entitlements` -- protected file
 - DO NOT use `DispatchQueue` or timers -- use existing countdownTick observation pattern
 - DO NOT use `print()` -- use `os.Logger` if logging is needed (shouldn't be in views)
 - DO NOT hardcode colors -- use semantic color tokens from Color+Headroom.swift
@@ -217,10 +217,10 @@ None required — no issues encountered.
 ### File List
 
 New:
-- cc-hdrm/cc-hdrm/Views/SevenDayGaugeSection.swift
-- cc-hdrm/cc-hdrmTests/Views/SevenDayGaugeSectionTests.swift
+- cc-hdrm/Views/SevenDayGaugeSection.swift
+- cc-hdrmTests/Views/SevenDayGaugeSectionTests.swift
 
 Modified:
-- cc-hdrm/cc-hdrm/Views/PopoverView.swift
-- cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift
+- cc-hdrm/Views/PopoverView.swift
+- cc-hdrmTests/Views/PopoverViewTests.swift
 - _bmad-output/implementation-artifacts/sprint-status.yaml (status: backlog → review)

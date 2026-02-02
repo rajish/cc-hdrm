@@ -27,9 +27,9 @@ so that my headroom display is always current without any manual action.
 ## Tasks / Subtasks
 
 - [x] Task 1: Create `PollingEngineProtocol` and `PollingEngine` (AC: #1, #2, #8)
-  - [x] Create `cc-hdrm/cc-hdrm/Services/PollingEngineProtocol.swift`
+  - [x] Create `cc-hdrm/Services/PollingEngineProtocol.swift`
   - [x] Define `protocol PollingEngineProtocol: Sendable` with `func start() async` and `func stop()`
-  - [x] Create `cc-hdrm/cc-hdrm/Services/PollingEngine.swift`
+  - [x] Create `cc-hdrm/Services/PollingEngine.swift`
   - [x] Inject dependencies: `keychainService: any KeychainServiceProtocol`, `tokenRefreshService: any TokenRefreshServiceProtocol`, `apiClient: any APIClientProtocol`, `appState: AppState`
   - [x] Implement `start()`: `while !Task.isCancelled` loop with `Task.sleep(for: .seconds(30))`
   - [x] Each cycle calls `performPollCycle()` which: reads fresh credentials → checks token expiry via `TokenExpiryChecker` → fetches usage via `APIClient` → updates `AppState`
@@ -53,7 +53,7 @@ so that my headroom display is always current without any manual action.
   - [x] On refresh success: set `connectionStatus` to `.connected`, clear `statusMessage`
   - [x] On refresh failure: set `connectionStatus` to `.tokenExpired`, set appropriate `statusMessage`
 - [x] Task 4: Write PollingEngine tests (AC: all)
-  - [x] Create `cc-hdrm/cc-hdrmTests/Services/PollingEngineTests.swift`
+  - [x] Create `cc-hdrmTests/Services/PollingEngineTests.swift`
   - [x] Test: successful poll cycle populates `AppState` with usage data and sets `.connected`
   - [x] Test: network error sets `connectionStatus` to `.disconnected` with appropriate `statusMessage`
   - [x] Test: API 401 triggers token refresh (verify `refreshCallCount`)
@@ -262,15 +262,15 @@ let sevenDayState = response.sevenDay.map { window in
 
 New files to create:
 ```
-cc-hdrm/cc-hdrm/Services/PollingEngineProtocol.swift
-cc-hdrm/cc-hdrm/Services/PollingEngine.swift
-cc-hdrm/cc-hdrmTests/Services/PollingEngineTests.swift
+cc-hdrm/Services/PollingEngineProtocol.swift
+cc-hdrm/Services/PollingEngine.swift
+cc-hdrmTests/Services/PollingEngineTests.swift
 ```
 
 Files to modify:
 ```
-cc-hdrm/cc-hdrm/App/AppDelegate.swift              # Strip polling/fetch logic, wire PollingEngine
-cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift      # Refactor for new AppDelegate shape
+cc-hdrm/App/AppDelegate.swift              # Strip polling/fetch logic, wire PollingEngine
+cc-hdrmTests/App/AppDelegateTests.swift      # Refactor for new AppDelegate shape
 ```
 
 ### Testing Requirements
@@ -300,7 +300,7 @@ cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift      # Refactor for new AppDeleg
 - DO NOT create a separate `startPolling()` method that duplicates `start()` — one entry point only
 - DO NOT make PollingEngine depend on AppDelegate — PollingEngine is independent, AppDelegate just creates and starts/stops it
 - DO NOT add adaptive intervals or backoff logic — keep it simple at 30s fixed (future enhancement)
-- DO NOT modify `cc-hdrm/cc-hdrm/cc_hdrm.entitlements` — protected file
+- DO NOT modify `cc-hdrm/cc_hdrm.entitlements` — protected file
 
 ### References
 
@@ -345,11 +345,11 @@ None — clean implementation, all 96 tests pass on first run.
 ### File List
 
 New files:
-- cc-hdrm/cc-hdrm/Services/PollingEngineProtocol.swift
-- cc-hdrm/cc-hdrm/Services/PollingEngine.swift
-- cc-hdrm/cc-hdrmTests/Services/PollingEngineTests.swift
+- cc-hdrm/Services/PollingEngineProtocol.swift
+- cc-hdrm/Services/PollingEngine.swift
+- cc-hdrmTests/Services/PollingEngineTests.swift
 
 Modified files:
-- cc-hdrm/cc-hdrm/App/AppDelegate.swift (stripped polling/fetch logic, now delegates to PollingEngine)
-- cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift (refactored to test lifecycle only with MockPollingEngine)
+- cc-hdrm/App/AppDelegate.swift (stripped polling/fetch logic, now delegates to PollingEngine)
+- cc-hdrmTests/App/AppDelegateTests.swift (refactored to test lifecycle only with MockPollingEngine)
 - _bmad-output/implementation-artifacts/sprint-status.yaml (story status updated)

@@ -29,7 +29,7 @@ so that I know my remaining capacity at a glance without any interaction.
 ## Tasks / Subtasks
 
 - [x] Task 1: Create `Color+Headroom.swift` extension (AC: #2, #3)
-  - [x] Create `cc-hdrm/cc-hdrm/Extensions/Color+Headroom.swift`
+  - [x] Create `cc-hdrm/Extensions/Color+Headroom.swift`
   - [x] Define `extension Color` with static computed properties mapping to Asset Catalog names:
     - `.headroomNormal` → `Color("HeadroomNormal", bundle: .main)` (namespaced under HeadroomColors)
     - `.headroomCaution` → `Color("HeadroomCaution", bundle: .main)`
@@ -54,7 +54,7 @@ so that I know my remaining capacity at a glance without any interaction.
   - [x] NOTE: `HeadroomState.fontWeight` already returns a String ("regular", "medium", etc.) — the extension should use that or map directly. Prefer the direct NSFont.Weight mapping for type safety.
 
 - [x] Task 3: Add `menuBarText` and `menuBarHeadroomState` computed properties to AppState (AC: #1, #4, #5)
-  - [x] In `cc-hdrm/cc-hdrm/State/AppState.swift`, add:
+  - [x] In `cc-hdrm/State/AppState.swift`, add:
     - `var menuBarHeadroomState: HeadroomState` — derived from the **displayed** window (5h by default). Returns:
       - `.disconnected` if `connectionStatus` is not `.connected`
       - Otherwise derives from `fiveHour?.headroomState ?? .disconnected`
@@ -65,7 +65,7 @@ so that I know my remaining capacity at a glance without any interaction.
   - [x] These are **computed** properties — never stored. Same pattern as `dataFreshness`.
 
 - [x] Task 4: Update `AppDelegate` to observe AppState and update NSStatusItem (AC: #1, #2, #3, #4)
-  - [x] In `cc-hdrm/cc-hdrm/App/AppDelegate.swift`:
+  - [x] In `cc-hdrm/App/AppDelegate.swift`:
     - Add an observation mechanism to watch `AppState` changes and update the status item
     - **IMPORTANT:** `@Observable` uses the Observation framework. For AppKit integration, use `withObservationTracking` in a loop or a `Task` that re-renders on change.
     - Pattern:
@@ -103,14 +103,14 @@ so that I know my remaining capacity at a glance without any interaction.
   - [x] Track previous headroom state to detect changes for accessibility notifications
 
 - [x] Task 6: Write `Color+Headroom` / `NSColor` mapping tests (AC: #2, #3)
-  - [x] Create `cc-hdrm/cc-hdrmTests/Extensions/ColorHeadroomTests.swift`
+  - [x] Create `cc-hdrmTests/Extensions/ColorHeadroomTests.swift`
   - [x] Test: each HeadroomState maps to a non-nil NSColor (validates Asset Catalog names resolve)
   - [x] Test: `.normal` → different color than `.critical` (basic sanity)
   - [x] Test: `.disconnected` returns a grey-family color
   - [x] Test: font weight mapping returns correct NSFont.Weight for each state
 
 - [x] Task 7: Write `AppState.menuBarText` and `menuBarHeadroomState` tests (AC: #1, #3, #5)
-  - [x] In `cc-hdrm/cc-hdrmTests/State/AppStateTests.swift` (extend existing):
+  - [x] In `cc-hdrmTests/State/AppStateTests.swift` (extend existing):
   - [x] Test: `connectionStatus == .disconnected` → `menuBarHeadroomState == .disconnected`, `menuBarText == "✳ —"`
   - [x] Test: `connectionStatus == .connected`, `fiveHour = nil` → `.disconnected`, `"✳ —"`
   - [x] Test: `connectionStatus == .connected`, `fiveHour.utilization = 17.0` → headroom 83% → `.normal`, `"✳ 83%"`
@@ -123,7 +123,7 @@ so that I know my remaining capacity at a glance without any interaction.
   - [x] Test: utilization > 100 (edge case) → headroom clamped to 0%, not negative
 
 - [x] Task 8: Write `AppDelegate` menu bar update integration tests (AC: #4)
-  - [x] In `cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift` (extend existing):
+  - [x] In `cc-hdrmTests/App/AppDelegateTests.swift` (extend existing):
   - [x] Test: after `updateWindows(fiveHour:)` is called on AppState, the status item's `attributedTitle` reflects the new percentage (may need to expose `updateMenuBarDisplay()` as internal for testing)
   - [x] Test: status item button has an `accessibilityLabel` set
   - [x] Test: status item button has an `accessibilityValue` that includes "percent" for connected states
@@ -251,7 +251,7 @@ The `HeadroomState.colorTokenName` property already returns un-namespaced names 
 - Remove dead code / unused properties before committing
 - Add call counters to mocks for verifying interaction patterns
 - Make services `@MainActor` when they hold `AppState` reference
-- Do NOT modify `cc-hdrm/cc-hdrm/cc_hdrm.entitlements` — protected file
+- Do NOT modify `cc-hdrm/cc_hdrm.entitlements` — protected file
 
 ### Git Intelligence
 
@@ -274,16 +274,16 @@ Recent commits:
 
 New files to create:
 ```
-cc-hdrm/cc-hdrm/Extensions/Color+Headroom.swift
-cc-hdrm/cc-hdrmTests/Extensions/ColorHeadroomTests.swift
+cc-hdrm/Extensions/Color+Headroom.swift
+cc-hdrmTests/Extensions/ColorHeadroomTests.swift
 ```
 
 Files to modify:
 ```
-cc-hdrm/cc-hdrm/State/AppState.swift                    # Add menuBarText, menuBarHeadroomState
-cc-hdrm/cc-hdrm/App/AppDelegate.swift                   # Add observation loop, updateMenuBarDisplay()
-cc-hdrm/cc-hdrmTests/State/AppStateTests.swift           # Add menu bar property tests
-cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift          # Add menu bar update tests
+cc-hdrm/State/AppState.swift                    # Add menuBarText, menuBarHeadroomState
+cc-hdrm/App/AppDelegate.swift                   # Add observation loop, updateMenuBarDisplay()
+cc-hdrmTests/State/AppStateTests.swift           # Add menu bar property tests
+cc-hdrmTests/App/AppDelegateTests.swift          # Add menu bar update tests
 ```
 
 ### Testing Requirements
@@ -301,7 +301,7 @@ cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift          # Add menu bar update t
 - DO NOT use `Timer` or `DispatchQueue` for the observation loop — use `Task` + `withObservationTracking`
 - DO NOT update the menu bar from the polling engine — the observation pattern decouples polling from rendering
 - DO NOT hardcode colors — always reference Asset Catalog via `NSColor(named:)`
-- DO NOT modify `cc-hdrm/cc-hdrm/cc_hdrm.entitlements` — protected file
+- DO NOT modify `cc-hdrm/cc_hdrm.entitlements` — protected file
 - DO NOT use `print()` — use `os.Logger` with category `menubar`
 - DO NOT post accessibility notifications on every render — only when value actually changes
 
@@ -348,15 +348,15 @@ claude-opus-4-5 (anthropic/claude-opus-4-5)
 ### File List
 
 New files:
-- cc-hdrm/cc-hdrm/Extensions/Color+Headroom.swift
-- cc-hdrm/cc-hdrmTests/Extensions/ColorHeadroomTests.swift
+- cc-hdrm/Extensions/Color+Headroom.swift
+- cc-hdrmTests/Extensions/ColorHeadroomTests.swift
 
 Modified files:
-- cc-hdrm/cc-hdrm/State/AppState.swift
-- cc-hdrm/cc-hdrm/App/AppDelegate.swift
-- cc-hdrm/cc-hdrm/Models/HeadroomState.swift
-- cc-hdrm/cc-hdrm/Extensions/Color+Headroom.swift
-- cc-hdrm/cc-hdrmTests/State/AppStateTests.swift
-- cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift
-- cc-hdrm/cc-hdrmTests/Models/HeadroomStateTests.swift
+- cc-hdrm/State/AppState.swift
+- cc-hdrm/App/AppDelegate.swift
+- cc-hdrm/Models/HeadroomState.swift
+- cc-hdrm/Extensions/Color+Headroom.swift
+- cc-hdrmTests/State/AppStateTests.swift
+- cc-hdrmTests/App/AppDelegateTests.swift
+- cc-hdrmTests/Models/HeadroomStateTests.swift
 - _bmad-output/implementation-artifacts/sprint-status.yaml

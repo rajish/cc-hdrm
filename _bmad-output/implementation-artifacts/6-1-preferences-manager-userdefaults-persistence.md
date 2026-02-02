@@ -25,13 +25,13 @@ so that I configure cc-hdrm once and it remembers my choices.
 ## Tasks / Subtasks
 
 - [x] Task 1: Create PreferencesManagerProtocol (AC: #1)
-  - [x] Create `cc-hdrm/cc-hdrm/Services/PreferencesManagerProtocol.swift`
+  - [x] Create `cc-hdrm/Services/PreferencesManagerProtocol.swift`
   - [x] Define protocol with read/write properties: `warningThreshold: Double`, `criticalThreshold: Double`, `pollInterval: TimeInterval`, `launchAtLogin: Bool`, `dismissedVersion: String?`
   - [x] Define `resetToDefaults()` method
   - [x] Define static default constants: `defaultWarningThreshold = 20.0`, `defaultCriticalThreshold = 5.0`, `defaultPollInterval: TimeInterval = 30`, `defaultLaunchAtLogin = false`
 
 - [x] Task 2: Create PreferencesManager implementation (AC: #1, #2, #5)
-  - [x] Create `cc-hdrm/cc-hdrm/Services/PreferencesManager.swift`
+  - [x] Create `cc-hdrm/Services/PreferencesManager.swift`
   - [x] Implement `PreferencesManagerProtocol` conformance
   - [x] Use `UserDefaults.standard` for persistence with keys: `"com.cc-hdrm.warningThreshold"`, `"com.cc-hdrm.criticalThreshold"`, `"com.cc-hdrm.pollInterval"`, `"com.cc-hdrm.launchAtLogin"`, `"com.cc-hdrm.dismissedVersion"`
   - [x] Implement clamping validation on read:
@@ -44,7 +44,7 @@ so that I configure cc-hdrm once and it remembers my choices.
 
 - [x] Task 3: Update NotificationService to read thresholds from PreferencesManager (AC: #3)
   - [x] Add `preferencesManager: PreferencesManagerProtocol` parameter to `NotificationService.init`
-  - [x] Modify `evaluateWindow` in `cc-hdrm/cc-hdrm/Services/NotificationService.swift` to accept `warningThreshold` and `criticalThreshold` parameters instead of hardcoded `20` and `5`
+  - [x] Modify `evaluateWindow` in `cc-hdrm/Services/NotificationService.swift` to accept `warningThreshold` and `criticalThreshold` parameters instead of hardcoded `20` and `5`
   - [x] In `evaluateThresholds`, read current thresholds from `preferencesManager` and pass to `evaluateWindow`
   - [x] When thresholds change (detected by comparing to last-used values), re-evaluate current headroom against new thresholds:
     - If headroom is above new warning threshold, reset state to `aboveWarning` (re-arm)
@@ -53,12 +53,12 @@ so that I configure cc-hdrm once and it remembers my choices.
 
 - [x] Task 4: Update PollingEngine to read poll interval from PreferencesManager (AC: #4)
   - [x] Add `preferencesManager: PreferencesManagerProtocol` parameter to `PollingEngine.init`
-  - [x] In `cc-hdrm/cc-hdrm/Services/PollingEngine.swift`, replace `Task.sleep(for: .seconds(30))` (line 41) with `Task.sleep(for: .seconds(preferencesManager.pollInterval))`
+  - [x] In `cc-hdrm/Services/PollingEngine.swift`, replace `Task.sleep(for: .seconds(30))` (line 41) with `Task.sleep(for: .seconds(preferencesManager.pollInterval))`
   - [x] Read `pollInterval` fresh at each cycle start (hot-reconfigurable)
   - [x] Update `PollingEngineProtocol` init to include preferences parameter
 
 - [x] Task 5: Wire PreferencesManager into app startup (AC: #2)
-  - [x] In `cc-hdrm/cc-hdrm/App/AppDelegate.swift`, create `PreferencesManager` instance
+  - [x] In `cc-hdrm/App/AppDelegate.swift`, create `PreferencesManager` instance
   - [x] Pass to `NotificationService` and `PollingEngine` during service wiring
   - [x] Ensure PreferencesManager is accessible to future SettingsView (Story 6.2)
 
@@ -177,10 +177,10 @@ func evaluateWindow(
 ) -> (ThresholdState, shouldFireWarning: Bool, shouldFireCritical: Bool)
 ```
 
-Replace all hardcoded `20` with `warningThreshold` and `5` with `criticalThreshold` in the state machine logic at `cc-hdrm/cc-hdrm/Services/NotificationService.swift` lines 62-90.
+Replace all hardcoded `20` with `warningThreshold` and `5` with `criticalThreshold` in the state machine logic at `cc-hdrm/Services/NotificationService.swift` lines 62-90.
 
 **Updating PollingEngine.start():**
-Replace at `cc-hdrm/cc-hdrm/Services/PollingEngine.swift` line 41:
+Replace at `cc-hdrm/Services/PollingEngine.swift` line 41:
 ```swift
 // Before (hardcoded):
 try? await Task.sleep(for: .seconds(30))
@@ -198,8 +198,8 @@ This ensures changing thresholds from "20/5" to "30/10" while at 25% headroom co
 ### Previous Story Intelligence (5.3)
 
 **What was built:**
-- ThresholdState enum: `aboveWarning`, `warned20`, `warned5` — in `cc-hdrm/cc-hdrm/Services/NotificationServiceProtocol.swift`
-- `evaluateWindow` with 3-tuple return — in `cc-hdrm/cc-hdrm/Services/NotificationService.swift` lines 62-90
+- ThresholdState enum: `aboveWarning`, `warned20`, `warned5` — in `cc-hdrm/Services/NotificationServiceProtocol.swift`
+- `evaluateWindow` with 3-tuple return — in `cc-hdrm/Services/NotificationService.swift` lines 62-90
 - Hardcoded thresholds: `20` (lines 72, 77, 85) and `5` (lines 68, 80)
 - `evaluateThresholds(fiveHour:sevenDay:)` wired into PollingEngine
 - `deliverNotification` shared method for warning/critical delivery
@@ -220,38 +220,38 @@ XcodeGen auto-discovers new files — run `xcodegen generate` after adding NEW f
 ### Project Structure Notes
 
 - Existing service pairs follow `FooProtocol.swift` + `Foo.swift` pattern
-- Test mocks in `cc-hdrm/cc-hdrmTests/Mocks/` — add `MockPreferencesManager` here
+- Test mocks in `cc-hdrmTests/Mocks/` — add `MockPreferencesManager` here
 - No `PreferencesManager`, `UserDefaults` usage, or settings UI exists currently
-- `cc-hdrm/cc-hdrm/Views/GearMenuView.swift` — has only "Quit" item, will be expanded in Story 6.2
-- `cc-hdrm/cc-hdrm/App/AppDelegate.swift` — service wiring location, will need PreferencesManager instantiation
+- `cc-hdrm/Views/GearMenuView.swift` — has only "Quit" item, will be expanded in Story 6.2
+- `cc-hdrm/App/AppDelegate.swift` — service wiring location, will need PreferencesManager instantiation
 
 ### File Structure Requirements
 
 Files to CREATE:
 ```
-cc-hdrm/cc-hdrm/Services/PreferencesManagerProtocol.swift    # NEW — protocol + defaults enum
-cc-hdrm/cc-hdrm/Services/PreferencesManager.swift            # NEW — UserDefaults implementation
-cc-hdrm/cc-hdrmTests/Services/PreferencesManagerTests.swift   # NEW — unit tests for preferences
-cc-hdrm/cc-hdrmTests/Mocks/MockPreferencesManager.swift      # NEW — mock for injection into other services
+cc-hdrm/Services/PreferencesManagerProtocol.swift    # NEW — protocol + defaults enum
+cc-hdrm/Services/PreferencesManager.swift            # NEW — UserDefaults implementation
+cc-hdrmTests/Services/PreferencesManagerTests.swift   # NEW — unit tests for preferences
+cc-hdrmTests/Mocks/MockPreferencesManager.swift      # NEW — mock for injection into other services
 ```
 
 Files to MODIFY:
 ```
-cc-hdrm/cc-hdrm/Services/NotificationService.swift           # MODIFY — accept PreferencesManager, parameterize thresholds in evaluateWindow
-cc-hdrm/cc-hdrm/Services/NotificationServiceProtocol.swift   # MODIFY — update init signature to include PreferencesManager
-cc-hdrm/cc-hdrm/Services/PollingEngine.swift                 # MODIFY — accept PreferencesManager, use configurable poll interval
-cc-hdrm/cc-hdrm/Services/PollingEngineProtocol.swift         # MODIFY — update init signature to include PreferencesManager
-cc-hdrm/cc-hdrm/App/AppDelegate.swift                        # MODIFY — create and wire PreferencesManager
-cc-hdrm/cc-hdrmTests/Services/ThresholdStateMachineTests.swift # MODIFY — update evaluateWindow calls to pass threshold params
-cc-hdrm/cc-hdrmTests/Services/NotificationServiceTests.swift  # MODIFY — inject MockPreferencesManager
-cc-hdrm/cc-hdrmTests/Services/PollingEngineTests.swift        # MODIFY — inject MockPreferencesManager, test configurable interval
-cc-hdrm/cc-hdrmTests/Mocks/MockNotificationService.swift     # MODIFY — update init signature if protocol changed
-cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift              # MODIFY — update service wiring tests
+cc-hdrm/Services/NotificationService.swift           # MODIFY — accept PreferencesManager, parameterize thresholds in evaluateWindow
+cc-hdrm/Services/NotificationServiceProtocol.swift   # MODIFY — update init signature to include PreferencesManager
+cc-hdrm/Services/PollingEngine.swift                 # MODIFY — accept PreferencesManager, use configurable poll interval
+cc-hdrm/Services/PollingEngineProtocol.swift         # MODIFY — update init signature to include PreferencesManager
+cc-hdrm/App/AppDelegate.swift                        # MODIFY — create and wire PreferencesManager
+cc-hdrmTests/Services/ThresholdStateMachineTests.swift # MODIFY — update evaluateWindow calls to pass threshold params
+cc-hdrmTests/Services/NotificationServiceTests.swift  # MODIFY — inject MockPreferencesManager
+cc-hdrmTests/Services/PollingEngineTests.swift        # MODIFY — inject MockPreferencesManager, test configurable interval
+cc-hdrmTests/Mocks/MockNotificationService.swift     # MODIFY — update init signature if protocol changed
+cc-hdrmTests/App/AppDelegateTests.swift              # MODIFY — update service wiring tests
 ```
 
 Files NOT to modify:
 ```
-cc-hdrm/cc-hdrm/cc_hdrm.entitlements  # PROTECTED — do not touch
+cc-hdrm/cc_hdrm.entitlements  # PROTECTED — do not touch
 ```
 
 ### Testing Requirements
@@ -277,7 +277,7 @@ cc-hdrm/cc-hdrm/cc_hdrm.entitlements  # PROTECTED — do not touch
 - DO NOT use `@AppStorage` in PreferencesManager itself — that's a SwiftUI property wrapper for views (Story 6.2)
 - DO NOT implement launch-at-login registration here — this story only persists the boolean; Story 6.4 handles SMAppService
 - DO NOT implement SettingsView UI here — that's Story 6.2
-- DO NOT modify `cc-hdrm/cc-hdrm/cc_hdrm.entitlements` — protected file
+- DO NOT modify `cc-hdrm/cc_hdrm.entitlements` — protected file
 - DO NOT use `DispatchQueue` or GCD — use async/await
 - DO NOT use `print()` — use `os.Logger`
 - DO NOT cache threshold values in NotificationService properties as the primary source — always read fresh from PreferencesManager (hot-reconfigurable)
@@ -290,14 +290,14 @@ cc-hdrm/cc-hdrm/cc_hdrm.entitlements  # PROTECTED — do not touch
 - [Source: `_bmad-output/planning-artifacts/architecture.md` #Phase 2 Project Structure Additions] — New file locations for PreferencesManager and related files
 - [Source: `_bmad-output/planning-artifacts/architecture.md` #Phase 2 Data Flow Addition] — PreferencesManager reads flow into PollingEngine and NotificationService
 - [Source: `_bmad-output/planning-artifacts/ux-design-specification.md` #Notification Persistence] — Threshold defaults: 20% warning, 5% critical
-- [Source: `cc-hdrm/cc-hdrm/Services/NotificationService.swift` lines 62-90] — Current hardcoded thresholds in evaluateWindow
-- [Source: `cc-hdrm/cc-hdrm/Services/NotificationService.swift` lines 68,72,77,80,85] — Specific lines with hardcoded 20 and 5 values
-- [Source: `cc-hdrm/cc-hdrm/Services/PollingEngine.swift` line 41] — Hardcoded 30-second poll interval
-- [Source: `cc-hdrm/cc-hdrm/App/AppDelegate.swift`] — Service wiring location
-- [Source: `cc-hdrm/cc-hdrm/Services/NotificationServiceProtocol.swift`] — ThresholdState enum, protocol definition
-- [Source: `cc-hdrm/cc-hdrmTests/Services/ThresholdStateMachineTests.swift`] — Existing threshold tests to update
-- [Source: `cc-hdrm/cc-hdrmTests/Mocks/MockNotificationService.swift`] — Existing mock to update
-- [Source: `cc-hdrm/cc-hdrmTests/Mocks/SpyNotificationCenter.swift`] — Existing spy, no changes needed
+- [Source: `cc-hdrm/Services/NotificationService.swift` lines 62-90] — Current hardcoded thresholds in evaluateWindow
+- [Source: `cc-hdrm/Services/NotificationService.swift` lines 68,72,77,80,85] — Specific lines with hardcoded 20 and 5 values
+- [Source: `cc-hdrm/Services/PollingEngine.swift` line 41] — Hardcoded 30-second poll interval
+- [Source: `cc-hdrm/App/AppDelegate.swift`] — Service wiring location
+- [Source: `cc-hdrm/Services/NotificationServiceProtocol.swift`] — ThresholdState enum, protocol definition
+- [Source: `cc-hdrmTests/Services/ThresholdStateMachineTests.swift`] — Existing threshold tests to update
+- [Source: `cc-hdrmTests/Mocks/MockNotificationService.swift`] — Existing mock to update
+- [Source: `cc-hdrmTests/Mocks/SpyNotificationCenter.swift`] — Existing spy, no changes needed
 - [Source: `_bmad-output/planning-artifacts/project-context.md` #Architectural Boundaries] — Service boundaries
 
 ## Dev Agent Record
@@ -335,14 +335,14 @@ None required.
 ### File List
 
 Files CREATED:
-- `cc-hdrm/cc-hdrm/Services/PreferencesManagerProtocol.swift`
-- `cc-hdrm/cc-hdrm/Services/PreferencesManager.swift`
-- `cc-hdrm/cc-hdrmTests/Services/PreferencesManagerTests.swift`
-- `cc-hdrm/cc-hdrmTests/Mocks/MockPreferencesManager.swift`
+- `cc-hdrm/Services/PreferencesManagerProtocol.swift`
+- `cc-hdrm/Services/PreferencesManager.swift`
+- `cc-hdrmTests/Services/PreferencesManagerTests.swift`
+- `cc-hdrmTests/Mocks/MockPreferencesManager.swift`
 
 Files MODIFIED:
-- `cc-hdrm/cc-hdrm/Services/NotificationService.swift`
-- `cc-hdrm/cc-hdrm/Services/NotificationServiceProtocol.swift`
-- `cc-hdrm/cc-hdrm/Services/PollingEngine.swift`
-- `cc-hdrm/cc-hdrm/App/AppDelegate.swift`
+- `cc-hdrm/Services/NotificationService.swift`
+- `cc-hdrm/Services/NotificationServiceProtocol.swift`
+- `cc-hdrm/Services/PollingEngine.swift`
+- `cc-hdrm/App/AppDelegate.swift`
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`

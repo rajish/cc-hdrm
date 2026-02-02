@@ -17,7 +17,7 @@ You need:
 
 ```sh
 git clone https://github.com/<your-username>/cc-hdrm.git
-cd cc-hdrm/cc-hdrm
+cd cc-hdrm
 xcodegen generate
 open cc-hdrm.xcodeproj
 ```
@@ -29,7 +29,7 @@ From Xcode: `Cmd+U`
 From the command line:
 
 ```sh
-cd cc-hdrm/cc-hdrm
+cd cc-hdrm
 xcodegen generate
 xcodebuild -project cc-hdrm.xcodeproj -scheme cc-hdrmTests -destination 'platform=macOS' test
 ```

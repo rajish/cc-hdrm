@@ -30,7 +30,7 @@ so that I know exactly how much session capacity remains and when it resets.
 ## Tasks / Subtasks
 
 - [x] Task 1: Create HeadroomRingGauge.swift -- reusable circular ring gauge component (AC: #1-#5, #9, #11-#13)
-  - [x] Create `cc-hdrm/cc-hdrm/Views/HeadroomRingGauge.swift`
+  - [x] Create `cc-hdrm/Views/HeadroomRingGauge.swift`
   - [x] SwiftUI `View` struct with parameters:
     - `headroomPercentage: Double?` (nil = disconnected)
     - `windowLabel: String` ("5h" or "7d")
@@ -50,7 +50,7 @@ so that I know exactly how much session capacity remains and when it resets.
   - [x] Accessibility: `.accessibilityElement(children: .ignore)` on the gauge, with `.accessibilityLabel` and `.accessibilityValue` set based on state
 
 - [x] Task 2: Add `swiftUIColor` computed property to HeadroomState (AC: #3, #5)
-  - [x] In `cc-hdrm/cc-hdrm/Models/HeadroomState.swift`, add:
+  - [x] In `cc-hdrm/Models/HeadroomState.swift`, add:
     ```swift
     import SwiftUI // add if not already imported
     
@@ -68,7 +68,7 @@ so that I know exactly how much session capacity remains and when it resets.
   - [x] NOTE: HeadroomState.swift currently only imports Foundation. Adding `import SwiftUI` is appropriate since this property is only used by views. ALTERNATIVELY, put this in an extension file `HeadroomState+SwiftUI.swift` in Extensions/ to keep the model pure Foundation. Developer's choice -- either is acceptable.
 
 - [x] Task 3: Add absolute time formatter to Date+Formatting.swift (AC: #8)
-  - [x] In `cc-hdrm/cc-hdrm/Extensions/Date+Formatting.swift`, add:
+  - [x] In `cc-hdrm/Extensions/Date+Formatting.swift`, add:
     ```swift
     /// Returns an absolute time string for display below countdowns.
     /// - Same day: "at 4:52 PM"
@@ -89,7 +89,7 @@ so that I know exactly how much session capacity remains and when it resets.
   - [x] This follows the UX spec formatting rules and the architecture mandate that all date/time formatting lives in Date+Formatting.swift
 
 - [x] Task 4: Create CountdownLabel.swift -- relative + absolute reset time display (AC: #7, #8, #10)
-  - [x] Create `cc-hdrm/cc-hdrm/Views/CountdownLabel.swift`
+  - [x] Create `cc-hdrm/Views/CountdownLabel.swift`
   - [x] SwiftUI `View` struct with parameters:
     - `resetTime: Date?` (nil = no countdown to show)
     - `headroomState: HeadroomState`
@@ -114,14 +114,14 @@ so that I know exactly how much session capacity remains and when it resets.
   - [x] Center the section horizontally in the popover
 
 - [x] Task 6: Update PopoverView.swift to replace "5h gauge" placeholder (AC: all)
-  - [x] In `cc-hdrm/cc-hdrm/Views/PopoverView.swift`:
+  - [x] In `cc-hdrm/Views/PopoverView.swift`:
   - [x] Replace the `Text("5h gauge")` placeholder with the composed 5h gauge section
   - [x] Keep the `Divider()` after the 5h section
   - [x] Keep "7d gauge" placeholder and "footer" placeholder intact (stories 4.3 and 4.4)
   - [x] Ensure `appState.countdownTick` is accessed in the view tree so countdown updates trigger re-renders
 
 - [x] Task 7: Write HeadroomRingGauge tests (AC: #1-#5, #9, #11)
-  - [x] Create `cc-hdrm/cc-hdrmTests/Views/HeadroomRingGaugeTests.swift`
+  - [x] Create `cc-hdrmTests/Views/HeadroomRingGaugeTests.swift`
   - [x] Test: gauge can be instantiated with normal headroom percentage (no crash)
   - [x] Test: gauge can be instantiated with nil percentage (disconnected state)
   - [x] Test: gauge can be instantiated with 0% headroom (exhausted state)
@@ -129,7 +129,7 @@ so that I know exactly how much session capacity remains and when it resets.
   - [x] Test: verify HeadroomState derivation is correct for various percentages (leverages existing HeadroomStateTests patterns)
 
 - [x] Task 8: Write CountdownLabel tests (AC: #7, #8, #10)
-  - [x] Create `cc-hdrm/cc-hdrmTests/Views/CountdownLabelTests.swift`
+  - [x] Create `cc-hdrmTests/Views/CountdownLabelTests.swift`
   - [x] Test: CountdownLabel renders with a future reset time (no crash)
   - [x] Test: CountdownLabel with nil resetTime returns empty (no crash)
   - [x] Test: verify `absoluteTimeString()` produces "at HH:mm AM/PM" for same-day dates
@@ -137,7 +137,7 @@ so that I know exactly how much session capacity remains and when it resets.
   - [x] Note: absoluteTimeString tests should live in `cc-hdrmTests/Extensions/DateFormattingTests.swift` (extend existing file)
 
 - [x] Task 9: Write PopoverView integration test for 5h gauge (AC: #1, #5)
-  - [x] Extend `cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift`:
+  - [x] Extend `cc-hdrmTests/Views/PopoverViewTests.swift`:
   - [x] Test: PopoverView with valid 5h data in AppState renders without crash
   - [x] Test: PopoverView with nil fiveHour in AppState renders disconnected gauge without crash
   - [x] Test: Updating AppState.fiveHour triggers observation (reuse withObservationTracking pattern from story 4.1)
@@ -207,7 +207,7 @@ let _ = countdownTick  // Register observation dependency for 60-second refresh
 - Remove dead code / unused properties before committing
 - Add call counters to mocks for verifying interaction patterns
 - Make services `@MainActor` when they hold AppState reference
-- DO NOT modify `cc-hdrm/cc-hdrm/cc_hdrm.entitlements` -- protected file
+- DO NOT modify `cc-hdrm/cc_hdrm.entitlements` -- protected file
 
 ### Git Intelligence
 
@@ -216,7 +216,7 @@ Recent commits show one commit per story with code review fixes included. Files 
 ### Project Structure Notes
 
 - `Views/` directory already exists (created in story 4.1 with PopoverView.swift)
-- New files go in `cc-hdrm/cc-hdrm/Views/` and `cc-hdrm/cc-hdrmTests/Views/`
+- New files go in `cc-hdrm/Views/` and `cc-hdrmTests/Views/`
 - `Date+Formatting.swift` already has `countdownString()` and `relativeTimeAgo()` -- add `absoluteTimeString()` there
 - `Color+Headroom.swift` already has SwiftUI Color static properties (`.headroomNormal`, etc.)
 - `HeadroomState.swift` has `colorTokenName` and `fontWeight` (String) but no SwiftUI Color mapping yet
@@ -225,19 +225,19 @@ Recent commits show one commit per story with code review fixes included. Files 
 
 New files to create:
 ```
-cc-hdrm/cc-hdrm/Views/HeadroomRingGauge.swift              # NEW -- circular ring gauge component
-cc-hdrm/cc-hdrm/Views/CountdownLabel.swift                  # NEW -- relative + absolute reset time
-cc-hdrm/cc-hdrmTests/Views/HeadroomRingGaugeTests.swift      # NEW -- gauge tests
-cc-hdrm/cc-hdrmTests/Views/CountdownLabelTests.swift         # NEW -- countdown tests
+cc-hdrm/Views/HeadroomRingGauge.swift              # NEW -- circular ring gauge component
+cc-hdrm/Views/CountdownLabel.swift                  # NEW -- relative + absolute reset time
+cc-hdrmTests/Views/HeadroomRingGaugeTests.swift      # NEW -- gauge tests
+cc-hdrmTests/Views/CountdownLabelTests.swift         # NEW -- countdown tests
 ```
 
 Files to modify:
 ```
-cc-hdrm/cc-hdrm/Models/HeadroomState.swift                  # ADD swiftUIColor computed property (or create extension)
-cc-hdrm/cc-hdrm/Extensions/Date+Formatting.swift            # ADD absoluteTimeString() method
-cc-hdrm/cc-hdrm/Views/PopoverView.swift                     # REPLACE "5h gauge" placeholder with real gauge
-cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift            # ADD 5h gauge integration tests
-cc-hdrm/cc-hdrmTests/Extensions/DateFormattingTests.swift    # ADD absoluteTimeString tests
+cc-hdrm/Models/HeadroomState.swift                  # ADD swiftUIColor computed property (or create extension)
+cc-hdrm/Extensions/Date+Formatting.swift            # ADD absoluteTimeString() method
+cc-hdrm/Views/PopoverView.swift                     # REPLACE "5h gauge" placeholder with real gauge
+cc-hdrmTests/Views/PopoverViewTests.swift            # ADD 5h gauge integration tests
+cc-hdrmTests/Extensions/DateFormattingTests.swift    # ADD absoluteTimeString tests
 ```
 
 ### Testing Requirements
@@ -260,7 +260,7 @@ cc-hdrm/cc-hdrmTests/Extensions/DateFormattingTests.swift    # ADD absoluteTimeS
 - DO NOT update countdown every second -- the 60-second countdownTick mechanism is sufficient
 - DO NOT add the 7d gauge in this story -- that's story 4.3
 - DO NOT add the footer in this story -- that's story 4.4
-- DO NOT modify `cc-hdrm/cc-hdrm/cc_hdrm.entitlements` -- protected file
+- DO NOT modify `cc-hdrm/cc_hdrm.entitlements` -- protected file
 - DO NOT use `DispatchQueue` or timers for countdown updates -- use the existing countdownTick observation pattern
 - DO NOT use SwiftUI `.popover()` modifier -- the popover is AppKit NSPopover (story 4.1)
 - DO NOT hardcode colors -- use the semantic color tokens from Color+Headroom.swift
@@ -319,17 +319,17 @@ claude-opus-4-5 (anthropic/claude-opus-4-5)
 ### File List
 
 New files:
-- cc-hdrm/cc-hdrm/Views/HeadroomRingGauge.swift
-- cc-hdrm/cc-hdrm/Views/CountdownLabel.swift
-- cc-hdrm/cc-hdrm/Views/FiveHourGaugeSection.swift
-- cc-hdrm/cc-hdrm/Extensions/HeadroomState+SwiftUI.swift
-- cc-hdrm/cc-hdrmTests/Views/HeadroomRingGaugeTests.swift
-- cc-hdrm/cc-hdrmTests/Views/CountdownLabelTests.swift
+- cc-hdrm/Views/HeadroomRingGauge.swift
+- cc-hdrm/Views/CountdownLabel.swift
+- cc-hdrm/Views/FiveHourGaugeSection.swift
+- cc-hdrm/Extensions/HeadroomState+SwiftUI.swift
+- cc-hdrmTests/Views/HeadroomRingGaugeTests.swift
+- cc-hdrmTests/Views/CountdownLabelTests.swift
 
 Modified files:
-- cc-hdrm/cc-hdrm/Extensions/Date+Formatting.swift
-- cc-hdrm/cc-hdrm/Views/PopoverView.swift
-- cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift
-- cc-hdrm/cc-hdrmTests/Extensions/DateFormattingTests.swift
+- cc-hdrm/Extensions/Date+Formatting.swift
+- cc-hdrm/Views/PopoverView.swift
+- cc-hdrmTests/Views/PopoverViewTests.swift
+- cc-hdrmTests/Extensions/DateFormattingTests.swift
 - cc-hdrm/cc-hdrm.xcodeproj (regenerated via xcodegen, gitignored)
 - _bmad-output/implementation-artifacts/sprint-status.yaml

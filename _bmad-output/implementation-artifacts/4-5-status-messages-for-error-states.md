@@ -22,7 +22,7 @@ so that I understand what's happening and what (if anything) I need to do.
 ## Tasks / Subtasks
 
 - [x] Task 1: Create StatusMessageView.swift — reusable status message component (AC: #1-#6)
-  - [x] Create `cc-hdrm/cc-hdrm/Views/StatusMessageView.swift`
+  - [x] Create `cc-hdrm/Views/StatusMessageView.swift`
   - [x] SwiftUI `View` struct with parameters: `title: String`, `detail: String`
   - [x] Layout: `VStack(spacing: 4)` centered:
     1. `Text(title)` in `.body` size, `.secondary` foreground style, `.multilineTextAlignment(.center)`
@@ -30,7 +30,7 @@ so that I understand what's happening and what (if anything) I need to do.
   - [x] VoiceOver: `.accessibilityElement(children: .combine)` so VoiceOver reads title + detail as a single element (AC #6)
 
 - [x] Task 2: Update PopoverView.swift to conditionally show StatusMessageView (AC: #1-#5)
-  - [x] In `cc-hdrm/cc-hdrm/Views/PopoverView.swift`:
+  - [x] In `cc-hdrm/Views/PopoverView.swift`:
   - [x] Add a computed property or inline logic to determine if a status message should be shown and what its title/detail should be:
     - `connectionStatus == .disconnected` → title: "Unable to reach Claude API", detail: "Last attempt: Xs ago" (computed from `appState.lastUpdated` or `appState.countdownTick` for periodic refresh)
     - `connectionStatus == .tokenExpired` → title: "Token expired", detail: "Run any Claude Code command to refresh"
@@ -50,14 +50,14 @@ so that I understand what's happening and what (if anything) I need to do.
   - [x] Note: The gauge sections (FiveHourGaugeSection, SevenDayGaugeSection) should still render in error states — they show grey "—" when data is unavailable (already handled by existing gauge code). StatusMessageView provides the explanatory text below them.
 
 - [x] Task 3: Write StatusMessageView tests (AC: #1-#6)
-  - [x] Create `cc-hdrm/cc-hdrmTests/Views/StatusMessageViewTests.swift`
+  - [x] Create `cc-hdrmTests/Views/StatusMessageViewTests.swift`
   - [x] Test: StatusMessageView renders with title and detail — no crash
   - [x] Test: StatusMessageView renders with long multi-line title — no crash
   - [x] Test: StatusMessageView can be hosted in NSHostingController — instantiation test
   - [x] Use `@Test`, Swift Testing framework, consistent with previous story patterns
 
 - [x] Task 4: Write PopoverView integration tests for status messages (AC: #1-#5)
-  - [x] Extend `cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift`:
+  - [x] Extend `cc-hdrmTests/Views/PopoverViewTests.swift`:
   - [x] Test: PopoverView renders without crash when connectionStatus == .disconnected
   - [x] Test: PopoverView renders without crash when connectionStatus == .tokenExpired
   - [x] Test: PopoverView renders without crash when connectionStatus == .noCredentials
@@ -153,22 +153,22 @@ Last commit: `37f4f8e Add story 4.4: panel footer with tier, freshness & quit, a
 
 - `Views/` directory currently contains: PopoverView, PopoverFooterView, GearMenuView, HeadroomRingGauge, CountdownLabel, FiveHourGaugeSection, SevenDayGaugeSection
 - **StatusMessageView.swift does NOT exist yet** — this story creates it
-- New file goes in `cc-hdrm/cc-hdrm/Views/StatusMessageView.swift`
-- New test file goes in `cc-hdrm/cc-hdrmTests/Views/StatusMessageViewTests.swift`
-- Existing `cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift` gets extended
+- New file goes in `cc-hdrm/Views/StatusMessageView.swift`
+- New test file goes in `cc-hdrmTests/Views/StatusMessageViewTests.swift`
+- Existing `cc-hdrmTests/Views/PopoverViewTests.swift` gets extended
 
 ### File Structure Requirements
 
 New files to create:
 ```
-cc-hdrm/cc-hdrm/Views/StatusMessageView.swift               # NEW — status message display component
-cc-hdrm/cc-hdrmTests/Views/StatusMessageViewTests.swift       # NEW — StatusMessageView tests
+cc-hdrm/Views/StatusMessageView.swift               # NEW — status message display component
+cc-hdrmTests/Views/StatusMessageViewTests.swift       # NEW — StatusMessageView tests
 ```
 
 Files to modify:
 ```
-cc-hdrm/cc-hdrm/Views/PopoverView.swift                      # ADD conditional StatusMessageView between gauges and footer
-cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift             # ADD status message integration tests
+cc-hdrm/Views/PopoverView.swift                      # ADD conditional StatusMessageView between gauges and footer
+cc-hdrmTests/Views/PopoverViewTests.swift             # ADD status message integration tests
 ```
 
 ### Testing Requirements
@@ -194,7 +194,7 @@ cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift             # ADD status messa
 - DO NOT give StatusMessageView an `appState` dependency — keep it a simple presentational view with `title` and `detail` strings
 - DO NOT hide the gauge sections when error states are active — gauges already handle disconnected state (grey "—")
 - DO NOT create action buttons in StatusMessageView — all recovery is automatic per architecture
-- DO NOT modify `cc-hdrm/cc-hdrm/cc_hdrm.entitlements` — protected file
+- DO NOT modify `cc-hdrm/cc_hdrm.entitlements` — protected file
 - DO NOT use `DispatchQueue` or timers — use existing countdownTick observation pattern for periodic refresh
 - DO NOT use `print()` — use `os.Logger` if logging is needed (shouldn't be in views)
 - DO NOT use deprecated `.foregroundColor()` — use `.foregroundStyle()` instead
@@ -244,8 +244,8 @@ claude-opus-4-5 (anthropic/claude-opus-4-5)
 
 ### File List
 
-- cc-hdrm/cc-hdrm/Views/StatusMessageView.swift (NEW)
-- cc-hdrm/cc-hdrm/Views/PopoverView.swift (MODIFIED)
-- cc-hdrm/cc-hdrmTests/Views/StatusMessageViewTests.swift (NEW)
-- cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift (MODIFIED)
+- cc-hdrm/Views/StatusMessageView.swift (NEW)
+- cc-hdrm/Views/PopoverView.swift (MODIFIED)
+- cc-hdrmTests/Views/StatusMessageViewTests.swift (NEW)
+- cc-hdrmTests/Views/PopoverViewTests.swift (MODIFIED)
 - _bmad-output/implementation-artifacts/sprint-status.yaml (MODIFIED)

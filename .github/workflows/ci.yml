@@ -16,11 +16,9 @@ jobs:
         run: brew install xcodegen
 
       - name: Generate Xcode project
-        working-directory: cc-hdrm
         run: xcodegen generate
 
       - name: Build
-        working-directory: cc-hdrm
         run: |
           xcodebuild \
             -project cc-hdrm.xcodeproj \
@@ -32,7 +30,6 @@ jobs:
             build
 
       - name: Test
-        working-directory: cc-hdrm
         run: |
           xcodebuild \
             -project cc-hdrm.xcodeproj \

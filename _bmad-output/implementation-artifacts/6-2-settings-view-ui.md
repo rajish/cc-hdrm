@@ -30,7 +30,7 @@ so that I can configure cc-hdrm's behavior without editing files.
 ## Tasks / Subtasks
 
 - [x] Task 1: Create SettingsView (AC: #2, #3, #5)
-  - [x] Create `cc-hdrm/cc-hdrm/Views/SettingsView.swift`
+  - [x] Create `cc-hdrm/Views/SettingsView.swift`
   - [x] Add warning threshold control (Stepper, range 6-50, step 1)
   - [x] Add critical threshold control (Stepper, range 1-49, step 1, must be < warning)
   - [x] Add poll interval Picker with discrete options: 10, 15, 30, 60, 120, 300 seconds
@@ -40,21 +40,21 @@ so that I can configure cc-hdrm's behavior without editing files.
   - [x] Bind all controls to PreferencesManager (passed as init parameter)
 
 - [x] Task 2: Update GearMenuView to add "Settings..." item (AC: #1)
-  - [x] Modify `cc-hdrm/cc-hdrm/Views/GearMenuView.swift` to accept a `preferencesManager: PreferencesManagerProtocol` parameter
+  - [x] Modify `cc-hdrm/Views/GearMenuView.swift` to accept a `preferencesManager: PreferencesManagerProtocol` parameter
   - [x] Add `@State private var showingSettings = false` for sheet presentation
   - [x] Add "Settings..." menu item above "Quit cc-hdrm"
   - [x] Present SettingsView as a `.sheet` when "Settings..." is selected
 
 - [x] Task 3: Update PopoverFooterView to pass PreferencesManager to GearMenuView (AC: #1)
-  - [x] Modify `cc-hdrm/cc-hdrm/Views/PopoverFooterView.swift` to accept `preferencesManager: PreferencesManagerProtocol`
+  - [x] Modify `cc-hdrm/Views/PopoverFooterView.swift` to accept `preferencesManager: PreferencesManagerProtocol`
   - [x] Pass `preferencesManager` through to `GearMenuView`
 
 - [x] Task 4: Update PopoverView to pass PreferencesManager to PopoverFooterView
-  - [x] Modify `cc-hdrm/cc-hdrm/Views/PopoverView.swift` to accept `preferencesManager: PreferencesManagerProtocol`
+  - [x] Modify `cc-hdrm/Views/PopoverView.swift` to accept `preferencesManager: PreferencesManagerProtocol`
   - [x] Pass through to `PopoverFooterView`
 
 - [x] Task 5: Wire PreferencesManager into PopoverView from AppDelegate
-  - [x] Modify `cc-hdrm/cc-hdrm/App/AppDelegate.swift` to store `preferencesManager` as instance property
+  - [x] Modify `cc-hdrm/App/AppDelegate.swift` to store `preferencesManager` as instance property
   - [x] Pass `preferencesManager` to `PopoverView` when constructing the NSHostingController
 
 - [x] Task 6: Add "Reset to Defaults" functionality (AC: #4)
@@ -180,11 +180,11 @@ Recommended: Let PreferencesManager handle validation (it already does this in s
 ### Previous Story Intelligence (6.1)
 
 **What was built:**
-- `PreferencesManager` class at `cc-hdrm/cc-hdrm/Services/PreferencesManager.swift` — UserDefaults wrapper with clamping validation
-- `PreferencesManagerProtocol` at `cc-hdrm/cc-hdrm/Services/PreferencesManagerProtocol.swift` — protocol with `{ get set }` properties + `resetToDefaults()`
+- `PreferencesManager` class at `cc-hdrm/Services/PreferencesManager.swift` — UserDefaults wrapper with clamping validation
+- `PreferencesManagerProtocol` at `cc-hdrm/Services/PreferencesManagerProtocol.swift` — protocol with `{ get set }` properties + `resetToDefaults()`
 - `PreferencesDefaults` enum — static default constants (warningThreshold: 20.0, criticalThreshold: 5.0, pollInterval: 30, launchAtLogin: false)
-- `MockPreferencesManager` at `cc-hdrm/cc-hdrmTests/Mocks/MockPreferencesManager.swift` — in-memory mock
-- PreferencesManager wired into AppDelegate at `cc-hdrm/cc-hdrm/App/AppDelegate.swift` line 67 as `let preferences = PreferencesManager()`
+- `MockPreferencesManager` at `cc-hdrmTests/Mocks/MockPreferencesManager.swift` — in-memory mock
+- PreferencesManager wired into AppDelegate at `cc-hdrm/App/AppDelegate.swift` line 67 as `let preferences = PreferencesManager()`
 - Currently `preferences` is a local variable in `applicationDidFinishLaunching` — needs to become an instance property for SettingsView access
 - NotificationService and PollingEngine already accept PreferencesManager and read from it each cycle
 - 301 tests passing, zero regressions
@@ -202,8 +202,8 @@ Files changed: PreferencesManager, PreferencesManagerProtocol, NotificationServi
 ### Project Structure Notes
 
 - Views follow `FooView.swift` naming pattern: `GearMenuView.swift`, `PopoverView.swift`, `PopoverFooterView.swift`
-- New file: `SettingsView.swift` goes in `cc-hdrm/cc-hdrm/Views/`
-- New test file: `SettingsViewTests.swift` goes in `cc-hdrm/cc-hdrmTests/Views/`
+- New file: `SettingsView.swift` goes in `cc-hdrm/Views/`
+- New test file: `SettingsViewTests.swift` goes in `cc-hdrmTests/Views/`
 - No `WindowState.swift` file exists separately — it's defined within `AppState.swift` or `Models/`
 - XcodeGen NOT used in this project (raw Xcode project) — new files must be added to the Xcode project manually or via Xcode
 
@@ -211,34 +211,34 @@ Files changed: PreferencesManager, PreferencesManagerProtocol, NotificationServi
 
 Files to CREATE:
 ```
-cc-hdrm/cc-hdrm/Views/SettingsView.swift              # NEW — preferences UI
-cc-hdrm/cc-hdrmTests/Views/SettingsViewTests.swift     # NEW — unit tests for settings view
+cc-hdrm/Views/SettingsView.swift              # NEW — preferences UI
+cc-hdrmTests/Views/SettingsViewTests.swift     # NEW — unit tests for settings view
 ```
 
 Files to MODIFY:
 ```
-cc-hdrm/cc-hdrm/Views/GearMenuView.swift              # MODIFY — add "Settings..." item, accept preferencesManager, present sheet
-cc-hdrm/cc-hdrm/Views/PopoverFooterView.swift         # MODIFY — accept and pass preferencesManager to GearMenuView
-cc-hdrm/cc-hdrm/Views/PopoverView.swift               # MODIFY — accept and pass preferencesManager to PopoverFooterView
-cc-hdrm/cc-hdrm/App/AppDelegate.swift                 # MODIFY — store preferencesManager as property, pass to PopoverView
-cc-hdrm/cc-hdrmTests/Views/GearMenuViewTests.swift     # MODIFY — update tests for new preferencesManager parameter
-cc-hdrm/cc-hdrmTests/Views/PopoverFooterViewTests.swift # MODIFY — update tests for new preferencesManager parameter
-cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift      # MODIFY — update tests for new preferencesManager parameter
-cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift        # MODIFY — verify preferencesManager passed to PopoverView
+cc-hdrm/Views/GearMenuView.swift              # MODIFY — add "Settings..." item, accept preferencesManager, present sheet
+cc-hdrm/Views/PopoverFooterView.swift         # MODIFY — accept and pass preferencesManager to GearMenuView
+cc-hdrm/Views/PopoverView.swift               # MODIFY — accept and pass preferencesManager to PopoverFooterView
+cc-hdrm/App/AppDelegate.swift                 # MODIFY — store preferencesManager as property, pass to PopoverView
+cc-hdrmTests/Views/GearMenuViewTests.swift     # MODIFY — update tests for new preferencesManager parameter
+cc-hdrmTests/Views/PopoverFooterViewTests.swift # MODIFY — update tests for new preferencesManager parameter
+cc-hdrmTests/Views/PopoverViewTests.swift      # MODIFY — update tests for new preferencesManager parameter
+cc-hdrmTests/App/AppDelegateTests.swift        # MODIFY — verify preferencesManager passed to PopoverView
 ```
 
 Files NOT to modify:
 ```
-cc-hdrm/cc-hdrm/cc_hdrm.entitlements  # PROTECTED — do not touch
-cc-hdrm/cc-hdrm/Services/PreferencesManager.swift       # No changes needed — already complete from 6.1
-cc-hdrm/cc-hdrm/Services/PreferencesManagerProtocol.swift # May need `: AnyObject` if not already — verify before modifying
+cc-hdrm/cc_hdrm.entitlements  # PROTECTED — do not touch
+cc-hdrm/Services/PreferencesManager.swift       # No changes needed — already complete from 6.1
+cc-hdrm/Services/PreferencesManagerProtocol.swift # May need `: AnyObject` if not already — verify before modifying
 ```
 
 ### Testing Requirements
 
 - **Framework:** Swift Testing (`@Test`, `#expect`, `@Suite`)
 - **`@MainActor`:** Required on all view tests (SwiftUI views are main-actor-bound)
-- **Mock strategy:** Use existing `MockPreferencesManager` from `cc-hdrm/cc-hdrmTests/Mocks/MockPreferencesManager.swift` — no new mock needed
+- **Mock strategy:** Use existing `MockPreferencesManager` from `cc-hdrmTests/Mocks/MockPreferencesManager.swift` — no new mock needed
 - **Key test scenarios:**
   - SettingsView renders without crash with MockPreferencesManager
   - GearMenuView renders without crash with MockPreferencesManager parameter
@@ -258,7 +258,7 @@ cc-hdrm/cc-hdrm/Services/PreferencesManagerProtocol.swift # May need `: AnyObjec
 - DO NOT use `@AppStorage` directly — bypasses PreferencesManager validation clamping
 - DO NOT duplicate validation logic in SettingsView — PreferencesManager handles all clamping/cross-validation
 - DO NOT write to AppState from SettingsView — preferences are a separate service concern
-- DO NOT modify `cc-hdrm/cc-hdrm/cc_hdrm.entitlements` — protected file
+- DO NOT modify `cc-hdrm/cc_hdrm.entitlements` — protected file
 - DO NOT implement actual SMAppService registration — that's Story 6.4; this story only persists the boolean
 - DO NOT use `DispatchQueue` or GCD — not needed for synchronous UserDefaults operations
 - DO NOT use `print()` — use `os.Logger` if any logging is needed
@@ -273,14 +273,14 @@ cc-hdrm/cc-hdrm/Services/PreferencesManagerProtocol.swift # May need `: AnyObjec
 - [Source: `_bmad-output/planning-artifacts/architecture.md` #Phase 2 Project Structure Additions] — SettingsView.swift location in Views/
 - [Source: `_bmad-output/planning-artifacts/ux-design-specification.md` lines 787-799] — GearMenu anatomy: "Settings..." above "Quit", SF Symbol gearshape
 - [Source: `_bmad-output/planning-artifacts/ux-design-specification.md` line 819] — Phase 2: GearMenu expansion for configurable thresholds, poll interval, launch at login
-- [Source: `cc-hdrm/cc-hdrm/Views/GearMenuView.swift`] — Current implementation: Menu with only "Quit cc-hdrm"
-- [Source: `cc-hdrm/cc-hdrm/Views/PopoverFooterView.swift`] — Uses GearMenuView(), needs preferencesManager passthrough
-- [Source: `cc-hdrm/cc-hdrm/Views/PopoverView.swift`] — Uses PopoverFooterView(appState:), needs preferencesManager passthrough
-- [Source: `cc-hdrm/cc-hdrm/App/AppDelegate.swift` line 55] — PopoverView construction in NSHostingController
-- [Source: `cc-hdrm/cc-hdrm/App/AppDelegate.swift` line 67] — PreferencesManager created as local `let preferences`
-- [Source: `cc-hdrm/cc-hdrm/Services/PreferencesManagerProtocol.swift`] — Protocol definition with get/set properties
-- [Source: `cc-hdrm/cc-hdrm/Services/PreferencesManager.swift`] — Full implementation with clamping validation
-- [Source: `cc-hdrm/cc-hdrmTests/Mocks/MockPreferencesManager.swift`] — Existing mock for test injection
+- [Source: `cc-hdrm/Views/GearMenuView.swift`] — Current implementation: Menu with only "Quit cc-hdrm"
+- [Source: `cc-hdrm/Views/PopoverFooterView.swift`] — Uses GearMenuView(), needs preferencesManager passthrough
+- [Source: `cc-hdrm/Views/PopoverView.swift`] — Uses PopoverFooterView(appState:), needs preferencesManager passthrough
+- [Source: `cc-hdrm/App/AppDelegate.swift` line 55] — PopoverView construction in NSHostingController
+- [Source: `cc-hdrm/App/AppDelegate.swift` line 67] — PreferencesManager created as local `let preferences`
+- [Source: `cc-hdrm/Services/PreferencesManagerProtocol.swift`] — Protocol definition with get/set properties
+- [Source: `cc-hdrm/Services/PreferencesManager.swift`] — Full implementation with clamping validation
+- [Source: `cc-hdrmTests/Mocks/MockPreferencesManager.swift`] — Existing mock for test injection
 - [Source: `_bmad-output/implementation-artifacts/6-1-preferences-manager-userdefaults-persistence.md`] — Previous story with PreferencesManager details
 
 ## Dev Agent Record
@@ -311,17 +311,17 @@ None required.
 ### File List
 
 Files CREATED:
-- cc-hdrm/cc-hdrm/Views/SettingsView.swift
-- cc-hdrm/cc-hdrmTests/Views/SettingsViewTests.swift
+- cc-hdrm/Views/SettingsView.swift
+- cc-hdrmTests/Views/SettingsViewTests.swift
 
 Files MODIFIED:
-- cc-hdrm/cc-hdrm/Views/GearMenuView.swift — added preferencesManager param, Settings... item, .sheet presentation
-- cc-hdrm/cc-hdrm/Views/PopoverFooterView.swift — added preferencesManager param, passed to GearMenuView
-- cc-hdrm/cc-hdrm/Views/PopoverView.swift — added preferencesManager param, passed to PopoverFooterView
-- cc-hdrm/cc-hdrm/App/AppDelegate.swift — stored preferencesManager as internal property, passed to PopoverView
-- cc-hdrm/cc-hdrm/Services/PreferencesManagerProtocol.swift — added `: AnyObject` constraint
-- cc-hdrm/cc-hdrmTests/Views/GearMenuViewTests.swift — updated constructors with MockPreferencesManager
-- cc-hdrm/cc-hdrmTests/Views/PopoverFooterViewTests.swift — updated constructors with MockPreferencesManager
-- cc-hdrm/cc-hdrmTests/Views/PopoverViewTests.swift — updated constructors with MockPreferencesManager
-- cc-hdrm/cc-hdrmTests/App/AppDelegateTests.swift — added 2 PreferencesManager wiring tests
+- cc-hdrm/Views/GearMenuView.swift — added preferencesManager param, Settings... item, .sheet presentation
+- cc-hdrm/Views/PopoverFooterView.swift — added preferencesManager param, passed to GearMenuView
+- cc-hdrm/Views/PopoverView.swift — added preferencesManager param, passed to PopoverFooterView
+- cc-hdrm/App/AppDelegate.swift — stored preferencesManager as internal property, passed to PopoverView
+- cc-hdrm/Services/PreferencesManagerProtocol.swift — added `: AnyObject` constraint
+- cc-hdrmTests/Views/GearMenuViewTests.swift — updated constructors with MockPreferencesManager
+- cc-hdrmTests/Views/PopoverFooterViewTests.swift — updated constructors with MockPreferencesManager
+- cc-hdrmTests/Views/PopoverViewTests.swift — updated constructors with MockPreferencesManager
+- cc-hdrmTests/App/AppDelegateTests.swift — added 2 PreferencesManager wiring tests
 - _bmad-output/implementation-artifacts/sprint-status.yaml — updated 6-2-settings-view-ui status

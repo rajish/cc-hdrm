@@ -26,13 +26,13 @@ so that I get alerted at the headroom levels that matter for my workflow.
   - [x] Add `reevaluateThresholds()` method to NotificationServiceProtocol that forces a re-evaluation using current AppState headroom values
 
 - [x] Task 2: Implement immediate re-evaluation in NotificationService (AC: #3)
-  - [x] Add `reevaluateThresholds()` to `cc-hdrm/cc-hdrm/Services/NotificationService.swift` that reads current headroom from AppState and calls `evaluateThresholds`
+  - [x] Add `reevaluateThresholds()` to `cc-hdrm/Services/NotificationService.swift` that reads current headroom from AppState and calls `evaluateThresholds`
   - [x] Ensure re-arming logic in `evaluateThresholds` (lines 38-58) correctly handles mid-session threshold changes
   - [x] If headroom is above new warning threshold and state is `warned20` or `warned5`, reset to `aboveWarning`
   - [x] If headroom is below new threshold and state is `aboveWarning`, fire the appropriate notification
 
 - [x] Task 3: Connect SettingsView to trigger re-evaluation (AC: #1, #2, #3)
-  - [x] In `cc-hdrm/cc-hdrm/Views/SettingsView.swift`, after writing threshold changes to PreferencesManager, call the re-evaluation trigger
+  - [x] In `cc-hdrm/Views/SettingsView.swift`, after writing threshold changes to PreferencesManager, call the re-evaluation trigger
   - [x] Consider approach: SettingsView needs access to NotificationService (or a callback/closure) to trigger re-evaluation
   - [x] Evaluate threading: SettingsView is on MainActor, NotificationService is @MainActor — direct call is safe
 
@@ -103,7 +103,7 @@ let onThresholdChange = { [notificationService, appState] in
 ### Previous Story Intelligence (6.2)
 
 **What was built:**
-- `SettingsView.swift` at `cc-hdrm/cc-hdrm/Views/SettingsView.swift` — Stepper controls for warning (6-50%) and critical (1-49%) thresholds
+- `SettingsView.swift` at `cc-hdrm/Views/SettingsView.swift` — Stepper controls for warning (6-50%) and critical (1-49%) thresholds
 - onChange pattern: writes to PreferencesManager, re-reads both thresholds to handle clamping/reset
 - `isUpdating` guard prevents re-entrant onChange loops
 - PreferencesManager threaded through: AppDelegate → PopoverView → PopoverFooterView → GearMenuView → SettingsView (via .sheet)
@@ -143,27 +143,27 @@ This is a critical testing gap that story 6.3 must fill.
 
 - No new files expected — this story modifies existing files
 - If `reevaluateThresholds()` is added, it goes in `NotificationService.swift` and `NotificationServiceProtocol.swift`
-- Test additions go in `cc-hdrm/cc-hdrmTests/Services/ThresholdStateMachineTests.swift`
+- Test additions go in `cc-hdrmTests/Services/ThresholdStateMachineTests.swift`
 
 ### File Structure Requirements
 
 Files to MODIFY:
 ```
-cc-hdrm/cc-hdrm/Services/NotificationService.swift           # MODIFY — add reevaluateThresholds() method
-cc-hdrm/cc-hdrm/Services/NotificationServiceProtocol.swift   # MODIFY — add reevaluateThresholds() to protocol
-cc-hdrm/cc-hdrm/Views/SettingsView.swift                     # MODIFY — trigger re-evaluation on threshold change
-cc-hdrm/cc-hdrm/Views/GearMenuView.swift                     # MODIFY — pass re-evaluation callback or notificationService through
-cc-hdrm/cc-hdrm/Views/PopoverFooterView.swift                # MODIFY — pass re-evaluation callback through
-cc-hdrm/cc-hdrm/Views/PopoverView.swift                      # MODIFY — pass re-evaluation callback through
-cc-hdrm/cc-hdrm/App/AppDelegate.swift                        # MODIFY — wire re-evaluation closure/service to PopoverView
-cc-hdrm/cc-hdrmTests/Services/ThresholdStateMachineTests.swift # MODIFY — add tests for custom thresholds and re-arming
+cc-hdrm/Services/NotificationService.swift           # MODIFY — add reevaluateThresholds() method
+cc-hdrm/Services/NotificationServiceProtocol.swift   # MODIFY — add reevaluateThresholds() to protocol
+cc-hdrm/Views/SettingsView.swift                     # MODIFY — trigger re-evaluation on threshold change
+cc-hdrm/Views/GearMenuView.swift                     # MODIFY — pass re-evaluation callback or notificationService through
+cc-hdrm/Views/PopoverFooterView.swift                # MODIFY — pass re-evaluation callback through
+cc-hdrm/Views/PopoverView.swift                      # MODIFY — pass re-evaluation callback through
+cc-hdrm/App/AppDelegate.swift                        # MODIFY — wire re-evaluation closure/service to PopoverView
+cc-hdrmTests/Services/ThresholdStateMachineTests.swift # MODIFY — add tests for custom thresholds and re-arming
 ```
 
 Files NOT to modify:
 ```
-cc-hdrm/cc-hdrm/cc_hdrm.entitlements                         # PROTECTED — do not touch
-cc-hdrm/cc-hdrm/Services/PreferencesManager.swift            # No changes needed — already complete from 6.1
-cc-hdrm/cc-hdrm/Services/PreferencesManagerProtocol.swift    # No changes needed
+cc-hdrm/cc_hdrm.entitlements                         # PROTECTED — do not touch
+cc-hdrm/Services/PreferencesManager.swift            # No changes needed — already complete from 6.1
+cc-hdrm/Services/PreferencesManagerProtocol.swift    # No changes needed
 ```
 
 ### Testing Requirements
@@ -190,7 +190,7 @@ cc-hdrm/cc-hdrm/Services/PreferencesManagerProtocol.swift    # No changes needed
 - DO NOT duplicate threshold validation in SettingsView or NotificationService — PreferencesManager handles all clamping
 - DO NOT store threshold values separately from PreferencesManager — always read fresh
 - DO NOT bypass the existing re-arming logic in evaluateThresholds — extend it, don't replace it
-- DO NOT modify `cc-hdrm/cc-hdrm/cc_hdrm.entitlements` — protected file
+- DO NOT modify `cc-hdrm/cc_hdrm.entitlements` — protected file
 - DO NOT change notification content format — only threshold VALUES change
 - DO NOT use `DispatchQueue` or GCD — structured concurrency only
 - DO NOT use `print()` — use `os.Logger`
@@ -201,16 +201,16 @@ cc-hdrm/cc-hdrm/Services/PreferencesManagerProtocol.swift    # No changes needed
 
 - [Source: `_bmad-output/planning-artifacts/epics.md` #Story 6.3] — Full acceptance criteria for Configurable Notification Thresholds
 - [Source: `_bmad-output/planning-artifacts/architecture.md` #Settings Persistence] — Hot-reconfigurable preference reads
-- [Source: `cc-hdrm/cc-hdrm/Services/NotificationService.swift` lines 33-58] — evaluateThresholds with threshold change detection and re-arming
-- [Source: `cc-hdrm/cc-hdrm/Services/NotificationService.swift` lines 103-133] — evaluateWindow pure state machine with configurable threshold params
-- [Source: `cc-hdrm/cc-hdrm/Services/NotificationService.swift` lines 27-28] — lastWarningThreshold/lastCriticalThreshold init
-- [Source: `cc-hdrm/cc-hdrm/Services/NotificationServiceProtocol.swift` lines 1-10] — ThresholdState enum
-- [Source: `cc-hdrm/cc-hdrm/Services/PreferencesManager.swift` lines 28-92] — warningThreshold/criticalThreshold getters/setters with cross-validation
-- [Source: `cc-hdrm/cc-hdrm/Views/SettingsView.swift` lines 33-75] — Threshold stepper controls with onChange pattern
-- [Source: `cc-hdrm/cc-hdrm/Views/SettingsView.swift` lines 43-51] — onChange writes to PreferencesManager, re-reads both values
-- [Source: `cc-hdrm/cc-hdrmTests/Services/ThresholdStateMachineTests.swift`] — 614 lines of existing threshold tests (no re-arming tests yet)
-- [Source: `cc-hdrm/cc-hdrmTests/Mocks/MockPreferencesManager.swift`] — In-memory mock for test injection
-- [Source: `cc-hdrm/cc-hdrmTests/Mocks/SpyNotificationCenter.swift`] — Spy for notification delivery verification
+- [Source: `cc-hdrm/Services/NotificationService.swift` lines 33-58] — evaluateThresholds with threshold change detection and re-arming
+- [Source: `cc-hdrm/Services/NotificationService.swift` lines 103-133] — evaluateWindow pure state machine with configurable threshold params
+- [Source: `cc-hdrm/Services/NotificationService.swift` lines 27-28] — lastWarningThreshold/lastCriticalThreshold init
+- [Source: `cc-hdrm/Services/NotificationServiceProtocol.swift` lines 1-10] — ThresholdState enum
+- [Source: `cc-hdrm/Services/PreferencesManager.swift` lines 28-92] — warningThreshold/criticalThreshold getters/setters with cross-validation
+- [Source: `cc-hdrm/Views/SettingsView.swift` lines 33-75] — Threshold stepper controls with onChange pattern
+- [Source: `cc-hdrm/Views/SettingsView.swift` lines 43-51] — onChange writes to PreferencesManager, re-reads both values
+- [Source: `cc-hdrmTests/Services/ThresholdStateMachineTests.swift`] — 614 lines of existing threshold tests (no re-arming tests yet)
+- [Source: `cc-hdrmTests/Mocks/MockPreferencesManager.swift`] — In-memory mock for test injection
+- [Source: `cc-hdrmTests/Mocks/SpyNotificationCenter.swift`] — Spy for notification delivery verification
 - [Source: `_bmad-output/implementation-artifacts/6-1-preferences-manager-userdefaults-persistence.md`] — PreferencesManager details, threshold re-arming design
 - [Source: `_bmad-output/implementation-artifacts/6-2-settings-view-ui.md`] — SettingsView binding pattern, view hierarchy wiring
 - [Source: `_bmad-output/planning-artifacts/project-context.md`] — Architecture overview, coding patterns
@@ -244,14 +244,14 @@ None — clean implementation, no debugging required.
 
 ### File List
 
-- `cc-hdrm/cc-hdrm/Services/NotificationService.swift` — added `weak var appState`, `reevaluateThresholds()` method
-- `cc-hdrm/cc-hdrm/Services/NotificationServiceProtocol.swift` — added `reevaluateThresholds()` to protocol
-- `cc-hdrm/cc-hdrm/Views/SettingsView.swift` — added `onThresholdChange` closure, called from threshold `.onChange` and Reset
-- `cc-hdrm/cc-hdrm/Views/GearMenuView.swift` — added `onThresholdChange` pass-through, forwarded to SettingsView
-- `cc-hdrm/cc-hdrm/Views/PopoverFooterView.swift` — added `onThresholdChange` pass-through to GearMenuView
-- `cc-hdrm/cc-hdrm/Views/PopoverView.swift` — added `onThresholdChange` pass-through to PopoverFooterView
-- `cc-hdrm/cc-hdrm/App/AppDelegate.swift` — wired `onThresholdChange` closure calling `notificationService.reevaluateThresholds()`, set `appState` on NotificationService
-- `cc-hdrm/cc-hdrmTests/Services/ThresholdStateMachineTests.swift` — added 11 tests for custom thresholds, re-arming, reevaluateThresholds
-- `cc-hdrm/cc-hdrmTests/Mocks/MockNotificationService.swift` — added `reevaluateThresholds()` stub + call counter
+- `cc-hdrm/Services/NotificationService.swift` — added `weak var appState`, `reevaluateThresholds()` method
+- `cc-hdrm/Services/NotificationServiceProtocol.swift` — added `reevaluateThresholds()` to protocol
+- `cc-hdrm/Views/SettingsView.swift` — added `onThresholdChange` closure, called from threshold `.onChange` and Reset
+- `cc-hdrm/Views/GearMenuView.swift` — added `onThresholdChange` pass-through, forwarded to SettingsView
+- `cc-hdrm/Views/PopoverFooterView.swift` — added `onThresholdChange` pass-through to GearMenuView
+- `cc-hdrm/Views/PopoverView.swift` — added `onThresholdChange` pass-through to PopoverFooterView
+- `cc-hdrm/App/AppDelegate.swift` — wired `onThresholdChange` closure calling `notificationService.reevaluateThresholds()`, set `appState` on NotificationService
+- `cc-hdrmTests/Services/ThresholdStateMachineTests.swift` — added 11 tests for custom thresholds, re-arming, reevaluateThresholds
+- `cc-hdrmTests/Mocks/MockNotificationService.swift` — added `reevaluateThresholds()` stub + call counter
 - `_bmad-output/implementation-artifacts/sprint-status.yaml` — story status updated to done
-- `cc-hdrm/cc-hdrmTests/Views/SettingsViewTests.swift` — added onThresholdChange closure acceptance test (code review fix)
+- `cc-hdrmTests/Views/SettingsViewTests.swift` — added onThresholdChange closure acceptance test (code review fix)

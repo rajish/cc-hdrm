@@ -278,28 +278,28 @@ claude-opus-4-5
 
 ### File List
 
-- cc-hdrm/project.yml (XcodeGen spec)
+- project.yml (XcodeGen spec)
 - cc-hdrm/.gitignore
-- cc-hdrm/cc-hdrm/Info.plist
-- cc-hdrm/cc-hdrm/cc_hdrm.entitlements
-- cc-hdrm/cc-hdrm/App/cc_hdrmApp.swift
-- cc-hdrm/cc-hdrm/App/AppDelegate.swift
-- cc-hdrm/cc-hdrm/Models/HeadroomState.swift
-- cc-hdrm/cc-hdrm/Models/AppError.swift
-- cc-hdrm/cc-hdrm/State/AppState.swift
-- cc-hdrm/cc-hdrm/Services/.gitkeep
-- cc-hdrm/cc-hdrm/Views/.gitkeep
-- cc-hdrm/cc-hdrm/Extensions/.gitkeep
-- cc-hdrm/cc-hdrm/Resources/Assets.xcassets/Contents.json
-- cc-hdrm/cc-hdrm/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json
-- cc-hdrm/cc-hdrm/Resources/Assets.xcassets/AccentColor.colorset/Contents.json
-- cc-hdrm/cc-hdrm/Resources/Assets.xcassets/HeadroomColors/Contents.json
-- cc-hdrm/cc-hdrm/Resources/Assets.xcassets/HeadroomColors/HeadroomNormal.colorset/Contents.json
-- cc-hdrm/cc-hdrm/Resources/Assets.xcassets/HeadroomColors/HeadroomCaution.colorset/Contents.json
-- cc-hdrm/cc-hdrm/Resources/Assets.xcassets/HeadroomColors/HeadroomWarning.colorset/Contents.json
-- cc-hdrm/cc-hdrm/Resources/Assets.xcassets/HeadroomColors/HeadroomCritical.colorset/Contents.json
-- cc-hdrm/cc-hdrm/Resources/Assets.xcassets/HeadroomColors/HeadroomExhausted.colorset/Contents.json
-- cc-hdrm/cc-hdrm/Resources/Assets.xcassets/HeadroomColors/Disconnected.colorset/Contents.json
+- cc-hdrm/Info.plist
+- cc-hdrm/cc_hdrm.entitlements
+- cc-hdrm/App/cc_hdrmApp.swift
+- cc-hdrm/App/AppDelegate.swift
+- cc-hdrm/Models/HeadroomState.swift
+- cc-hdrm/Models/AppError.swift
+- cc-hdrm/State/AppState.swift
+- cc-hdrm/Services/.gitkeep
+- cc-hdrm/Views/.gitkeep
+- cc-hdrm/Extensions/.gitkeep
+- cc-hdrm/Resources/Assets.xcassets/Contents.json
+- cc-hdrm/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json
+- cc-hdrm/Resources/Assets.xcassets/AccentColor.colorset/Contents.json
+- cc-hdrm/Resources/Assets.xcassets/HeadroomColors/Contents.json
+- cc-hdrm/Resources/Assets.xcassets/HeadroomColors/HeadroomNormal.colorset/Contents.json
+- cc-hdrm/Resources/Assets.xcassets/HeadroomColors/HeadroomCaution.colorset/Contents.json
+- cc-hdrm/Resources/Assets.xcassets/HeadroomColors/HeadroomWarning.colorset/Contents.json
+- cc-hdrm/Resources/Assets.xcassets/HeadroomColors/HeadroomCritical.colorset/Contents.json
+- cc-hdrm/Resources/Assets.xcassets/HeadroomColors/HeadroomExhausted.colorset/Contents.json
+- cc-hdrm/Resources/Assets.xcassets/HeadroomColors/Disconnected.colorset/Contents.json
 - cc-hdrmTests/Models/HeadroomStateTests.swift
 - cc-hdrmTests/Services/.gitkeep
 - cc-hdrmTests/State/AppStateTests.swift
