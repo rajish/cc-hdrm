@@ -5,6 +5,7 @@ import SwiftUI
 struct SettingsView: View {
     let preferencesManager: PreferencesManagerProtocol
     var onDone: (() -> Void)?
+    var onThresholdChange: (() -> Void)?
 
     @State private var warningThreshold: Double
     @State private var criticalThreshold: Double
@@ -15,9 +16,10 @@ struct SettingsView: View {
     /// Discrete poll interval options per AC #2.
     private static let pollIntervalOptions: [TimeInterval] = [10, 15, 30, 60, 120, 300]
 
-    init(preferencesManager: PreferencesManagerProtocol, onDone: (() -> Void)? = nil) {
+    init(preferencesManager: PreferencesManagerProtocol, onDone: (() -> Void)? = nil, onThresholdChange: (() -> Void)? = nil) {
         self.preferencesManager = preferencesManager
         self.onDone = onDone
+        self.onThresholdChange = onThresholdChange
         _warningThreshold = State(initialValue: preferencesManager.warningThreshold)
         _criticalThreshold = State(initialValue: preferencesManager.criticalThreshold)
         _pollInterval = State(initialValue: preferencesManager.pollInterval)
@@ -48,6 +50,7 @@ struct SettingsView: View {
                     warningThreshold = preferencesManager.warningThreshold
                     criticalThreshold = preferencesManager.criticalThreshold
                     isUpdating = false
+                    onThresholdChange?()
                 }
                 .accessibilityLabel("Warning notification threshold, \(Int(warningThreshold)) percent")
             }
@@ -70,6 +73,7 @@ struct SettingsView: View {
                     warningThreshold = preferencesManager.warningThreshold
                     criticalThreshold = preferencesManager.criticalThreshold
                     isUpdating = false
+                    onThresholdChange?()
                 }
                 .accessibilityLabel("Critical notification threshold, \(Int(criticalThreshold)) percent")
             }
@@ -116,6 +120,7 @@ struct SettingsView: View {
                     criticalThreshold = preferencesManager.criticalThreshold
                     pollInterval = preferencesManager.pollInterval
                     launchAtLogin = preferencesManager.launchAtLogin
+                    onThresholdChange?()
                 }
                 .accessibilityLabel("Reset all settings to default values")
                 Spacer()

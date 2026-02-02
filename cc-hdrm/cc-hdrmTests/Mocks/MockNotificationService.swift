@@ -7,6 +7,7 @@ final class MockNotificationService: NotificationServiceProtocol {
     var fiveHourThresholdState: ThresholdState = .aboveWarning
     var sevenDayThresholdState: ThresholdState = .aboveWarning
     var evaluateThresholdsCalls: [(fiveHour: WindowState?, sevenDay: WindowState?)] = []
+    var reevaluateThresholdsCallCount = 0
 
     func requestAuthorization() async {
         requestAuthorizationCallCount += 1
@@ -14,5 +15,9 @@ final class MockNotificationService: NotificationServiceProtocol {
 
     func evaluateThresholds(fiveHour: WindowState?, sevenDay: WindowState?) async {
         evaluateThresholdsCalls.append((fiveHour: fiveHour, sevenDay: sevenDay))
+    }
+
+    func reevaluateThresholds() async {
+        reevaluateThresholdsCallCount += 1
     }
 }

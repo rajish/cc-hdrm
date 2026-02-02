@@ -5,6 +5,7 @@ import SwiftUI
 struct PopoverView: View {
     let appState: AppState
     let preferencesManager: PreferencesManagerProtocol
+    var onThresholdChange: (() -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,7 +31,7 @@ struct PopoverView: View {
 
             Divider()
 
-            PopoverFooterView(appState: appState, preferencesManager: preferencesManager)
+            PopoverFooterView(appState: appState, preferencesManager: preferencesManager, onThresholdChange: onThresholdChange)
                 .padding(.horizontal)
                 .padding(.vertical, 8)
         }

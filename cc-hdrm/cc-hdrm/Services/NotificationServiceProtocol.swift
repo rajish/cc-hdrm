@@ -22,6 +22,11 @@ protocol NotificationServiceProtocol: Sendable {
     /// Evaluates headroom thresholds for both windows and fires notifications on crossings.
     func evaluateThresholds(fiveHour: WindowState?, sevenDay: WindowState?) async
 
+    /// Forces immediate re-evaluation of thresholds using current AppState headroom values.
+    /// Called when the user changes threshold preferences to provide instant feedback
+    /// instead of waiting for the next poll cycle (up to 30s).
+    func reevaluateThresholds() async
+
     /// Current threshold state for 5-hour window (read-only, for testing).
     var fiveHourThresholdState: ThresholdState { get }
     /// Current threshold state for 7-day window (read-only, for testing).

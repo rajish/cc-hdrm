@@ -58,7 +58,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let pop = NSPopover()
         pop.contentSize = NSSize(width: 220, height: 0) // width hint only; SwiftUI determines height
         pop.behavior = .transient
-        pop.contentViewController = NSHostingController(rootView: PopoverView(appState: state, preferencesManager: preferences))
+        // Task wrapper required: onThresholdChange is a synchronous closure (called from SwiftUI
+        // .onChange), but reevaluateThresholds() is async — Task bridges sync→async context.
+        pop.contentViewController = NSHostingController(rootView: PopoverView(appState: state, preferencesManager: preferences, onThresholdChange: { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in
+                await self.notificationService?.reevaluateThresholds()
+            }
+        }))
         pop.animates = true
         self.popover = pop
 
@@ -83,7 +90,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Create NotificationService if not already injected (test path)
         if notificationService == nil {
-            notificationService = NotificationService(preferencesManager: preferences)
+            let ns = NotificationService(preferencesManager: preferences)
+            ns.appState = state
+            notificationService = ns
         }
 
         // Create PollingEngine with production services if not already injected (test path)

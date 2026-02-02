@@ -5,6 +5,7 @@ import SwiftUI
 struct PopoverFooterView: View {
     let appState: AppState
     let preferencesManager: PreferencesManagerProtocol
+    var onThresholdChange: (() -> Void)?
 
     var body: some View {
         // Access countdownTick to register observation for periodic re-renders
@@ -24,7 +25,7 @@ struct PopoverFooterView: View {
             Spacer()
 
             // Right: gear menu (AC #3)
-            GearMenuView(preferencesManager: preferencesManager)
+            GearMenuView(preferencesManager: preferencesManager, onThresholdChange: onThresholdChange)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)

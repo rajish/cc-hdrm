@@ -610,4 +610,239 @@ struct ThresholdStateMachineTests {
         #expect(!content.body.contains("resets in"))
         #expect(content.sound == .default)
     }
+
+    // MARK: - Story 6.3: Configurable Notification Thresholds
+
+    @Test("Custom 30% warning threshold fires at 29% instead of default 20% (AC #1)")
+    @MainActor
+    func customWarningThresholdFiresAtCustomLevel() async {
+        let spy = SpyNotificationCenter()
+        let prefs = MockPreferencesManager()
+        prefs.warningThreshold = 30
+        prefs.criticalThreshold = 10
+        let service = NotificationService(notificationCenter: spy, preferencesManager: prefs)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        // headroom 29% (utilization 71%) — below custom 30%, should fire warning
+        await service.evaluateThresholds(fiveHour: windowState(utilization: 71), sevenDay: nil)
+        #expect(service.fiveHourThresholdState == .warned20)
+        #expect(spy.addedRequests.count == 1)
+        #expect(spy.addedRequests[0].identifier == "headroom-warning-5h")
+    }
+
+    @Test("Custom 10% critical threshold fires at 9% instead of default 5% (AC #2)")
+    @MainActor
+    func customCriticalThresholdFiresAtCustomLevel() async {
+        let spy = SpyNotificationCenter()
+        let prefs = MockPreferencesManager()
+        prefs.warningThreshold = 30
+        prefs.criticalThreshold = 10
+        let service = NotificationService(notificationCenter: spy, preferencesManager: prefs)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        // First cross warning at 29%
+        await service.evaluateThresholds(fiveHour: windowState(utilization: 71), sevenDay: nil)
+        #expect(service.fiveHourThresholdState == .warned20)
+
+        // Now cross critical at 9% (utilization 91%)
+        await service.evaluateThresholds(fiveHour: windowState(utilization: 91), sevenDay: nil)
+        #expect(service.fiveHourThresholdState == .warned5)
+        #expect(spy.addedRequests.count == 2)
+        #expect(spy.addedRequests[1].identifier == "headroom-critical-5h")
+        #expect(spy.addedRequests[1].content.sound == .default)
+    }
+
+    @Test("Threshold change from 20/5 to 30/10 while headroom is 25% — state re-arms (AC #3)")
+    @MainActor
+    func thresholdChangeRearmsWhenAboveNewThreshold() async {
+        let spy = SpyNotificationCenter()
+        let prefs = MockPreferencesManager()
+        // Start with defaults (20/5)
+        let service = NotificationService(notificationCenter: spy, preferencesManager: prefs)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        // Cross below 20% — headroom 18% (utilization 82%)
+        await service.evaluateThresholds(fiveHour: windowState(utilization: 82), sevenDay: nil)
+        #expect(service.fiveHourThresholdState == .warned20)
+        #expect(spy.addedRequests.count == 1)
+
+        // Now change thresholds to 30/10 while headroom is 25% (utilization 75%)
+        // headroom 25% >= new warning 30%? No, 25% < 30%, so should NOT re-arm
+        prefs.warningThreshold = 30
+        prefs.criticalThreshold = 10
+        await service.evaluateThresholds(fiveHour: windowState(utilization: 75), sevenDay: nil)
+        // 25% < 30%, state stays warned20
+        #expect(service.fiveHourThresholdState == .warned20)
+    }
+
+    @Test("Threshold change re-arms when headroom >= new warning threshold (AC #3)")
+    @MainActor
+    func thresholdChangeRearmsWhenHeadroomAboveNewWarning() async {
+        let spy = SpyNotificationCenter()
+        let prefs = MockPreferencesManager()
+        // Start with defaults (20/5)
+        let service = NotificationService(notificationCenter: spy, preferencesManager: prefs)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        // Cross below 20% — headroom 18% (utilization 82%)
+        await service.evaluateThresholds(fiveHour: windowState(utilization: 82), sevenDay: nil)
+        #expect(service.fiveHourThresholdState == .warned20)
+        #expect(spy.addedRequests.count == 1)
+
+        // Change thresholds to 10/3, headroom still 18% which is >= 10%
+        prefs.warningThreshold = 10
+        prefs.criticalThreshold = 3
+        await service.evaluateThresholds(fiveHour: windowState(utilization: 82), sevenDay: nil)
+        // 18% >= 10% new warning → re-arms to aboveWarning
+        #expect(service.fiveHourThresholdState == .aboveWarning)
+    }
+
+    @Test("Threshold change fires notification when headroom below new threshold and state is aboveWarning (AC #3)")
+    @MainActor
+    func thresholdChangeFiresWhenBelowNewThreshold() async {
+        let spy = SpyNotificationCenter()
+        let prefs = MockPreferencesManager()
+        prefs.warningThreshold = 10
+        prefs.criticalThreshold = 3
+        let service = NotificationService(notificationCenter: spy, preferencesManager: prefs)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        // Headroom 15% — above 10% warning, state aboveWarning
+        await service.evaluateThresholds(fiveHour: windowState(utilization: 85), sevenDay: nil)
+        #expect(service.fiveHourThresholdState == .aboveWarning)
+        #expect(spy.addedRequests.count == 0)
+
+        // Now change threshold to 30/10, headroom still 15% — 15% < 30% → fire warning
+        prefs.warningThreshold = 30
+        prefs.criticalThreshold = 10
+        await service.evaluateThresholds(fiveHour: windowState(utilization: 85), sevenDay: nil)
+        #expect(service.fiveHourThresholdState == .warned20)
+        #expect(spy.addedRequests.count == 1)
+        #expect(spy.addedRequests[0].identifier == "headroom-warning-5h")
+    }
+
+    @Test("Both 5h and 7d windows independently use custom thresholds")
+    @MainActor
+    func bothWindowsUseCustomThresholds() async {
+        let spy = SpyNotificationCenter()
+        let prefs = MockPreferencesManager()
+        prefs.warningThreshold = 30
+        prefs.criticalThreshold = 10
+        let service = NotificationService(notificationCenter: spy, preferencesManager: prefs)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        // 5h headroom 29% (below 30%), 7d headroom 50% (above 30%)
+        await service.evaluateThresholds(
+            fiveHour: windowState(utilization: 71),
+            sevenDay: windowState(utilization: 50)
+        )
+        #expect(service.fiveHourThresholdState == .warned20)
+        #expect(service.sevenDayThresholdState == .aboveWarning)
+        #expect(spy.addedRequests.count == 1)
+        #expect(spy.addedRequests[0].identifier == "headroom-warning-5h")
+
+        // Now 7d also drops below 30%
+        await service.evaluateThresholds(
+            fiveHour: windowState(utilization: 71),
+            sevenDay: windowState(utilization: 75) // headroom 25%
+        )
+        #expect(service.sevenDayThresholdState == .warned20)
+        #expect(spy.addedRequests.count == 2)
+        #expect(spy.addedRequests[1].identifier == "headroom-warning-7d")
+    }
+
+    @Test("reevaluateThresholds() fires notification when headroom is below new threshold with state aboveWarning")
+    @MainActor
+    func reevaluateThresholdsFiresNotification() async {
+        let spy = SpyNotificationCenter()
+        let prefs = MockPreferencesManager()
+        prefs.warningThreshold = 10
+        prefs.criticalThreshold = 3
+        let service = NotificationService(notificationCenter: spy, preferencesManager: prefs)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        let appState = AppState()
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 85, resetsAt: Date().addingTimeInterval(3600)), // headroom 15%
+            sevenDay: nil
+        )
+        service.appState = appState
+
+        // With 10% warning, headroom 15% is above — no notification
+        await service.reevaluateThresholds()
+        #expect(service.fiveHourThresholdState == .aboveWarning)
+        #expect(spy.addedRequests.count == 0)
+
+        // Change warning to 30% and re-evaluate — headroom 15% < 30% → fire
+        prefs.warningThreshold = 30
+        prefs.criticalThreshold = 10
+        await service.reevaluateThresholds()
+        #expect(service.fiveHourThresholdState == .warned20)
+        #expect(spy.addedRequests.count == 1)
+        #expect(spy.addedRequests[0].identifier == "headroom-warning-5h")
+    }
+
+    @Test("reevaluateThresholds() with nil appState does not crash")
+    @MainActor
+    func reevaluateThresholdsNilAppState() async {
+        let service = NotificationService()
+        // appState is nil by default
+        await service.reevaluateThresholds()
+        #expect(service.fiveHourThresholdState == .aboveWarning)
+    }
+
+    @Test("evaluateWindow with custom thresholds: aboveWarning + headroom 29% with 30/10 → warned20")
+    @MainActor
+    func evaluateWindowCustomThresholds() {
+        let service = NotificationService()
+        let (state, fireWarning, fireCritical) = service.evaluateWindow(
+            currentState: .aboveWarning,
+            headroom: 29,
+            warningThreshold: 30,
+            criticalThreshold: 10
+        )
+        #expect(state == .warned20)
+        #expect(fireWarning == true)
+        #expect(fireCritical == false)
+    }
+
+    @Test("evaluateWindow with custom thresholds: warned20 + headroom 9% with 30/10 → warned5, critical fires")
+    @MainActor
+    func evaluateWindowCustomCritical() {
+        let service = NotificationService()
+        let (state, fireWarning, fireCritical) = service.evaluateWindow(
+            currentState: .warned20,
+            headroom: 9,
+            warningThreshold: 30,
+            criticalThreshold: 10
+        )
+        #expect(state == .warned5)
+        #expect(fireWarning == false)
+        #expect(fireCritical == true)
+    }
+
+    @Test("Threshold change from 20/5 to 10/3 while headroom 15% and state warned20 — re-arms since 15% >= 10%")
+    @MainActor
+    func thresholdLoweringRearmsWarned20() async {
+        let prefs = MockPreferencesManager()
+        let service = NotificationService(preferencesManager: prefs)
+
+        // Cross below 20% — headroom 15%
+        await service.evaluateThresholds(fiveHour: windowState(utilization: 85), sevenDay: nil)
+        #expect(service.fiveHourThresholdState == .warned20)
+
+        // Lower thresholds to 10/3
+        prefs.warningThreshold = 10
+        prefs.criticalThreshold = 3
+        await service.evaluateThresholds(fiveHour: windowState(utilization: 85), sevenDay: nil)
+        // 15% >= 10% → re-arms
+        #expect(service.fiveHourThresholdState == .aboveWarning)
+    }
 }

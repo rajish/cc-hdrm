@@ -28,7 +28,23 @@ final class NotificationService: NotificationServiceProtocol {
         self.lastCriticalThreshold = preferencesManager.criticalThreshold
     }
 
+    /// Weak reference to AppState for re-evaluation on threshold change.
+    /// Set by AppDelegate after construction.
+    weak var appState: AppState?
+
     // MARK: - Threshold Evaluation
+
+    /// Forces immediate re-evaluation using current AppState headroom values.
+    /// Thread-safe: both this method and `evaluateThresholds` (called by PollingEngine)
+    /// are `@MainActor`, so calls are serialized — no concurrent execution possible.
+    func reevaluateThresholds() async {
+        guard let appState else {
+            Self.logger.warning("reevaluateThresholds called but appState is nil")
+            return
+        }
+        Self.logger.info("Re-evaluating thresholds after preference change")
+        await evaluateThresholds(fiveHour: appState.fiveHour, sevenDay: appState.sevenDay)
+    }
 
     func evaluateThresholds(fiveHour: WindowState?, sevenDay: WindowState?) async {
         let currentWarning = preferencesManager.warningThreshold

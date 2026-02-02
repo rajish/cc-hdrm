@@ -9,6 +9,7 @@ extension Notification.Name {
 /// Accepts a PreferencesManagerProtocol to pass to SettingsView.
 struct GearMenuView: View {
     let preferencesManager: PreferencesManagerProtocol
+    var onThresholdChange: (() -> Void)?
     @State private var showingSettings = false
 
     var body: some View {
@@ -29,9 +30,9 @@ struct GearMenuView: View {
         .fixedSize()
         .accessibilityLabel("Settings")
         .popover(isPresented: $showingSettings, arrowEdge: .bottom) {
-            SettingsView(preferencesManager: preferencesManager) {
+            SettingsView(preferencesManager: preferencesManager, onDone: {
                 showingSettings = false
-            }
+            }, onThresholdChange: onThresholdChange)
             .onDisappear {
                 // Close the parent NSPopover when settings dismisses for any reason
                 // (Done button, Esc, or click-outside)
