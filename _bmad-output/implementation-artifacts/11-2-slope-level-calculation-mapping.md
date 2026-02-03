@@ -130,7 +130,7 @@ extension SlopeLevel {
 
 This story completes the slope display preparation. The data flow established in 11.1:
 
-```
+```text
 PollingEngine (line 176-180) -> slopeService.addPoll()
                              -> slopeService.calculateSlope() 
                              -> appState.updateSlopes()
@@ -171,7 +171,7 @@ From Story 11.1 completion notes:
 ### Project Structure Notes
 
 **Modified files:**
-```
+```text
 cc-hdrm/Models/SlopeLevel.swift              # Add color(for:), isActionable, nsColor(for:)
 cc-hdrmTests/Models/SlopeLevelTests.swift    # Add color and isActionable tests
 ```
