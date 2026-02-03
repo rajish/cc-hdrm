@@ -397,7 +397,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         )
 
         Self.logger.info("Reset detected: \(detectionMethod, privacy: .public)")
-        Self.logger.info("Reset event recorded: peak=\(peakUtil ?? -1, privacy: .public)%, 7d=\(currentPoll.sevenDayUtil ?? -1, privacy: .public)%, tier=\(tier ?? "unknown", privacy: .public)")
+        Self.logger.info("Reset event recorded: peak=\(peakUtil ?? -1, privacy: .public)%, 7d=\(previousPoll.sevenDayUtil ?? -1, privacy: .public)%, tier=\(tier ?? "unknown", privacy: .public)")
     }
 
     /// Queries the maximum 5-hour utilization from polls within the last 5 hours.
