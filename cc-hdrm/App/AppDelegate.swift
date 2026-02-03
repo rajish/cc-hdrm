@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     internal var launchAtLoginService: (any LaunchAtLoginServiceProtocol)?
     private var notificationService: (any NotificationServiceProtocol)?
     private var updateCheckService: (any UpdateCheckServiceProtocol)?
+    private var slopeCalculationService: SlopeCalculationService?
+    private var historicalDataServiceRef: HistoricalDataService?
     private var observationTask: Task<Void, Never>?
     private var eventMonitor: Any?
     private var previousAccessibilityValue: String?
@@ -111,6 +113,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let historicalDataService = HistoricalDataService(
                 databaseManager: DatabaseManager.shared
             )
+            self.historicalDataServiceRef = historicalDataService
+
+            // Create SlopeCalculationService for burn rate tracking
+            let slopeService = SlopeCalculationService()
+            self.slopeCalculationService = slopeService
 
             pollingEngine = PollingEngine(
                 keychainService: KeychainService(),
@@ -119,7 +126,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 appState: state,
                 notificationService: notificationService,
                 preferencesManager: preferences,
-                historicalDataService: historicalDataService
+                historicalDataService: historicalDataService,
+                slopeCalculationService: slopeService
             )
         }
 
@@ -144,6 +152,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Fire-and-forget update check — do not block app launch
         Task {
             await updateCheckService?.checkForUpdate()
+        }
+
+        // Bootstrap slope buffer from historical data (fire-and-forget)
+        Task {
+            do {
+                if let recentPolls = try await self.historicalDataServiceRef?.getRecentPolls(hours: 1) {
+                    self.slopeCalculationService?.bootstrapFromHistory(recentPolls)
+                }
+            } catch {
+                // Continue without historical data - buffer will fill naturally
+                Self.logger.warning("Failed to bootstrap slope buffer: \(error.localizedDescription)")
+            }
         }
     }
 

@@ -45,6 +45,8 @@ final class AppState {
     private(set) var subscriptionTier: String?
     private(set) var statusMessage: StatusMessage?
     private(set) var availableUpdate: AvailableUpdate?
+    private(set) var fiveHourSlope: SlopeLevel = .flat
+    private(set) var sevenDaySlope: SlopeLevel = .flat
 
     /// Counter incremented every 60 seconds to trigger observation-based re-renders of countdown text.
     private(set) var countdownTick: UInt = 0
@@ -146,6 +148,12 @@ final class AppState {
     /// Updates or clears the available update info.
     func updateAvailableUpdate(_ update: AvailableUpdate?) {
         self.availableUpdate = update
+    }
+
+    /// Updates the slope levels for both time windows.
+    func updateSlopes(fiveHour: SlopeLevel, sevenDay: SlopeLevel) {
+        self.fiveHourSlope = fiveHour
+        self.sevenDaySlope = sevenDay
     }
 
     /// Sets `lastUpdated` to an arbitrary date. Test use only — not available in release builds.
