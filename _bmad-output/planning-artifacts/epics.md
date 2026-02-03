@@ -1,9 +1,11 @@
 ---
-stepsCompleted: [step-01-validate-prerequisites, step-02-design-epics, step-03-create-stories, step-04-final-validation, phase-2-epics-added]
+stepsCompleted: [step-01-validate-prerequisites, step-02-design-epics, step-03-create-stories, step-04-final-validation, phase-2-epics-added, phase-3-epics-added]
 inputDocuments:
   - _bmad-output/planning-artifacts/prd.md
   - _bmad-output/planning-artifacts/architecture.md
   - _bmad-output/planning-artifacts/ux-design-specification.md
+  - _bmad-output/planning-artifacts/ux-design-specification-phase3.md
+lastUpdated: '2026-02-03'
 ---
 
 # cc-hdrm - Epic Breakdown
@@ -48,6 +50,19 @@ FR29: User can enable launch at login so the app starts automatically on macOS b
 FR30: User can access a settings view from the gear menu to configure preferences (Phase 2)
 FR31: Maintainer can trigger a semver release by including [patch], [minor], or [major] in a PR title merged to master (Phase 2)
 FR32: Release changelog is auto-generated from merged PR titles since last tag, with optional maintainer preamble (Phase 2)
+FR33: App persists each poll snapshot (timestamp, 5h utilization, 5h resets_at, 7d utilization, 7d resets_at) to a local SQLite database (Phase 3)
+FR34: App rolls up historical data at decreasing resolution as data ages, balancing storage efficiency with analytical granularity (Phase 3)
+FR35: User can view a compact 24-hour usage trend of 5h utilization in the popover below existing gauges (Phase 3)
+FR36: User can open a full analytics view in a separate window with zoomable historical charts across all retention periods (Phase 3)
+FR37: App renders data gaps as a visually distinct state with no interpolation of missing data (Phase 3)
+FR38: User can configure data retention period in settings (default 1 year) (Phase 3)
+FR39: App calculates effective headroom as min(5h remaining capacity, 7d remaining capacity) (Phase 3)
+FR40: App detects 5h window resets and classifies unused capacity into three categories: 5h waste, 7d-constrained (not waste), and true waste (Phase 3)
+FR41: User can view a breakdown of used capacity, 7d-constrained capacity, and true available capacity in the analytics view (Phase 3)
+FR42: App computes usage rate of change from recent poll history (Phase 3)
+FR43: App maps rate of change to a discrete 4-level slope indicator (Cooling ↘, Flat →, Rising ↗, Steep ⬆) (Phase 3)
+FR44: User can see the slope indicator inline next to the utilization percentage in the menu bar (Phase 3)
+FR45: User can see per-window slope indicators in the popover for both 5h and 7d gauges (Phase 3)
 
 ### NonFunctional Requirements
 
@@ -140,6 +155,19 @@ FR29: Epic 6 - Launch at login
 FR30: Epic 6 - Settings view in gear menu
 FR31: Epic 7 - Keyword-driven semver release
 FR32: Epic 7 - Auto-generated changelog
+FR33: Epic 10 - Persist poll snapshots to SQLite
+FR34: Epic 10 - Tiered data rollup strategy
+FR35: Epic 12 - 24h sparkline in popover
+FR36: Epic 13 - Full analytics window with zoomable charts
+FR37: Epic 12, 13 - Gap rendering in sparkline and charts
+FR38: Epic 15 - Configurable data retention
+FR39: Epic 14 - Effective headroom calculation
+FR40: Epic 14 - Reset detection and waste classification
+FR41: Epic 14 - Three-band headroom breakdown visualization
+FR42: Epic 11 - Usage rate of change computation
+FR43: Epic 11 - Discrete 4-level slope indicator mapping
+FR44: Epic 11 - Slope indicator in menu bar
+FR45: Epic 11 - Per-window slope indicators in popover
 
 ## Epic List
 
@@ -178,6 +206,30 @@ Alex sees a subtle badge in the popover when a new version is available — one 
 ### Epic 9: Homebrew Tap Distribution (Phase 2)
 A developer finds cc-hdrm, runs `brew install cc-hdrm`, and it works. Upgrades flow through `brew upgrade` automatically when new releases are published.
 **FRs covered:** (supports FR25/FR26 Homebrew update path)
+
+### Epic 10: Data Persistence & Historical Storage (Phase 3)
+Alex's usage data is no longer ephemeral — every poll snapshot is persisted to SQLite, rolled up at decreasing resolution as it ages, creating a permanent record of usage patterns.
+**FRs covered:** FR33, FR34
+
+### Epic 11: Usage Slope Indicator (Phase 3)
+Alex sees not just where he stands, but how fast he's burning. A 4-level slope indicator (↘→↗⬆) appears in the menu bar when burn rate is actionable, and always in the popover for both windows.
+**FRs covered:** FR42, FR43, FR44, FR45
+
+### Epic 12: 24h Sparkline & Analytics Launcher (Phase 3)
+Alex glances at the popover and sees a compact 24-hour usage trend — a step-area sparkline showing the sawtooth pattern of his recent sessions. Clicking it opens the analytics window.
+**FRs covered:** FR35, FR37 (sparkline gaps)
+
+### Epic 13: Full Analytics Window (Phase 3)
+Alex clicks the sparkline and a floating analytics panel appears — zoomable charts across all retention periods, time range selectors, series toggles, and honest gap rendering for periods when cc-hdrm wasn't running.
+**FRs covered:** FR36, FR37 (chart gaps)
+
+### Epic 14: Headroom Analysis & Waste Breakdown (Phase 3)
+Alex sees the real story behind his usage — a three-band breakdown showing what he actually used, what was blocked by the weekly limit (not waste!), and what he genuinely left on the table.
+**FRs covered:** FR39, FR40, FR41
+
+### Epic 15: Phase 3 Settings & Data Retention (Phase 3)
+Alex configures how long cc-hdrm keeps historical data and optionally overrides credit limits for unknown subscription tiers.
+**FRs covered:** FR38
 
 ## Epic 1: Zero-Config Launch & Credential Discovery
 
@@ -951,3 +1003,767 @@ So that Homebrew users get new versions without manual formula maintenance.
 **When** the step fails
 **Then** the GitHub Release is still published (formula update is non-blocking)
 **And** the maintainer is notified of the formula update failure
+
+## Epic 10: Data Persistence & Historical Storage (Phase 3)
+
+Alex's usage data is no longer ephemeral — every poll snapshot is persisted to SQLite, rolled up at decreasing resolution as it ages, creating a permanent record of usage patterns.
+
+### Story 10.1: Database Manager & Schema Creation
+
+As a developer using Claude Code,
+I want cc-hdrm to create and manage a SQLite database for historical data,
+So that poll snapshots can be persisted reliably across app restarts.
+
+**Acceptance Criteria:**
+
+**Given** the app launches for the first time after Phase 3 upgrade
+**When** DatabaseManager initializes
+**Then** it creates a SQLite database at `~/Library/Application Support/cc-hdrm/usage.db`
+**And** the database contains table `usage_polls` with columns: id (INTEGER PRIMARY KEY), timestamp (INTEGER), five_hour_util (REAL), five_hour_resets_at (INTEGER nullable), seven_day_util (REAL), seven_day_resets_at (INTEGER nullable)
+**And** the database contains table `usage_rollups` with columns: id, period_start, period_end, resolution (TEXT), five_hour_avg, five_hour_peak, five_hour_min, seven_day_avg, seven_day_peak, seven_day_min, reset_count, waste_credits
+**And** the database contains table `reset_events` with columns: id, timestamp, five_hour_peak, seven_day_util, tier, used_credits, constrained_credits, waste_credits
+**And** indexes exist on: usage_polls(timestamp), usage_rollups(resolution, period_start), reset_events(timestamp)
+**And** DatabaseManager conforms to DatabaseManagerProtocol for testability
+
+**Given** the app launches on subsequent runs
+**When** DatabaseManager initializes
+**Then** it opens the existing database without recreating tables
+**And** schema version is tracked for future migrations
+
+**Given** the database file is corrupted or inaccessible
+**When** DatabaseManager attempts to open
+**Then** the error is logged via os.Logger (database category)
+**And** the app continues functioning without historical features (graceful degradation)
+**And** real-time usage display continues working normally
+
+### Story 10.2: Historical Data Service & Poll Persistence
+
+As a developer using Claude Code,
+I want each poll snapshot to be automatically persisted,
+So that I build a historical record without any manual action.
+
+**Acceptance Criteria:**
+
+**Given** a successful poll cycle completes with valid usage data
+**When** PollingEngine receives the UsageResponse
+**Then** HistoricalDataService.persistPoll() is called with the response data
+**And** a new row is inserted into usage_polls with current timestamp and utilization values
+**And** persistence happens asynchronously (does not block UI updates)
+**And** HistoricalDataService conforms to HistoricalDataServiceProtocol for testability
+
+**Given** the database write fails
+**When** persistPoll() encounters an error
+**Then** the error is logged via os.Logger
+**And** the poll cycle is not retried (data for this cycle is lost)
+**And** the app continues functioning — subsequent polls attempt persistence normally
+
+**Given** the app has been running for 24+ hours
+**When** the database is inspected
+**Then** it contains one row per successful poll (~1440 rows for 30-second intervals over 24h)
+**And** no duplicate timestamps exist
+
+### Story 10.3: Reset Event Detection
+
+As a developer using Claude Code,
+I want cc-hdrm to detect when a 5h window resets,
+So that headroom analysis can be performed at each reset boundary.
+
+**Acceptance Criteria:**
+
+**Given** two consecutive polls where the second poll's `five_hour_resets_at` differs from the first
+**When** HistoricalDataService detects this shift
+**Then** a new row is inserted into reset_events with the pre-reset peak utilization and current 7d utilization
+**And** the tier from KeychainCredentials is recorded
+
+**Given** `five_hour_resets_at` is null or missing in the API response
+**When** HistoricalDataService detects a large utilization drop (e.g., 80% → 2%)
+**Then** it infers a reset event occurred (fallback detection)
+**And** logs the inferred reset via os.Logger (info level)
+
+**Given** a reset event is detected
+**When** the event is recorded
+**Then** used_credits, constrained_credits, and waste_credits are calculated per the headroom analysis math (deferred to Epic 14 for full calculation)
+**And** if credit limits are unknown for the tier, the credit fields are set to null
+
+### Story 10.4: Tiered Rollup Engine
+
+As a developer using Claude Code,
+I want historical data to be rolled up at decreasing resolution as it ages,
+So that storage remains efficient while preserving analytical value.
+
+**Acceptance Criteria:**
+
+**Given** usage_polls contains data older than 24 hours
+**When** HistoricalDataService.ensureRollupsUpToDate() is called
+**Then** raw polls from 24h-7d ago are aggregated into 5-minute rollups
+**And** each rollup row contains: period_start, period_end, resolution='5min', avg/peak/min for both windows
+**And** original raw polls older than 24h are deleted after rollup
+**And** a metadata record tracks last_rollup_timestamp
+
+**Given** usage_rollups contains 5-minute data older than 7 days
+**When** ensureRollupsUpToDate() processes that data
+**Then** 5-minute rollups from 7-30 days ago are aggregated into hourly rollups
+**And** original 5-minute rollups older than 7 days are deleted after aggregation
+
+**Given** usage_rollups contains hourly data older than 30 days
+**When** ensureRollupsUpToDate() processes that data
+**Then** hourly rollups from 30+ days ago are aggregated into daily summaries
+**And** daily summaries include: avg utilization, peak utilization, min utilization, calculated waste %
+**And** original hourly rollups older than 30 days are deleted
+
+**Given** the analytics window opens
+**When** the view loads
+**Then** ensureRollupsUpToDate() is called before querying data
+**And** rollup processing completes within 100ms for a typical day's data
+**And** rollups are performed on-demand (not on a background timer)
+
+### Story 10.5: Data Query APIs
+
+As a developer using Claude Code,
+I want to query historical data at the appropriate resolution for different time ranges,
+So that analytics views can display relevant data efficiently.
+
+**Acceptance Criteria:**
+
+**Given** a request for the last 24 hours of data
+**When** HistoricalDataService.getRecentPolls(hours: 24) is called
+**Then** it returns raw poll data from usage_polls ordered by timestamp
+**And** the result includes all fields needed for sparkline and chart rendering
+
+**Given** a request for 7-day data
+**When** HistoricalDataService.getRolledUpData(range: .week) is called
+**Then** it returns 5-minute rollups for the 1-7 day range combined with raw data for <24h
+**And** data is seamlessly stitched (no visible boundary between raw and rolled data)
+
+**Given** a request for 30-day or all-time data
+**When** getRolledUpData() is called with the appropriate range
+**Then** it returns the correctly tiered data (daily for 30+ days, hourly for 7-30 days, etc.)
+
+**Given** a request for reset events in a time range
+**When** HistoricalDataService.getResetEvents(range:) is called
+**Then** it returns all reset_events rows within the specified range
+**And** results are ordered by timestamp ascending
+
+## Epic 11: Usage Slope Indicator (Phase 3)
+
+Alex sees not just where he stands, but how fast he's burning. A 4-level slope indicator (↘→↗⬆) appears in the menu bar when burn rate is actionable, and always in the popover for both windows.
+
+### Story 11.1: Slope Calculation Service & Ring Buffer
+
+As a developer using Claude Code,
+I want cc-hdrm to track recent poll data and calculate usage slope,
+So that burn rate can be displayed alongside utilization.
+
+**Acceptance Criteria:**
+
+**Given** the app launches
+**When** SlopeCalculationService initializes
+**Then** it maintains an in-memory ring buffer for the last 15 minutes of poll data (~30 data points at 30s intervals)
+**And** SlopeCalculationService conforms to SlopeCalculationServiceProtocol for testability
+**And** it calls HistoricalDataService.getRecentPolls(hours: 1) to bootstrap the buffer from SQLite
+
+**Given** a new poll cycle completes
+**When** SlopeCalculationService.addPoll() is called with the UsageResponse
+**Then** the new data point is added to the ring buffer
+**And** older data points beyond 15 minutes are evicted
+**And** slope is recalculated for both 5h and 7d windows
+
+**Given** the ring buffer contains less than 10 minutes of data
+**When** calculateSlope() is called
+**Then** it returns .flat (insufficient data to determine slope)
+
+### Story 11.2: Slope Level Calculation & Mapping
+
+As a developer using Claude Code,
+I want burn rate mapped to discrete slope levels,
+So that the display is simple and actionable rather than noisy continuous values.
+
+**Acceptance Criteria:**
+
+**Given** the ring buffer contains 10+ minutes of poll data for a window
+**When** calculateSlope(for: .fiveHour) is called
+**Then** it computes the average rate of change (% per minute) across the buffer
+**And** maps the rate to SlopeLevel:
+- Rate < -0.5% per min → .cooling (↘)
+- Rate -0.5 to 0.3% per min → .flat (→)
+- Rate 0.3 to 1.5% per min → .rising (↗)
+- Rate > 1.5% per min → .steep (⬆)
+
+**Given** slope is calculated for both windows
+**When** the calculation completes
+**Then** AppState.fiveHourSlope and AppState.sevenDaySlope are updated
+**And** updates happen on @MainActor to ensure UI consistency
+
+**Given** the SlopeLevel enum is defined
+**When** referenced across the codebase
+**Then** it includes properties: arrow (String), color (Color), accessibilityLabel (String)
+**And** .cooling and .flat use secondary color; .rising and .steep use headroom color
+
+### Story 11.3: Menu Bar Slope Display (Escalation-Only)
+
+As a developer using Claude Code,
+I want to see a slope arrow in the menu bar only when burn rate is actionable,
+So that the compact footprint is preserved during calm periods.
+
+**Acceptance Criteria:**
+
+**Given** AppState.fiveHourSlope is .rising or .steep
+**And** connection status is normal (not disconnected/expired)
+**And** headroom is not exhausted
+**When** MenuBarTextRenderer renders
+**Then** it displays "✳ XX% ↗" or "✳ XX% ⬆" (slope arrow appended)
+**And** the arrow uses the same color as the percentage
+
+**Given** AppState.fiveHourSlope is .flat or .cooling
+**When** MenuBarTextRenderer renders
+**Then** it displays "✳ XX%" (no arrow) — same as Phase 1
+
+**Given** headroom is exhausted (showing countdown)
+**When** MenuBarTextRenderer renders
+**Then** it displays "✳ ↻ Xm" (no slope arrow) — countdown takes precedence
+
+**Given** 7d headroom is promoted to menu bar (tighter constraint)
+**When** MenuBarTextRenderer renders with slope
+**Then** it uses AppState.sevenDaySlope instead of fiveHourSlope for the arrow
+
+**Given** a VoiceOver user focuses the menu bar with slope visible
+**When** VoiceOver reads the element
+**Then** it announces "cc-hdrm: Claude headroom [X] percent, [state], [slope]" (e.g., "rising")
+
+### Story 11.4: Popover Slope Display (Always Visible)
+
+As a developer using Claude Code,
+I want to see slope indicators on both gauges in the popover,
+So that I have full visibility into burn rate for both windows.
+
+**Acceptance Criteria:**
+
+**Given** the popover is open
+**When** HeadroomRingGauge renders for 5h window
+**Then** a SlopeIndicator appears below the percentage inside/below the ring
+**And** the slope level matches AppState.fiveHourSlope
+**And** all four levels are visible in the popover (↘ → ↗ ⬆)
+
+**Given** the popover is open
+**When** HeadroomRingGauge renders for 7d window
+**Then** a SlopeIndicator appears with AppState.sevenDaySlope
+**And** display is consistent with the 5h gauge
+
+**Given** slope data is insufficient (< 10 minutes of history)
+**When** the popover renders
+**Then** slope displays as → (flat) as the default
+
+**Given** a VoiceOver user focuses a gauge
+**When** VoiceOver reads the element
+**Then** it announces slope as part of the gauge reading: "[window] headroom: [X] percent, [slope level]"
+
+### Story 11.5: SlopeIndicator Component
+
+As a developer using Claude Code,
+I want a reusable SlopeIndicator component,
+So that slope display is consistent across menu bar and popover.
+
+**Acceptance Criteria:**
+
+**Given** SlopeIndicator is instantiated with a SlopeLevel and size
+**When** the view renders
+**Then** it displays the appropriate arrow character (↘ → ↗ ⬆)
+**And** color matches the level: secondary for cooling/flat, headroom color for rising/steep
+**And** font size matches the size parameter
+
+**Given** any SlopeIndicator instance
+**When** accessibility is evaluated
+**Then** it has .accessibilityLabel set to the slope level name ("cooling", "flat", "rising", "steep")
+
+## Epic 12: 24h Sparkline & Analytics Launcher (Phase 3)
+
+Alex glances at the popover and sees a compact 24-hour usage trend — a step-area sparkline showing the sawtooth pattern of his recent sessions. Clicking it opens the analytics window.
+
+### Story 12.1: Sparkline Data Preparation
+
+As a developer using Claude Code,
+I want the popover to have sparkline data ready instantly,
+So that opening the popover never feels slow.
+
+**Acceptance Criteria:**
+
+**Given** a successful poll cycle completes
+**When** PollingEngine updates AppState
+**Then** it also updates AppState.sparklineData by calling HistoricalDataService.getRecentPolls(hours: 24)
+**And** sparklineData is refreshed on every poll cycle (kept current)
+
+**Given** the app just launched and historical data exists
+**When** the first poll cycle completes
+**Then** sparklineData is populated from SQLite (bootstrap from history)
+
+**Given** no historical data exists (fresh Phase 3 install)
+**When** the popover opens before any data is collected
+**Then** the sparkline area shows a placeholder: "Building history..." in secondary text
+**And** after ~30 minutes of polling, enough data exists to render a meaningful sparkline
+
+### Story 12.2: Sparkline Component
+
+As a developer using Claude Code,
+I want a compact sparkline showing the 24h usage sawtooth pattern,
+So that I can see recent trends at a glance without opening analytics.
+
+**Acceptance Criteria:**
+
+**Given** AppState.sparklineData contains 24h of poll data
+**When** Sparkline component renders
+**Then** it displays a step-area chart (not line chart) honoring the monotonically increasing nature of utilization
+**And** only 5h utilization is shown (7d is too slow-moving for 24h sparkline)
+**And** reset boundaries are visible as vertical drops to the baseline
+**And** the sparkline fits in approximately 200×40px in the popover
+
+**Given** gaps exist in the sparkline data (cc-hdrm wasn't running)
+**When** Sparkline renders
+**Then** gaps are rendered as breaks in the path — no interpolation, no fake data
+**And** gap regions are subtly distinct (slight grey tint or dashed baseline)
+
+**Given** the sparkline data is empty or insufficient
+**When** Sparkline renders
+**Then** it shows placeholder text instead of an empty chart
+
+**Given** a VoiceOver user focuses the sparkline
+**When** VoiceOver reads the element
+**Then** it announces "24-hour usage chart. Double-tap to open analytics."
+
+### Story 12.3: Sparkline as Analytics Toggle
+
+As a developer using Claude Code,
+I want to click the sparkline to open the analytics window,
+So that deeper analysis is one click away from the popover.
+
+**Acceptance Criteria:**
+
+**Given** the sparkline is visible in the popover
+**When** Alex clicks/taps the sparkline
+**Then** the analytics window opens (or comes to front if already open)
+**And** the popover remains open (does not auto-close)
+
+**Given** the analytics window is already open
+**When** Alex clicks the sparkline
+**Then** the analytics window comes to front (orderFront)
+**And** no duplicate window is created
+
+**Given** the analytics window is open
+**When** the popover renders the sparkline
+**Then** a subtle indicator dot appears on the sparkline to show the window is open
+
+**Given** the sparkline has hover/press states
+**When** Alex hovers over the sparkline
+**Then** a subtle background highlight indicates it's clickable
+**And** cursor changes to pointer (hand) on hover
+
+### Story 12.4: PopoverView Integration
+
+As a developer using Claude Code,
+I want the sparkline integrated into the existing popover layout,
+So that the Phase 3 feature enhances without disrupting the Phase 1 design.
+
+**Acceptance Criteria:**
+
+**Given** the popover is open
+**When** PopoverView renders
+**Then** the layout is: 5h gauge → 7d gauge → sparkline section → footer
+**And** a hairline divider separates the sparkline from the gauges above
+**And** a hairline divider separates the sparkline from the footer below
+
+**Given** AppState.isAnalyticsWindowOpen is true
+**When** the popover renders
+**Then** the sparkline shows the indicator dot (visual link between popover and analytics)
+
+## Epic 13: Full Analytics Window (Phase 3)
+
+Alex clicks the sparkline and a floating analytics panel appears — zoomable charts across all retention periods, time range selectors, series toggles, and honest gap rendering for periods when cc-hdrm wasn't running.
+
+### Story 13.1: Analytics Window Shell (NSPanel)
+
+As a developer using Claude Code,
+I want an analytics window that behaves as a floating utility panel,
+So that it's accessible without disrupting my main workflow or polluting the dock.
+
+**Acceptance Criteria:**
+
+**Given** the sparkline is clicked
+**When** AnalyticsWindowController.toggle() is called
+**Then** an NSPanel opens with the following characteristics:
+- styleMask includes .nonactivatingPanel (doesn't steal focus)
+- collectionBehavior does NOT include .canJoinAllSpaces (stays on current desktop)
+- hidesOnDeactivate is false (stays visible when app loses focus)
+- level is .floating (above normal windows, below fullscreen)
+- No dock icon appears (app remains LSUIElement)
+- No Cmd+Tab entry is added
+**And** default size is ~600×500px
+**And** the window is resizable with reasonable minimum size (~400×350px)
+
+**Given** the analytics window is open
+**When** Alex presses Escape or clicks the close button
+**Then** the window closes
+**And** AppState.isAnalyticsWindowOpen is set to false
+
+**Given** the analytics window is closed and reopened
+**When** the window appears
+**Then** it restores its previous position and size (persisted to UserDefaults)
+
+**Given** AnalyticsWindowController
+**When** toggle() is called multiple times
+**Then** it opens the window if closed, brings to front if open (no duplicates)
+**And** the controller is a singleton
+
+### Story 13.2: Analytics View Layout
+
+As a developer using Claude Code,
+I want a clear analytics view layout with time controls, chart, and breakdown,
+So that I can explore my usage patterns effectively.
+
+**Acceptance Criteria:**
+
+**Given** the analytics window is open
+**When** AnalyticsView renders
+**Then** it displays (top to bottom):
+- Title bar: "Usage Analytics" with close button
+- Time range selector: [24h] [7d] [30d] [All] buttons
+- Series toggles: 5h (filled circle) | 7d (empty circle) toggle buttons
+- Main chart area (UsageChart component)
+- Headroom breakdown section (HeadroomBreakdownBar + stats)
+**And** vertical spacing follows macOS design guidelines
+
+**Given** the window is resized
+**When** AnalyticsView re-renders
+**Then** the chart area expands/contracts to fill available space
+**And** controls and breakdown maintain their natural sizes
+
+### Story 13.3: Time Range Selector
+
+As a developer using Claude Code,
+I want to select different time ranges to analyze my usage patterns,
+So that I can see both recent detail and long-term trends.
+
+**Acceptance Criteria:**
+
+**Given** the analytics view is visible
+**When** TimeRangeSelector renders
+**Then** it shows four buttons: "24h", "7d", "30d", "All"
+**And** one button is visually selected (filled/highlighted)
+**And** default selection is "24h"
+
+**Given** Alex clicks a time range button
+**When** the selection changes
+**Then** the chart and breakdown update to show data for that range
+**And** data is loaded via HistoricalDataService with appropriate resolution
+**And** ensureRollupsUpToDate() is called before querying
+
+**Given** Alex selects "All"
+**When** the data loads
+**Then** it includes daily summaries from the full retention period
+**And** if retention is 1 year, "All" shows up to 365 data points
+
+### Story 13.4: Series Toggle Controls
+
+As a developer using Claude Code,
+I want to toggle 5h and 7d series visibility,
+So that I can focus on the window that matters for my analysis.
+
+**Acceptance Criteria:**
+
+**Given** the series toggle controls are visible
+**When** they render
+**Then** "5h" and "7d" appear as toggle buttons with distinct visual states
+**And** both are selected by default
+
+**Given** Alex toggles off "7d"
+**When** the chart re-renders
+**Then** only the 5h series is visible
+**And** the 7d toggle shows as unselected (outline only)
+
+**Given** both series are toggled off
+**When** the chart re-renders
+**Then** the chart shows empty state with message: "Select a series to display"
+
+**Given** a time range is selected
+**When** the series toggle state is remembered
+**Then** toggle state persists per time range within the session
+**And** switching from 24h to 7d and back preserves the 24h toggle state
+
+### Story 13.5: Usage Chart Component (Step-Area Mode)
+
+As a developer using Claude Code,
+I want a step-area chart for the 24h view that honors the sawtooth pattern,
+So that I see an accurate representation of how utilization actually behaves.
+
+**Acceptance Criteria:**
+
+**Given** time range is "24h"
+**When** UsageChart renders
+**Then** it displays a step-area chart where:
+- Steps only go UP within each window (monotonically increasing)
+- Vertical drops mark reset boundaries (dashed vertical lines)
+- X-axis shows time labels: "8am", "12pm", "4pm", "8pm", "12am", "4am", "now"
+- Y-axis shows 0% to 100%
+**And** both 5h and 7d series can be overlaid (5h primary color, 7d secondary color)
+
+**Given** slope was steep during a period
+**When** the chart renders
+**Then** background color bands (subtle warm tint) appear behind steep periods
+**And** flat periods have no background tint
+
+**Given** the user hovers over a data point
+**When** the hover tooltip appears
+**Then** it shows: timestamp (absolute), exact utilization %, slope level at that moment
+
+### Story 13.6: Usage Chart Component (Bar Mode)
+
+As a developer using Claude Code,
+I want a bar chart for 7d+ views showing peak utilization per period,
+So that long-term patterns are visible without visual clutter.
+
+**Acceptance Criteria:**
+
+**Given** time range is "7d"
+**When** UsageChart renders
+**Then** it displays a bar chart where:
+- Each bar represents one hour
+- Bar height = peak utilization during that hour (not average)
+- Reset events are marked with subtle indicators below affected bars
+- X-axis shows day/time labels appropriate to the range
+
+**Given** time range is "30d"
+**When** UsageChart renders
+**Then** each bar represents one day
+**And** bar height = peak utilization for that day
+
+**Given** time range is "All"
+**When** UsageChart renders
+**Then** each bar represents one day (daily summaries)
+**And** X-axis shows date labels with appropriate spacing
+
+**Given** the user hovers over a bar
+**When** the hover tooltip appears
+**Then** it shows: period range, min/avg/peak utilization for that period
+
+### Story 13.7: Gap Rendering in Charts
+
+As a developer using Claude Code,
+I want gaps in historical data rendered honestly,
+So that I trust the visualization isn't fabricating data.
+
+**Acceptance Criteria:**
+
+**Given** a gap exists in the 24h data (cc-hdrm wasn't running)
+**When** UsageChart (step-area mode) renders
+**Then** the gap is rendered as a missing segment — no path drawn
+**And** the gap region has a subtle hatched/grey background
+
+**Given** a gap exists in 7d+ data
+**When** UsageChart (bar mode) renders
+**Then** missing periods have no bar displayed
+**And** hovering over the empty space shows: "No data — cc-hdrm not running"
+
+**Given** a gap spans multiple periods
+**When** the chart renders
+**Then** the gap is visually continuous (not segmented per period)
+**And** gap boundaries are clear
+
+## Epic 14: Headroom Analysis & Waste Breakdown (Phase 3)
+
+Alex sees the real story behind his usage — a three-band breakdown showing what he actually used, what was blocked by the weekly limit (not waste!), and what he genuinely left on the table.
+
+### Story 14.1: Rate Limit Tier & Credit Limits
+
+As a developer using Claude Code,
+I want cc-hdrm to know the credit limits for my subscription tier,
+So that headroom can be calculated in absolute terms.
+
+**Acceptance Criteria:**
+
+**Given** the RateLimitTier enum is defined
+**When** referenced across the codebase
+**Then** it includes cases: .pro, .max5x, .max20x
+**And** each case provides fiveHourCredits and sevenDayCredits properties:
+- Pro: 550,000 / 5,000,000
+- Max 5x: 3,300,000 / 41,666,700
+- Max 20x: 11,000,000 / 83,333,300
+
+**Given** rateLimitTier is read from KeychainCredentials
+**When** the tier string matches a known case (e.g., "default_claude_max_5x")
+**Then** it maps to the corresponding RateLimitTier enum case
+
+**Given** rateLimitTier doesn't match any known tier
+**When** HeadroomAnalysisService needs credit limits
+**Then** it checks PreferencesManager for user-configured custom credit limits
+**And** if custom limits exist, uses those
+**And** if no custom limits, returns nil (percentage-only analysis)
+**And** a warning is logged: "Unknown rate limit tier: [tier]"
+
+### Story 14.2: Headroom Analysis Service
+
+As a developer using Claude Code,
+I want headroom analysis calculated at each reset event,
+So that waste breakdown is accurate and meaningful.
+
+**Acceptance Criteria:**
+
+**Given** a reset event is detected (from Story 10.3)
+**When** HeadroomAnalysisService.analyzeResetEvent() is called
+**Then** it calculates:
+```
+5h_remaining_credits = (100% - 5h_peak%) × 5h_limit
+7d_remaining_credits = (100% - 7d_util%) × 7d_limit
+effective_headroom_credits = min(5h_remaining, 7d_remaining)
+
+If 5h_remaining ≤ 7d_remaining:
+    true_waste_credits = 5h_remaining  
+    constrained_credits = 0
+Else:
+    true_waste_credits = 7d_remaining  
+    constrained_credits = 5h_remaining - 7d_remaining
+```
+**And** returns a HeadroomBreakdown struct with: usedPercent, constrainedPercent, wastePercent, usedCredits, constrainedCredits, wasteCredits
+
+**Given** credit limits are unknown (tier not recognized, no user override)
+**When** analyzeResetEvent() is called
+**Then** it returns nil (analysis cannot be performed)
+**And** the analytics view shows: "Headroom breakdown unavailable — unknown subscription tier"
+
+**Given** multiple reset events in a time range
+**When** HeadroomAnalysisService.aggregateBreakdown() is called
+**Then** it sums used_credits, constrained_credits, and waste_credits across all events
+**And** returns aggregate percentages and totals
+
+### Story 14.3: Headroom Breakdown Bar Component
+
+As a developer using Claude Code,
+I want a three-band visualization showing used, constrained, and waste,
+So that the emotional framing is clear — constrained is not waste.
+
+**Acceptance Criteria:**
+
+**Given** HeadroomBreakdownBar is instantiated with breakdown data
+**When** the view renders
+**Then** it displays a horizontal stacked bar with three segments:
+- **Used (▓)**: solid fill, headroom color based on the aggregate peak level
+- **7d-constrained (░)**: hatched/stippled pattern, muted slate blue
+- **True waste (□)**: light/empty fill, faint outline
+
+**Given** breakdown percentages (e.g., 52% used, 12% constrained, 36% waste)
+**When** the bar renders
+**Then** segment widths are proportional to percentages
+**And** segments are stacked left-to-right: Used | Constrained | Waste
+
+**Given** constrained is 0%
+**When** the bar renders
+**Then** the constrained segment is not visible (only Used and Waste)
+
+**Given** a VoiceOver user focuses the breakdown bar
+**When** VoiceOver reads the element
+**Then** it announces: "Headroom breakdown: [X]% used, [Y]% constrained by weekly limit, [Z]% unused"
+
+### Story 14.4: Breakdown Summary Statistics
+
+As a developer using Claude Code,
+I want summary stats below the breakdown bar,
+So that I understand the scale and patterns of my usage.
+
+**Acceptance Criteria:**
+
+**Given** the analytics view shows a time range with reset events
+**When** the breakdown section renders
+**Then** it displays below the bar:
+- **Avg peak:** Average of peak utilization across resets in the period
+- **Total waste:** Sum of waste_credits formatted as "X.XM credits" or "XXXk credits"
+- **7d-constrained:** Percentage of unused capacity blocked by weekly limit
+
+**Given** the selected time range is "24h" with 0-2 resets
+**When** the breakdown renders
+**Then** it shows aggregate for those resets (may be just one)
+**And** if zero resets in range, shows: "No reset events in this period"
+
+**Given** credit limits are unknown
+**When** the breakdown section renders
+**Then** it shows percentages only (no absolute credit values)
+**And** "Total waste" shows as percentage, not credits
+
+### Story 14.5: Analytics View Integration
+
+As a developer using Claude Code,
+I want the headroom breakdown integrated into the analytics view,
+So that I can see breakdown alongside the usage chart.
+
+**Acceptance Criteria:**
+
+**Given** the analytics window is open
+**When** AnalyticsView renders
+**Then** HeadroomBreakdownBar and summary stats appear below the UsageChart
+
+**Given** the time range changes
+**When** the breakdown re-renders
+**Then** it recalculates aggregate breakdown for the new range
+**And** queries reset_events for that range via HistoricalDataService
+
+**Given** no reset events exist in the selected range
+**When** the breakdown section renders
+**Then** it displays: "No reset events in this period — usage continues from previous window"
+
+## Epic 15: Phase 3 Settings & Data Retention (Phase 3)
+
+Alex configures how long cc-hdrm keeps historical data and optionally overrides credit limits for unknown subscription tiers.
+
+### Story 15.1: Data Retention Configuration
+
+As a developer using Claude Code,
+I want to configure how long cc-hdrm retains historical data,
+So that I can balance storage usage with analytical depth.
+
+**Acceptance Criteria:**
+
+**Given** the settings view is open (from Epic 6)
+**When** SettingsView renders
+**Then** a new "Historical Data" section appears with:
+- Data retention: picker with options: 30 days, 90 days, 6 months, 1 year (default), 2 years, 5 years
+- Database size: read-only display showing current size (e.g., "14.2 MB")
+- "Clear History" button
+
+**Given** Alex changes the retention period
+**When** the value is saved to PreferencesManager
+**Then** the next rollup cycle prunes data older than the new retention period
+
+**Given** Alex clicks "Clear History"
+**When** confirmation dialog appears and Alex confirms
+**Then** all tables are truncated (usage_polls, usage_rollups, reset_events)
+**And** the database is vacuumed to reclaim space
+**And** sparkline and analytics show empty state until new data is collected
+
+**Given** the database exceeds a reasonable size (e.g., 500 MB)
+**When** the settings view opens
+**Then** the database size is displayed with warning color
+**And** a hint suggests reducing retention or clearing history
+
+### Story 15.2: Custom Credit Limit Override
+
+As a developer using Claude Code,
+I want to manually set credit limits for unknown tiers,
+So that headroom analysis works even if Anthropic introduces new tiers.
+
+**Acceptance Criteria:**
+
+**Given** the settings view is open
+**When** SettingsView renders
+**Then** an "Advanced" section appears (collapsed by default) with:
+- Custom 5h credit limit: optional number field
+- Custom 7d credit limit: optional number field
+- Hint text: "Override credit limits if your tier isn't recognized"
+
+**Given** Alex enters custom credit limits
+**When** the values are saved to PreferencesManager
+**Then** HeadroomAnalysisService uses the custom limits instead of tier lookup
+
+**Given** custom limits are set AND tier is recognized
+**When** HeadroomAnalysisService needs limits
+**Then** tier lookup values take precedence (custom limits are fallback only)
+
+**Given** invalid values are entered (e.g., negative numbers, zero)
+**When** validation runs
+**Then** the invalid values are rejected with inline error message
+**And** previous valid values are retained
