@@ -63,4 +63,12 @@ extension Color {
     static var headroomCritical: Color { Color("HeadroomColors/HeadroomCritical", bundle: .main) }
     static var headroomExhausted: Color { Color("HeadroomColors/HeadroomExhausted", bundle: .main) }
     static var disconnected: Color { Color("HeadroomColors/Disconnected", bundle: .main) }
+
+    /// Returns the SwiftUI `Color` for the given headroom state.
+    /// Delegates to `HeadroomState.swiftUIColor` to avoid duplication.
+    /// - Parameter state: The headroom state to get the color for.
+    /// - Returns: The corresponding SwiftUI Color.
+    static func headroomColor(for state: HeadroomState) -> Color {
+        state.swiftUIColor
+    }
 }

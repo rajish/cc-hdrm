@@ -89,10 +89,18 @@ development_status:
   9-2-automated-homebrew-formula-update: cancelled  # Absorbed into 9.1 Task 3
   epic-9-retrospective: optional
 
-  epic-10: in-progress
+  epic-10: done
   10-1-database-manager-schema-creation: done
   10-2-historical-data-service-poll-persistence: done
   10-3-reset-event-detection: done
-  10-4-tiered-rollup-engine: review
+  10-4-tiered-rollup-engine: done
   10-5-data-query-apis: done
-  epic-10-retrospective: optional
+  epic-10-retrospective: done
+
+  epic-11: in-progress
+  11-1-slope-calculation-service-ring-buffer: review
+  11-2-slope-level-calculation-mapping: done
+  11-3-menu-bar-slope-display: backlog
+  11-4-popover-slope-display: backlog
+  11-5-slope-indicator-component: backlog
+  epic-11-retrospective: optional
