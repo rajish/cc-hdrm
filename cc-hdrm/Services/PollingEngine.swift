@@ -12,6 +12,7 @@ final class PollingEngine: PollingEngineProtocol {
     private let appState: AppState
     private let notificationService: (any NotificationServiceProtocol)?
     private let preferencesManager: any PreferencesManagerProtocol
+    private let historicalDataService: (any HistoricalDataServiceProtocol)?
     private var pollingTask: Task<Void, Never>?
 
     private static let logger = Logger(
@@ -25,7 +26,8 @@ final class PollingEngine: PollingEngineProtocol {
         apiClient: any APIClientProtocol,
         appState: AppState,
         notificationService: (any NotificationServiceProtocol)? = nil,
-        preferencesManager: any PreferencesManagerProtocol = PreferencesManager()
+        preferencesManager: any PreferencesManagerProtocol = PreferencesManager(),
+        historicalDataService: (any HistoricalDataServiceProtocol)? = nil
     ) {
         self.keychainService = keychainService
         self.tokenRefreshService = tokenRefreshService
@@ -33,6 +35,7 @@ final class PollingEngine: PollingEngineProtocol {
         self.appState = appState
         self.notificationService = notificationService
         self.preferencesManager = preferencesManager
+        self.historicalDataService = historicalDataService
     }
 
     func start() async {
@@ -143,6 +146,17 @@ final class PollingEngine: PollingEngineProtocol {
             await notificationService?.evaluateThresholds(fiveHour: fiveHourState, sevenDay: sevenDayState)
             appState.updateConnectionStatus(.connected)
             appState.updateStatusMessage(nil)
+
+            // Persist to database asynchronously (fire-and-forget, does not block UI)
+            Task {
+                do {
+                    try await historicalDataService?.persistPoll(response)
+                } catch {
+                    Self.logger.error("Failed to persist poll data: \(error.localizedDescription)")
+                    // Continue without retrying - data for this cycle is lost
+                }
+            }
+
             Self.logger.info("Usage data fetched and applied successfully")
         } catch let error as AppError {
             await handleAPIError(error, credentials: credentials)

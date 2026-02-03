@@ -45,6 +45,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.logger.info("Application launching — configuring menu bar status item")
 
+        // Initialize database with graceful degradation (historical features disabled if fails)
+        DatabaseManager.shared.initialize()
+
         let state = AppState()
         self.appState = state
 
@@ -104,13 +107,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Create PollingEngine with production services if not already injected (test path)
         if pollingEngine == nil {
+            // Create HistoricalDataService for poll persistence
+            let historicalDataService = HistoricalDataService(
+                databaseManager: DatabaseManager.shared
+            )
+
             pollingEngine = PollingEngine(
                 keychainService: KeychainService(),
                 tokenRefreshService: TokenRefreshService(),
                 apiClient: APIClient(),
                 appState: state,
                 notificationService: notificationService,
-                preferencesManager: preferences
+                preferencesManager: preferences,
+                historicalDataService: historicalDataService
             )
         }
 
