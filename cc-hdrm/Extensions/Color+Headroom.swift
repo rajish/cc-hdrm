@@ -65,23 +65,10 @@ extension Color {
     static var disconnected: Color { Color("HeadroomColors/Disconnected", bundle: .main) }
 
     /// Returns the SwiftUI `Color` for the given headroom state.
-    /// Uses the static color properties which reference the Asset Catalog.
+    /// Delegates to `HeadroomState.swiftUIColor` to avoid duplication.
     /// - Parameter state: The headroom state to get the color for.
     /// - Returns: The corresponding SwiftUI Color.
     static func headroomColor(for state: HeadroomState) -> Color {
-        switch state {
-        case .normal:
-            return .headroomNormal
-        case .caution:
-            return .headroomCaution
-        case .warning:
-            return .headroomWarning
-        case .critical:
-            return .headroomCritical
-        case .exhausted:
-            return .headroomExhausted
-        case .disconnected:
-            return .disconnected
-        }
+        state.swiftUIColor
     }
 }
