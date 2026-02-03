@@ -300,6 +300,389 @@ struct HistoricalDataServiceTests {
         let service = HistoricalDataService(databaseManager: dbManager)
         let _: any HistoricalDataServiceProtocol = service
     }
+
+    // MARK: - Reset Detection Tests (Story 10.3)
+
+    @Test("Reset detected when resets_at changes (AC #1)")
+    func resetDetectedWhenResetsAtChanges() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        // First poll with resets_at = T1
+        let response1 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 50.0, resetsAt: "2026-02-03T10:00:00Z"),
+            sevenDay: WindowUsage(utilization: 30.0, resetsAt: "2026-02-10T00:00:00Z"),
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response1, tier: "test_tier")
+
+        // Second poll with different resets_at = T2 (indicates reset occurred)
+        let response2 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 10.0, resetsAt: "2026-02-03T15:00:00Z"),
+            sevenDay: WindowUsage(utilization: 30.0, resetsAt: "2026-02-10T00:00:00Z"),
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response2, tier: "test_tier")
+
+        // Verify reset event was recorded
+        let events = try await service.getResetEvents(fromTimestamp: nil, toTimestamp: nil)
+        #expect(events.count == 1)
+        #expect(events[0].tier == "test_tier")
+    }
+
+    @Test("Fallback detection on large utilization drop (AC #2)")
+    func fallbackDetectionOnLargeUtilizationDrop() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        // First poll at 80% utilization (no resets_at)
+        let response1 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 80.0, resetsAt: nil),
+            sevenDay: WindowUsage(utilization: 40.0, resetsAt: nil),
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response1, tier: nil)
+
+        // Second poll at 5% utilization (large drop, no resets_at)
+        let response2 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 5.0, resetsAt: nil),
+            sevenDay: WindowUsage(utilization: 40.0, resetsAt: nil),
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response2, tier: nil)
+
+        // Verify reset event was inferred
+        let events = try await service.getResetEvents(fromTimestamp: nil, toTimestamp: nil)
+        #expect(events.count == 1)
+    }
+
+    @Test("No false positive on small utilization change (AC #1)")
+    func noFalsePositiveOnSmallUtilizationChange() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        // Insert polls with small changes (shouldn't trigger reset)
+        let response1 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 50.0, resetsAt: "2026-02-03T10:00:00Z"),
+            sevenDay: nil,
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response1, tier: nil)
+
+        // Same resets_at, small utilization increase
+        let response2 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 52.0, resetsAt: "2026-02-03T10:00:00Z"),
+            sevenDay: nil,
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response2, tier: nil)
+
+        let events = try await service.getResetEvents(fromTimestamp: nil, toTimestamp: nil)
+        #expect(events.count == 0)
+    }
+
+    @Test("No false positive on small utilization drop without resets_at")
+    func noFalsePositiveOnSmallUtilizationDrop() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        // First poll at 60%
+        let response1 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 60.0, resetsAt: nil),
+            sevenDay: nil,
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response1, tier: nil)
+
+        // Small drop to 45% (only 15% drop, below 50% threshold)
+        let response2 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 45.0, resetsAt: nil),
+            sevenDay: nil,
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response2, tier: nil)
+
+        let events = try await service.getResetEvents(fromTimestamp: nil, toTimestamp: nil)
+        #expect(events.count == 0)
+    }
+
+    @Test("getResetEvents returns correct data (AC #3)")
+    func getResetEventsReturnsCorrectData() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        // Trigger a reset
+        let response1 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 80.0, resetsAt: "2026-02-03T10:00:00Z"),
+            sevenDay: WindowUsage(utilization: 45.0, resetsAt: "2026-02-10T00:00:00Z"),
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response1, tier: "my_tier")
+
+        let response2 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 5.0, resetsAt: "2026-02-03T15:00:00Z"),
+            sevenDay: WindowUsage(utilization: 45.0, resetsAt: "2026-02-10T00:00:00Z"),
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response2, tier: "my_tier")
+
+        let events = try await service.getResetEvents(fromTimestamp: nil, toTimestamp: nil)
+        #expect(events.count == 1)
+        #expect(events[0].tier == "my_tier")
+        #expect(events[0].fiveHourPeak != nil)
+        #expect(events[0].sevenDayUtil == 45.0)
+    }
+
+    @Test("Credit fields are NULL when tier unknown (AC #3)")
+    func creditFieldsNullWhenTierUnknown() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        // Trigger reset with nil tier
+        let response1 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 75.0, resetsAt: "2026-02-03T10:00:00Z"),
+            sevenDay: nil,
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response1, tier: nil)
+
+        let response2 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 10.0, resetsAt: "2026-02-03T15:00:00Z"),
+            sevenDay: nil,
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response2, tier: nil)
+
+        let events = try await service.getResetEvents(fromTimestamp: nil, toTimestamp: nil)
+        #expect(events.count == 1)
+        #expect(events[0].tier == nil)
+        #expect(events[0].usedCredits == nil)
+        #expect(events[0].constrainedCredits == nil)
+        #expect(events[0].wasteCredits == nil)
+    }
+
+    @Test("getLastPoll returns most recent poll")
+    func getLastPollReturnsMostRecent() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        // Insert multiple polls
+        let response1 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 10.0, resetsAt: nil),
+            sevenDay: nil,
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response1, tier: nil)
+
+        let response2 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 20.0, resetsAt: nil),
+            sevenDay: nil,
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response2, tier: nil)
+
+        let response3 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 30.0, resetsAt: nil),
+            sevenDay: nil,
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response3, tier: nil)
+
+        let lastPoll = try await service.getLastPoll()
+        #expect(lastPoll != nil)
+        #expect(lastPoll?.fiveHourUtil == 30.0)
+    }
+
+    @Test("getLastPoll returns nil when no polls exist")
+    func getLastPollReturnsNilWhenEmpty() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        let lastPoll = try await service.getLastPoll()
+        #expect(lastPoll == nil)
+    }
+
+    @Test("getLastPoll returns nil when database unavailable")
+    func getLastPollReturnsNilWhenDatabaseUnavailable() async throws {
+        let mockManager = MockDatabaseManager()
+        mockManager.shouldBeAvailable = false
+
+        let service = HistoricalDataService(databaseManager: mockManager)
+
+        let lastPoll = try await service.getLastPoll()
+        #expect(lastPoll == nil)
+    }
+
+    @Test("getResetEvents returns empty when database unavailable")
+    func getResetEventsReturnsEmptyWhenDatabaseUnavailable() async throws {
+        let mockManager = MockDatabaseManager()
+        mockManager.shouldBeAvailable = false
+
+        let service = HistoricalDataService(databaseManager: mockManager)
+
+        let events = try await service.getResetEvents(fromTimestamp: nil, toTimestamp: nil)
+        #expect(events.isEmpty)
+    }
+
+    @Test("getResetEvents filters by timestamp range")
+    func getResetEventsFiltersByTimestampRange() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        // Trigger two resets at different times
+        let response1 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 80.0, resetsAt: "2026-02-03T10:00:00Z"),
+            sevenDay: nil,
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response1, tier: nil)
+
+        let response2 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 5.0, resetsAt: "2026-02-03T15:00:00Z"),
+            sevenDay: nil,
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response2, tier: nil)
+
+        // Get all events first
+        let allEvents = try await service.getResetEvents(fromTimestamp: nil, toTimestamp: nil)
+        #expect(allEvents.count == 1)
+
+        // Now filter with a timestamp range that includes the event
+        let eventTimestamp = allEvents[0].timestamp
+        let filteredEvents = try await service.getResetEvents(
+            fromTimestamp: eventTimestamp - 1000,
+            toTimestamp: eventTimestamp + 1000
+        )
+        #expect(filteredEvents.count == 1)
+
+        // Filter with a range that excludes the event
+        let excludedEvents = try await service.getResetEvents(
+            fromTimestamp: eventTimestamp + 10000,
+            toTimestamp: eventTimestamp + 20000
+        )
+        #expect(excludedEvents.count == 0)
+    }
+
+    @Test("Reset event captures pre-reset 7d utilization (from previous poll)")
+    func resetEventCapturesPreReset7dUtil() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        // First poll: 7d util = 40% (this is the PRE-reset value we should capture)
+        let response1 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 80.0, resetsAt: "2026-02-03T10:00:00Z"),
+            sevenDay: WindowUsage(utilization: 40.0, resetsAt: "2026-02-10T00:00:00Z"),
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response1, tier: nil)
+
+        // Second poll: 7d util = 42% (POST-reset value, should NOT be captured)
+        let response2 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 5.0, resetsAt: "2026-02-03T15:00:00Z"),
+            sevenDay: WindowUsage(utilization: 42.0, resetsAt: "2026-02-10T00:00:00Z"),
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response2, tier: nil)
+
+        let events = try await service.getResetEvents(fromTimestamp: nil, toTimestamp: nil)
+        #expect(events.count == 1)
+        // Should capture pre-reset 7d util (40%), not post-reset (42%)
+        #expect(events[0].sevenDayUtil == 40.0)
+    }
+
+    @Test("Peak utilization is recorded from recent polls")
+    func peakUtilizationRecordedFromRecentPolls() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        // Insert polls with increasing utilization
+        for util in [10.0, 30.0, 75.0, 50.0] {
+            let response = UsageResponse(
+                fiveHour: WindowUsage(utilization: util, resetsAt: "2026-02-03T10:00:00Z"),
+                sevenDay: nil,
+                sevenDaySonnet: nil,
+                extraUsage: nil
+            )
+            try await service.persistPoll(response, tier: nil)
+        }
+
+        // Now trigger a reset - the peak should be 75.0
+        let resetResponse = UsageResponse(
+            fiveHour: WindowUsage(utilization: 5.0, resetsAt: "2026-02-03T15:00:00Z"),
+            sevenDay: nil,
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(resetResponse, tier: nil)
+
+        let events = try await service.getResetEvents(fromTimestamp: nil, toTimestamp: nil)
+        #expect(events.count == 1)
+        #expect(events[0].fiveHourPeak == 75.0)
+    }
 }
 
 // MARK: - Mock DatabaseManager for Graceful Degradation Tests

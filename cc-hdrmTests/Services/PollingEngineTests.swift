@@ -89,11 +89,19 @@ private struct PEMockTokenRefreshService: TokenRefreshServiceProtocol {
 private final class PEMockHistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sendable {
     var persistPollCallCount = 0
     var lastPersistedResponse: UsageResponse?
+    var lastPersistedTier: String?
     var shouldThrow = false
+    var mockLastPoll: UsagePoll?
+    var mockResetEvents: [ResetEvent] = []
 
     func persistPoll(_ response: UsageResponse) async throws {
+        try await persistPoll(response, tier: nil)
+    }
+
+    func persistPoll(_ response: UsageResponse, tier: String?) async throws {
         persistPollCallCount += 1
         lastPersistedResponse = response
+        lastPersistedTier = tier
         if shouldThrow {
             throw AppError.databaseQueryFailed(underlying: NSError(domain: "test", code: 1))
         }
@@ -101,6 +109,14 @@ private final class PEMockHistoricalDataService: HistoricalDataServiceProtocol, 
 
     func getRecentPolls(hours: Int) async throws -> [UsagePoll] {
         return []
+    }
+
+    func getLastPoll() async throws -> UsagePoll? {
+        return mockLastPoll
+    }
+
+    func getResetEvents(fromTimestamp: Int64?, toTimestamp: Int64?) async throws -> [ResetEvent] {
+        return mockResetEvents
     }
 
     func getDatabaseSize() async throws -> Int64 {

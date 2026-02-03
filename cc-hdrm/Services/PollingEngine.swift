@@ -148,9 +148,11 @@ final class PollingEngine: PollingEngineProtocol {
             appState.updateStatusMessage(nil)
 
             // Persist to database asynchronously (fire-and-forget, does not block UI)
+            // Pass tier for reset event recording
+            let tier = credentials.rateLimitTier
             Task {
                 do {
-                    try await historicalDataService?.persistPoll(response)
+                    try await historicalDataService?.persistPoll(response, tier: tier)
                 } catch {
                     Self.logger.error("Failed to persist poll data: \(error.localizedDescription)")
                     // Continue without retrying - data for this cycle is lost
