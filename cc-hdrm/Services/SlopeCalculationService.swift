@@ -102,8 +102,11 @@ final class SlopeCalculationService: SlopeCalculationServiceProtocol, @unchecked
                 return .flat
             }
 
-            // Get oldest and newest entries (buffer is append-only, so order is chronological)
-            guard let oldest = entries.first, let newest = entries.last else {
+            // Get oldest and newest entries by timestamp (defensive against out-of-order inserts)
+            guard
+                let oldest = entries.min(by: { $0.timestamp < $1.timestamp }),
+                let newest = entries.max(by: { $0.timestamp < $1.timestamp })
+            else {
                 return .flat
             }
 
