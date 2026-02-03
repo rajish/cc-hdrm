@@ -13,6 +13,7 @@ final class PollingEngine: PollingEngineProtocol {
     private let notificationService: (any NotificationServiceProtocol)?
     private let preferencesManager: any PreferencesManagerProtocol
     private let historicalDataService: (any HistoricalDataServiceProtocol)?
+    private let slopeCalculationService: (any SlopeCalculationServiceProtocol)?
     private var pollingTask: Task<Void, Never>?
 
     private static let logger = Logger(
@@ -27,7 +28,8 @@ final class PollingEngine: PollingEngineProtocol {
         appState: AppState,
         notificationService: (any NotificationServiceProtocol)? = nil,
         preferencesManager: any PreferencesManagerProtocol = PreferencesManager(),
-        historicalDataService: (any HistoricalDataServiceProtocol)? = nil
+        historicalDataService: (any HistoricalDataServiceProtocol)? = nil,
+        slopeCalculationService: (any SlopeCalculationServiceProtocol)? = nil
     ) {
         self.keychainService = keychainService
         self.tokenRefreshService = tokenRefreshService
@@ -36,6 +38,7 @@ final class PollingEngine: PollingEngineProtocol {
         self.notificationService = notificationService
         self.preferencesManager = preferencesManager
         self.historicalDataService = historicalDataService
+        self.slopeCalculationService = slopeCalculationService
     }
 
     func start() async {
@@ -157,6 +160,24 @@ final class PollingEngine: PollingEngineProtocol {
                     Self.logger.error("Failed to persist poll data: \(error.localizedDescription)")
                     // Continue without retrying - data for this cycle is lost
                 }
+            }
+
+            // Update slope calculation with new poll data
+            if let slopeService = slopeCalculationService {
+                // Convert UsageResponse to UsagePoll for slope service
+                let poll = UsagePoll(
+                    id: 0, // Not from DB, ID doesn't matter
+                    timestamp: Int64(Date().timeIntervalSince1970 * 1000),
+                    fiveHourUtil: response.fiveHour?.utilization,
+                    fiveHourResetsAt: nil, // Not needed for slope
+                    sevenDayUtil: response.sevenDay?.utilization,
+                    sevenDayResetsAt: nil
+                )
+                slopeService.addPoll(poll)
+
+                let fiveHourSlope = slopeService.calculateSlope(for: .fiveHour)
+                let sevenDaySlope = slopeService.calculateSlope(for: .sevenDay)
+                appState.updateSlopes(fiveHour: fiveHourSlope, sevenDay: sevenDaySlope)
             }
 
             Self.logger.info("Usage data fetched and applied successfully")
