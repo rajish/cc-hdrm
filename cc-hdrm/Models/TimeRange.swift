@@ -1,15 +1,27 @@
 import Foundation
 
 /// Time range options for querying historical usage data.
-/// Determines which resolution tiers are used for data retrieval.
+///
+/// Used with `getRolledUpData(range:)` and `getResetEvents(range:)` to query
+/// data at appropriate resolutions. Each range automatically stitches data
+/// from the optimal resolution tiers:
+///
+/// ```
+/// .day:   Raw polls (last 24h) - finest granularity
+/// .week:  Raw + 5min rollups (1-7d) - balanced detail
+/// .month: Raw + 5min + hourly rollups (7-30d) - good overview
+/// .all:   Raw + 5min + hourly + daily rollups - full history
+/// ```
+///
+/// - Note: Results are always sorted by timestamp/period_start ascending.
 enum TimeRange: CaseIterable, Sendable {
-    /// Last 24 hours - raw polls only
+    /// Last 24 hours - raw polls only (finest granularity for detailed views)
     case day
-    /// Last 7 days - raw + 5min rollups
+    /// Last 7 days - raw polls (<24h) + 5-minute rollups (1-7d)
     case week
-    /// Last 30 days - raw + 5min + hourly rollups
+    /// Last 30 days - raw + 5-minute + hourly rollups
     case month
-    /// Full retention period - includes daily rollups
+    /// All available data - no time limit (actual retention controlled by pruneOldData, typically ~90 days)
     case all
 
     /// Returns the start timestamp (Unix ms) for this time range.

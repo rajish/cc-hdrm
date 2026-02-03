@@ -119,6 +119,27 @@ private final class PEMockHistoricalDataService: HistoricalDataServiceProtocol, 
         return mockResetEvents
     }
 
+    func getResetEvents(range: TimeRange) async throws -> [ResetEvent] {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let fromTimestamp: Int64?
+
+        switch range {
+        case .day:
+            fromTimestamp = nowMs - (24 * 60 * 60 * 1000)
+        case .week:
+            fromTimestamp = nowMs - (7 * 24 * 60 * 60 * 1000)
+        case .month:
+            fromTimestamp = nowMs - (30 * 24 * 60 * 60 * 1000)
+        case .all:
+            fromTimestamp = nil
+        }
+
+        return mockResetEvents.filter { event in
+            guard let from = fromTimestamp else { return true }
+            return event.timestamp >= from && event.timestamp <= nowMs
+        }
+    }
+
     func getDatabaseSize() async throws -> Int64 {
         return 0
     }

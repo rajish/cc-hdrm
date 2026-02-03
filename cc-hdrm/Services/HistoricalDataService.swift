@@ -345,6 +345,24 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         return events
     }
 
+    func getResetEvents(range: TimeRange) async throws -> [ResetEvent] {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let fromTimestamp: Int64?
+
+        switch range {
+        case .day:
+            fromTimestamp = nowMs - (24 * 60 * 60 * 1000)
+        case .week:
+            fromTimestamp = nowMs - (7 * 24 * 60 * 60 * 1000)
+        case .month:
+            fromTimestamp = nowMs - (30 * 24 * 60 * 60 * 1000)
+        case .all:
+            fromTimestamp = nil  // No lower bound
+        }
+
+        return try await getResetEvents(fromTimestamp: fromTimestamp, toTimestamp: nowMs)
+    }
+
     // MARK: - Private Reset Detection
 
     /// Detects if a reset occurred and records it if so.
