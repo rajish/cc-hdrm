@@ -15,8 +15,15 @@ protocol HistoricalDataServiceProtocol: Sendable {
     /// - Throws: Database errors (caller should handle gracefully)
     func persistPoll(_ response: UsageResponse, tier: String?) async throws
 
-    /// Retrieves recent poll data.
-    /// - Parameter hours: Number of hours to look back
+    /// Retrieves recent poll data for sparkline and chart rendering.
+    ///
+    /// Returns raw polls suitable for fine-grained visualization:
+    /// - `timestamp`: Unix ms for X-axis positioning
+    /// - `fiveHourUtil`: Y-axis primary series (5-hour utilization %)
+    /// - `sevenDayUtil`: Y-axis secondary series (7-day utilization %)
+    /// - `fiveHourResetsAt`/`sevenDayResetsAt`: Reset boundary markers
+    ///
+    /// - Parameter hours: Number of hours to look back (typically 24 for sparklines)
     /// - Returns: Array of poll records ordered by timestamp ascending
     func getRecentPolls(hours: Int) async throws -> [UsagePoll]
 
@@ -30,6 +37,12 @@ protocol HistoricalDataServiceProtocol: Sendable {
     ///   - toTimestamp: Optional end timestamp (Unix ms), inclusive
     /// - Returns: Array of reset events ordered by timestamp ascending
     func getResetEvents(fromTimestamp: Int64?, toTimestamp: Int64?) async throws -> [ResetEvent]
+
+    /// Retrieves reset events within a time range.
+    /// Uses TimeRange enum for API consistency (same parameter pattern as getRolledUpData).
+    /// - Parameter range: Time range to query (.day, .week, .month, .all)
+    /// - Returns: Array of reset events ordered by timestamp ascending
+    func getResetEvents(range: TimeRange) async throws -> [ResetEvent]
 
     /// Returns the current database file size in bytes.
     func getDatabaseSize() async throws -> Int64

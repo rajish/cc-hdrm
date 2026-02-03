@@ -937,6 +937,146 @@ struct HistoricalDataServiceTests {
 
         #expect(rollups.isEmpty)
     }
+
+    // MARK: - Story 10.5: Data Query APIs - getResetEvents(range:) Tests
+
+    @Test("getResetEvents with day range returns events in last 24h (AC 4)")
+    func getResetEventsWithDayRangeReturnsLast24h() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+        let connection = try dbManager.getConnection()
+
+        // Insert reset events at various times
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let twelveHoursAgo = nowMs - (12 * 60 * 60 * 1000)
+        let thirtySixHoursAgo = nowMs - (36 * 60 * 60 * 1000)
+
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        sqlite3_exec(connection, "INSERT INTO reset_events (timestamp, five_hour_peak) VALUES (\(twelveHoursAgo), 80.0)", nil, nil, &errorMessage)
+        sqlite3_exec(connection, "INSERT INTO reset_events (timestamp, five_hour_peak) VALUES (\(thirtySixHoursAgo), 70.0)", nil, nil, &errorMessage)
+
+        let events = try await service.getResetEvents(range: .day)
+
+        #expect(events.count == 1)
+        #expect(events[0].timestamp == twelveHoursAgo)
+    }
+
+    @Test("getResetEvents with week range returns events in last 7 days (AC 4)")
+    func getResetEventsWithWeekRangeReturnsLast7Days() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+        let connection = try dbManager.getConnection()
+
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let threeDaysAgo = nowMs - (3 * 24 * 60 * 60 * 1000)
+        let tenDaysAgo = nowMs - (10 * 24 * 60 * 60 * 1000)
+
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        sqlite3_exec(connection, "INSERT INTO reset_events (timestamp, five_hour_peak) VALUES (\(threeDaysAgo), 75.0)", nil, nil, &errorMessage)
+        sqlite3_exec(connection, "INSERT INTO reset_events (timestamp, five_hour_peak) VALUES (\(tenDaysAgo), 65.0)", nil, nil, &errorMessage)
+
+        let events = try await service.getResetEvents(range: .week)
+
+        #expect(events.count == 1)
+        #expect(events[0].timestamp == threeDaysAgo)
+    }
+
+    @Test("getResetEvents with month range returns events in last 30 days (AC 4)")
+    func getResetEventsWithMonthRangeReturnsLast30Days() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+        let connection = try dbManager.getConnection()
+
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let fifteenDaysAgo = nowMs - (15 * 24 * 60 * 60 * 1000)
+        let sixtyDaysAgo = nowMs - (60 * 24 * 60 * 60 * 1000)
+
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        sqlite3_exec(connection, "INSERT INTO reset_events (timestamp, five_hour_peak) VALUES (\(fifteenDaysAgo), 85.0)", nil, nil, &errorMessage)
+        sqlite3_exec(connection, "INSERT INTO reset_events (timestamp, five_hour_peak) VALUES (\(sixtyDaysAgo), 55.0)", nil, nil, &errorMessage)
+
+        let events = try await service.getResetEvents(range: .month)
+
+        #expect(events.count == 1)
+        #expect(events[0].timestamp == fifteenDaysAgo)
+    }
+
+    @Test("getResetEvents with all range returns all events (AC 4)")
+    func getResetEventsWithAllRangeReturnsAllEvents() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+        let connection = try dbManager.getConnection()
+
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let oneDayAgo = nowMs - (1 * 24 * 60 * 60 * 1000)
+        let fiftyDaysAgo = nowMs - (50 * 24 * 60 * 60 * 1000)
+        let hundredDaysAgo = nowMs - (100 * 24 * 60 * 60 * 1000)
+
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        sqlite3_exec(connection, "INSERT INTO reset_events (timestamp, five_hour_peak) VALUES (\(oneDayAgo), 90.0)", nil, nil, &errorMessage)
+        sqlite3_exec(connection, "INSERT INTO reset_events (timestamp, five_hour_peak) VALUES (\(fiftyDaysAgo), 60.0)", nil, nil, &errorMessage)
+        sqlite3_exec(connection, "INSERT INTO reset_events (timestamp, five_hour_peak) VALUES (\(hundredDaysAgo), 40.0)", nil, nil, &errorMessage)
+
+        let events = try await service.getResetEvents(range: .all)
+
+        #expect(events.count == 3)
+    }
+
+    @Test("getResetEvents with range returns events ordered by timestamp ascending (AC 4)")
+    func getResetEventsWithRangeOrderedByTimestamp() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+        let connection = try dbManager.getConnection()
+
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let t1 = nowMs - 30000
+        let t2 = nowMs - 20000
+        let t3 = nowMs - 10000
+
+        // Insert in non-chronological order
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        sqlite3_exec(connection, "INSERT INTO reset_events (timestamp, five_hour_peak) VALUES (\(t3), 30.0)", nil, nil, &errorMessage)
+        sqlite3_exec(connection, "INSERT INTO reset_events (timestamp, five_hour_peak) VALUES (\(t1), 10.0)", nil, nil, &errorMessage)
+        sqlite3_exec(connection, "INSERT INTO reset_events (timestamp, five_hour_peak) VALUES (\(t2), 20.0)", nil, nil, &errorMessage)
+
+        let events = try await service.getResetEvents(range: .day)
+
+        #expect(events.count == 3)
+        #expect(events[0].timestamp == t1)
+        #expect(events[1].timestamp == t2)
+        #expect(events[2].timestamp == t3)
+    }
+
+    @Test("getResetEvents(range:) returns empty when database unavailable")
+    func getResetEventsWithRangeReturnsEmptyWhenDatabaseUnavailable() async throws {
+        let mockManager = MockDatabaseManager()
+        mockManager.shouldBeAvailable = false
+
+        let service = HistoricalDataService(databaseManager: mockManager)
+
+        let events = try await service.getResetEvents(range: .week)
+        #expect(events.isEmpty)
+    }
 }
 
 // MARK: - Mock DatabaseManager for Graceful Degradation Tests
