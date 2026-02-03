@@ -122,6 +122,18 @@ private final class PEMockHistoricalDataService: HistoricalDataServiceProtocol, 
     func getDatabaseSize() async throws -> Int64 {
         return 0
     }
+
+    func ensureRollupsUpToDate() async throws {
+        // No-op for mock
+    }
+
+    func getRolledUpData(range: TimeRange) async throws -> [UsageRollup] {
+        return []
+    }
+
+    func pruneOldData(retentionDays: Int) async throws {
+        // No-op for mock
+    }
 }
 
 private struct PEMockAPIClient: APIClientProtocol {

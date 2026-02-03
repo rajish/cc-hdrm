@@ -33,4 +33,23 @@ protocol HistoricalDataServiceProtocol: Sendable {
 
     /// Returns the current database file size in bytes.
     func getDatabaseSize() async throws -> Int64
+
+    // MARK: - Story 10.4: Tiered Rollup Engine
+
+    /// Ensures all rollup tiers are up-to-date.
+    /// Call before querying historical data for analytics.
+    /// Performs rollups on-demand, not on a background timer.
+    /// - Throws: Database errors (caller should handle gracefully)
+    func ensureRollupsUpToDate() async throws
+
+    /// Retrieves historical data at appropriate resolution for the time range.
+    /// Automatically stitches data from different resolution tiers.
+    /// - Parameter range: Time range to query (.day, .week, .month, .all)
+    /// - Returns: Array of rollup records ordered by period_start ascending
+    func getRolledUpData(range: TimeRange) async throws -> [UsageRollup]
+
+    /// Prunes data older than the retention period.
+    /// Called automatically at the end of ensureRollupsUpToDate().
+    /// - Parameter retentionDays: Maximum age of data to retain
+    func pruneOldData(retentionDays: Int) async throws
 }

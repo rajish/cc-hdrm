@@ -115,6 +115,7 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
             try createUsagePollsTable(connection)
             try createUsageRollupsTable(connection)
             try createResetEventsTable(connection)
+            try createRollupMetadataTable(connection)
             try setSchemaVersion(currentSchemaVersion)
             Self.logger.info("Database schema created successfully")
         } else if existingVersion < currentSchemaVersion {
@@ -284,6 +285,82 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
         try executeSQL(createIndex, on: connection)
 
         Self.logger.info("Created reset_events table and index")
+    }
+
+    private func createRollupMetadataTable(_ connection: OpaquePointer) throws {
+        let createTable = """
+            CREATE TABLE IF NOT EXISTS rollup_metadata (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+            """
+        try executeSQL(createTable, on: connection)
+
+        Self.logger.info("Created rollup_metadata table")
+    }
+
+    // MARK: - Rollup Metadata Helpers
+
+    /// Gets the last rollup timestamp from metadata.
+    /// - Returns: Unix milliseconds of last rollup, or nil if never run
+    func getLastRollupTimestamp() throws -> Int64? {
+        let connection = try getConnection()
+
+        let sql = "SELECT value FROM rollup_metadata WHERE key = 'last_rollup_timestamp'"
+
+        var statement: OpaquePointer?
+        defer {
+            if let statement = statement {
+                sqlite3_finalize(statement)
+            }
+        }
+
+        let prepareResult = sqlite3_prepare_v2(connection, sql, -1, &statement, nil)
+        guard prepareResult == SQLITE_OK else {
+            throw AppError.databaseQueryFailed(underlying: SQLiteError.prepareFailed(code: prepareResult))
+        }
+
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            return nil
+        }
+
+        guard sqlite3_column_type(statement, 0) != SQLITE_NULL else {
+            return nil
+        }
+
+        let valueString = String(cString: sqlite3_column_text(statement, 0))
+        return Int64(valueString)
+    }
+
+    /// Sets the last rollup timestamp in metadata.
+    /// - Parameter timestamp: Unix milliseconds of last rollup
+    func setLastRollupTimestamp(_ timestamp: Int64) throws {
+        let connection = try getConnection()
+
+        let sql = "INSERT OR REPLACE INTO rollup_metadata (key, value) VALUES ('last_rollup_timestamp', ?)"
+
+        var statement: OpaquePointer?
+        defer {
+            if let statement = statement {
+                sqlite3_finalize(statement)
+            }
+        }
+
+        let prepareResult = sqlite3_prepare_v2(connection, sql, -1, &statement, nil)
+        guard prepareResult == SQLITE_OK else {
+            throw AppError.databaseQueryFailed(underlying: SQLiteError.prepareFailed(code: prepareResult))
+        }
+
+        let timestampString = String(timestamp)
+        timestampString.withCString { cString in
+            sqlite3_bind_text(statement, 1, cString, -1, SQLITE_TRANSIENT)
+        }
+
+        let stepResult = sqlite3_step(statement)
+        guard stepResult == SQLITE_DONE else {
+            let errorMessage = String(cString: sqlite3_errmsg(connection))
+            throw AppError.databaseQueryFailed(underlying: SQLiteError.execFailed(message: errorMessage))
+        }
     }
 
     // MARK: - Schema Verification Helpers (for testing)
