@@ -86,6 +86,28 @@ private struct PEMockTokenRefreshService: TokenRefreshServiceProtocol {
     }
 }
 
+private final class PEMockHistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sendable {
+    var persistPollCallCount = 0
+    var lastPersistedResponse: UsageResponse?
+    var shouldThrow = false
+
+    func persistPoll(_ response: UsageResponse) async throws {
+        persistPollCallCount += 1
+        lastPersistedResponse = response
+        if shouldThrow {
+            throw AppError.databaseQueryFailed(underlying: NSError(domain: "test", code: 1))
+        }
+    }
+
+    func getRecentPolls(hours: Int) async throws -> [UsagePoll] {
+        return []
+    }
+
+    func getDatabaseSize() async throws -> Int64 {
+        return 0
+    }
+}
+
 private struct PEMockAPIClient: APIClientProtocol {
     private let resultProvider: ResultProvider
     private let callTracker: APICallTracker
@@ -384,6 +406,62 @@ struct PollingEngineTests {
         await engine.performPollCycle()
 
         #expect(mockKeychain.readCallCount == 3, "Credentials should be read fresh each cycle")
+    }
+
+    @Test("successful poll cycle calls historicalDataService.persistPoll (Story 10.2 AC #1)")
+    @MainActor
+    func successfulPollCallsPersistPoll() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(result: successResponse())
+        let mockHistorical = PEMockHistoricalDataService()
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            historicalDataService: mockHistorical
+        )
+
+        await engine.performPollCycle()
+
+        // Give time for fire-and-forget Task to execute
+        try? await Task.sleep(for: .milliseconds(100))
+
+        #expect(mockHistorical.persistPollCallCount == 1, "persistPoll should be called after successful API response")
+        #expect(mockHistorical.lastPersistedResponse?.fiveHour?.utilization == 18.0)
+        #expect(mockHistorical.lastPersistedResponse?.sevenDay?.utilization == 6.0)
+    }
+
+    @Test("persistPoll error does not affect poll cycle (Story 10.2 AC #2)")
+    @MainActor
+    func persistPollErrorDoesNotAffectPollCycle() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(result: successResponse())
+        let mockHistorical = PEMockHistoricalDataService()
+        mockHistorical.shouldThrow = true
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            historicalDataService: mockHistorical
+        )
+
+        await engine.performPollCycle()
+
+        // Give time for fire-and-forget Task to execute
+        try? await Task.sleep(for: .milliseconds(100))
+
+        // Poll cycle should still complete successfully
+        #expect(appState.connectionStatus == .connected)
+        #expect(appState.fiveHour?.utilization == 18.0)
+        #expect(mockHistorical.persistPollCallCount == 1, "persistPoll should still be attempted")
     }
 
     @Test("AppState.lastUpdated is set after successful fetch")

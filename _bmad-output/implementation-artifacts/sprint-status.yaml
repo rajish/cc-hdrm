@@ -91,7 +91,7 @@ development_status:
 
   epic-10: in-progress
   10-1-database-manager-schema-creation: done
-  10-2-historical-data-service-poll-persistence: backlog
+  10-2-historical-data-service-poll-persistence: done
   10-3-reset-event-detection: backlog
   10-4-tiered-rollup-engine: backlog
   10-5-data-query-apis: backlog

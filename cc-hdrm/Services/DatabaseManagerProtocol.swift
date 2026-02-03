@@ -29,4 +29,8 @@ protocol DatabaseManagerProtocol: AnyObject, Sendable {
     /// Returns the current schema version from `PRAGMA user_version`.
     /// - Returns: The schema version number, or 0 if not set
     func getSchemaVersion() throws -> Int
+
+    /// Closes the database connection.
+    /// Primarily used in tests for cleanup before deleting test database files.
+    func closeConnection()
 }
