@@ -5,6 +5,11 @@ import Testing
 @Suite("TokenRefreshService Tests")
 struct TokenRefreshServiceTests {
 
+    // MARK: - Constants
+
+    private static let tokenEndpointURL = URL(string: "https://console.anthropic.com/v1/oauth/token")!
+    private static let expectedClientId = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+
     // MARK: - Successful Refresh
 
     @Test("successful refresh returns updated credentials")
@@ -19,7 +24,7 @@ struct TokenRefreshServiceTests {
         """.data(using: .utf8)!
 
         let mockResponse = HTTPURLResponse(
-            url: URL(string: "https://platform.claude.com/v1/oauth/token")!,
+            url: Self.tokenEndpointURL,
             statusCode: 200,
             httpVersion: nil,
             headerFields: nil
@@ -52,7 +57,7 @@ struct TokenRefreshServiceTests {
         """.data(using: .utf8)!
 
         let mockResponse = HTTPURLResponse(
-            url: URL(string: "https://platform.claude.com/v1/oauth/token")!,
+            url: Self.tokenEndpointURL,
             statusCode: 200,
             httpVersion: nil,
             headerFields: nil
@@ -85,7 +90,7 @@ struct TokenRefreshServiceTests {
     @Test("non-200 status throws tokenRefreshFailed")
     func non200Status() async {
         let mockResponse = HTTPURLResponse(
-            url: URL(string: "https://platform.claude.com/v1/oauth/token")!,
+            url: Self.tokenEndpointURL,
             statusCode: 401,
             httpVersion: nil,
             headerFields: nil
@@ -103,7 +108,7 @@ struct TokenRefreshServiceTests {
     @Test("invalid response body throws tokenRefreshFailed")
     func invalidResponseBody() async {
         let mockResponse = HTTPURLResponse(
-            url: URL(string: "https://platform.claude.com/v1/oauth/token")!,
+            url: Self.tokenEndpointURL,
             statusCode: 200,
             httpVersion: nil,
             headerFields: nil
@@ -125,7 +130,7 @@ struct TokenRefreshServiceTests {
         """.data(using: .utf8)!
 
         let mockResponse = HTTPURLResponse(
-            url: URL(string: "https://platform.claude.com/v1/oauth/token")!,
+            url: Self.tokenEndpointURL,
             statusCode: 200,
             httpVersion: nil,
             headerFields: nil
@@ -147,7 +152,7 @@ struct TokenRefreshServiceTests {
         """.data(using: .utf8)!
 
         let mockResponse = HTTPURLResponse(
-            url: URL(string: "https://platform.claude.com/v1/oauth/token")!,
+            url: Self.tokenEndpointURL,
             statusCode: 200,
             httpVersion: nil,
             headerFields: nil
@@ -162,5 +167,49 @@ struct TokenRefreshServiceTests {
         #expect(creds.accessToken == "new-token")
         #expect(creds.expiresAt == nil)
         #expect(creds.refreshToken == "old-refresh")
+    }
+
+    // MARK: - Request Format Verification
+
+    @Test("request includes correct endpoint and client_id")
+    func requestFormatVerification() async throws {
+        let responseJSON = """
+        { "access_token": "new-token", "token_type": "Bearer" }
+        """.data(using: .utf8)!
+
+        let mockResponse = HTTPURLResponse(
+            url: Self.tokenEndpointURL,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        // Use actor to safely capture request across concurrency boundary
+        actor RequestCapture {
+            var request: URLRequest?
+            func capture(_ req: URLRequest) { request = req }
+        }
+        let capture = RequestCapture()
+
+        let service = TokenRefreshService(dataLoader: { request in
+            await capture.capture(request)
+            return (responseJSON, mockResponse)
+        })
+
+        _ = try await service.refreshToken(using: "test-refresh-token")
+
+        let capturedRequest = await capture.request
+
+        // Verify endpoint URL
+        #expect(capturedRequest?.url == Self.tokenEndpointURL)
+
+        // Verify request body contains required fields
+        let bodyString = capturedRequest?.httpBody.flatMap { String(data: $0, encoding: .utf8) }
+        #expect(bodyString?.contains("grant_type=refresh_token") == true)
+        #expect(bodyString?.contains("refresh_token=test-refresh-token") == true)
+        #expect(bodyString?.contains("client_id=\(Self.expectedClientId)") == true)
+
+        // Verify Content-Type header
+        #expect(capturedRequest?.value(forHTTPHeaderField: "Content-Type") == "application/x-www-form-urlencoded")
     }
 }

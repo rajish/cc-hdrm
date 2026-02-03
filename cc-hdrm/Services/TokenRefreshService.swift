@@ -9,7 +9,10 @@ final class TokenRefreshService: TokenRefreshServiceProtocol, @unchecked Sendabl
         category: "token"
     )
 
-    private static let tokenEndpoint = URL(string: "https://platform.claude.com/v1/oauth/token")!
+    private static let tokenEndpoint = URL(string: "https://console.anthropic.com/v1/oauth/token")!
+    
+    /// Anthropic's public OAuth client ID (used by Claude Code and OpenCode)
+    private static let clientId = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 
     /// Abstraction for network requests — enables test injection.
     private let dataLoader: @Sendable (URLRequest) async throws -> (Data, URLResponse)
@@ -37,7 +40,7 @@ final class TokenRefreshService: TokenRefreshServiceProtocol, @unchecked Sendabl
             Self.logger.error("Failed to URL-encode refresh token")
             throw AppError.tokenRefreshFailed(underlying: URLError(.badURL))
         }
-        let body = "grant_type=refresh_token&refresh_token=\(encodedToken)"
+        let body = "grant_type=refresh_token&refresh_token=\(encodedToken)&client_id=\(Self.clientId)"
         request.httpBody = body.data(using: .utf8)
 
         let data: Data

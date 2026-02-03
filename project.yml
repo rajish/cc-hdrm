@@ -40,6 +40,9 @@ targets:
         GENERATE_INFOPLIST_FILE: false
     entitlements:
       path: cc-hdrm/cc_hdrm.entitlements
+      properties:
+        keychain-access-groups:
+          - "$(AppIdentifierPrefix)com.cc-hdrm.app"
 
   cc-hdrmTests:
     type: bundle.unit-test
