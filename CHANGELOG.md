@@ -20,6 +20,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-02-03
+
+### Changed
+
+- feat: add Homebrew Cask tap + auto-update workflow step (Story 9.1)
+- Fix story 8.1 code review issues: AC #2 DMG preference, test URLs, initializer isolation, redundant wrapper, empty assets test
+- feat: add dismissable update badge with download link (Story 8.2)
+- feat: add UpdateCheckService for GitHub release update detection
+- Update project-context.md for Phase 2: add new services, GitHub API integration, refined HTTP boundaries
+- Update story 7.3 with CI fixes, test fixes, Xcode upgrade, and first release notes
+
 ## [1.0.1] - 2026-02-02
 
 ### Changed
@@ -54,6 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Launch at login via SMAppService
 - Xcode project with XcodeGen configuration
 
-[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/rajish/cc-hdrm/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/rajish/cc-hdrm/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/rajish/cc-hdrm/releases/tag/v1.0.0
