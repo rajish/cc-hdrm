@@ -12,6 +12,16 @@ The following are intentionally **not tracked by git**:
 
 - `*.xcodeproj/` — Xcode project files (including `project.pbxproj`) are gitignored. When reviewing story File Lists, do NOT report these as "missing from git" or "undocumented changes" — they cannot be tracked.
 
+## XcodeGen — Project Generation
+
+This project uses **XcodeGen** with `project.yml`. After adding new Swift files:
+
+```bash
+xcodegen generate
+```
+
+This regenerates `cc-hdrm.xcodeproj` with all files in `cc-hdrm/` and `cc-hdrmTests/` auto-discovered.
+
 ## Story Creation — File Path References
 
 When creating stories, every reference to an existing project file **must** use a project-relative path (e.g., `cc-hdrm/Services/NotificationService.swift`), not just a filename. This eliminates unnecessary file searches by dev agents and saves tokens. Applies to all sections: Tasks, Dev Notes, File Structure Requirements, References, and inline code comments.
