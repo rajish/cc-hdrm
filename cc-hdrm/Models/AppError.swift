@@ -10,6 +10,9 @@ enum AppError: Error, Sendable, Equatable {
     case networkUnreachable
     case apiError(statusCode: Int, body: String?)
     case parseError(underlying: any Error & Sendable)
+    case databaseOpenFailed(path: String)
+    case databaseSchemaFailed(underlying: any Error & Sendable)
+    case databaseQueryFailed(underlying: any Error & Sendable)
 
     static func == (lhs: AppError, rhs: AppError) -> Bool {
         switch (lhs, rhs) {
@@ -24,6 +27,12 @@ enum AppError: Error, Sendable, Equatable {
         case let (.apiError(lCode, lBody), .apiError(rCode, rBody)):
             return lCode == rCode && lBody == rBody
         case (.parseError, .parseError):
+            return true
+        case let (.databaseOpenFailed(lPath), .databaseOpenFailed(rPath)):
+            return lPath == rPath
+        case (.databaseSchemaFailed, .databaseSchemaFailed):
+            return true
+        case (.databaseQueryFailed, .databaseQueryFailed):
             return true
         default:
             return false
