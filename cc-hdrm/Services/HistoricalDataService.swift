@@ -1215,6 +1215,29 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
 
     // MARK: - Task 8: Query Rolled Up Data
 
+    /// Estimated poll interval in milliseconds (used for pseudo-rollup period calculation)
+    private static let estimatedPollIntervalMs: Int64 = 30_000
+
+    /// Converts a raw poll to a pseudo-rollup for consistent query results.
+    /// - Parameter poll: The raw usage poll
+    /// - Returns: UsageRollup representing the single poll
+    private func pollToRollup(_ poll: UsagePoll) -> UsageRollup {
+        UsageRollup(
+            id: poll.id,
+            periodStart: poll.timestamp,
+            periodEnd: poll.timestamp + Self.estimatedPollIntervalMs,
+            resolution: .fiveMin, // Use fiveMin as placeholder for raw
+            fiveHourAvg: poll.fiveHourUtil,
+            fiveHourPeak: poll.fiveHourUtil,
+            fiveHourMin: poll.fiveHourUtil,
+            sevenDayAvg: poll.sevenDayUtil,
+            sevenDayPeak: poll.sevenDayUtil,
+            sevenDayMin: poll.sevenDayUtil,
+            resetCount: 0,
+            wasteCredits: nil
+        )
+    }
+
     /// Queries historical data at appropriate resolution for the time range.
     private func queryRolledUpData(range: TimeRange, connection: OpaquePointer) async throws -> [UsageRollup] {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
@@ -1228,44 +1251,12 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         case .day:
             // Raw polls only from last 24h - convert to rollup format for consistency
             let polls = try queryRawPollsForRollup(from: twentyFourHoursAgo, to: nowMs, connection: connection)
-            // For day view, we return raw polls as-is (no rollups needed)
-            // Convert polls to "pseudo-rollups" with single-poll resolution
-            for poll in polls {
-                allRollups.append(UsageRollup(
-                    id: poll.id,
-                    periodStart: poll.timestamp,
-                    periodEnd: poll.timestamp + 30000, // Assume ~30s poll interval
-                    resolution: .fiveMin, // Use fiveMin as placeholder for raw
-                    fiveHourAvg: poll.fiveHourUtil,
-                    fiveHourPeak: poll.fiveHourUtil,
-                    fiveHourMin: poll.fiveHourUtil,
-                    sevenDayAvg: poll.sevenDayUtil,
-                    sevenDayPeak: poll.sevenDayUtil,
-                    sevenDayMin: poll.sevenDayUtil,
-                    resetCount: 0,
-                    wasteCredits: nil
-                ))
-            }
+            allRollups.append(contentsOf: polls.map { pollToRollup($0) })
 
         case .week:
             // Raw <24h + 5min rollups 1-7d
             let recentPolls = try queryRawPollsForRollup(from: twentyFourHoursAgo, to: nowMs, connection: connection)
-            for poll in recentPolls {
-                allRollups.append(UsageRollup(
-                    id: poll.id,
-                    periodStart: poll.timestamp,
-                    periodEnd: poll.timestamp + 30000,
-                    resolution: .fiveMin,
-                    fiveHourAvg: poll.fiveHourUtil,
-                    fiveHourPeak: poll.fiveHourUtil,
-                    fiveHourMin: poll.fiveHourUtil,
-                    sevenDayAvg: poll.sevenDayUtil,
-                    sevenDayPeak: poll.sevenDayUtil,
-                    sevenDayMin: poll.sevenDayUtil,
-                    resetCount: 0,
-                    wasteCredits: nil
-                ))
-            }
+            allRollups.append(contentsOf: recentPolls.map { pollToRollup($0) })
             let fiveMinRollups = try queryRollupsForRollup(
                 resolution: .fiveMin,
                 from: sevenDaysAgo,
@@ -1277,22 +1268,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         case .month:
             // Raw + 5min + hourly
             let recentPolls = try queryRawPollsForRollup(from: twentyFourHoursAgo, to: nowMs, connection: connection)
-            for poll in recentPolls {
-                allRollups.append(UsageRollup(
-                    id: poll.id,
-                    periodStart: poll.timestamp,
-                    periodEnd: poll.timestamp + 30000,
-                    resolution: .fiveMin,
-                    fiveHourAvg: poll.fiveHourUtil,
-                    fiveHourPeak: poll.fiveHourUtil,
-                    fiveHourMin: poll.fiveHourUtil,
-                    sevenDayAvg: poll.sevenDayUtil,
-                    sevenDayPeak: poll.sevenDayUtil,
-                    sevenDayMin: poll.sevenDayUtil,
-                    resetCount: 0,
-                    wasteCredits: nil
-                ))
-            }
+            allRollups.append(contentsOf: recentPolls.map { pollToRollup($0) })
             let fiveMinRollups = try queryRollupsForRollup(
                 resolution: .fiveMin,
                 from: sevenDaysAgo,
@@ -1311,22 +1287,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         case .all:
             // Raw + 5min + hourly + daily
             let recentPolls = try queryRawPollsForRollup(from: twentyFourHoursAgo, to: nowMs, connection: connection)
-            for poll in recentPolls {
-                allRollups.append(UsageRollup(
-                    id: poll.id,
-                    periodStart: poll.timestamp,
-                    periodEnd: poll.timestamp + 30000,
-                    resolution: .fiveMin,
-                    fiveHourAvg: poll.fiveHourUtil,
-                    fiveHourPeak: poll.fiveHourUtil,
-                    fiveHourMin: poll.fiveHourUtil,
-                    sevenDayAvg: poll.sevenDayUtil,
-                    sevenDayPeak: poll.sevenDayUtil,
-                    sevenDayMin: poll.sevenDayUtil,
-                    resetCount: 0,
-                    wasteCredits: nil
-                ))
-            }
+            allRollups.append(contentsOf: recentPolls.map { pollToRollup($0) })
             let fiveMinRollups = try queryRollupsForRollup(
                 resolution: .fiveMin,
                 from: sevenDaysAgo,
@@ -1374,12 +1335,16 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         sqlite3_bind_int64(statement, 1, cutoffMs)
 
         var stepResult = sqlite3_step(statement)
+        // Capture error message BEFORE finalize (finalize can clear error state)
+        var errorMessage: String?
+        if stepResult != SQLITE_DONE {
+            errorMessage = String(cString: sqlite3_errmsg(connection))
+        }
         sqlite3_finalize(statement)
         statement = nil
 
         guard stepResult == SQLITE_DONE else {
-            let errorMessage = String(cString: sqlite3_errmsg(connection))
-            throw AppError.databaseQueryFailed(underlying: SQLiteError.execFailed(message: errorMessage))
+            throw AppError.databaseQueryFailed(underlying: SQLiteError.execFailed(message: errorMessage ?? "Unknown error"))
         }
 
         // Delete old reset events
@@ -1393,11 +1358,14 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         sqlite3_bind_int64(statement, 1, cutoffMs)
 
         stepResult = sqlite3_step(statement)
+        // Capture error message BEFORE finalize (finalize can clear error state)
+        if stepResult != SQLITE_DONE {
+            errorMessage = String(cString: sqlite3_errmsg(connection))
+        }
         sqlite3_finalize(statement)
 
         guard stepResult == SQLITE_DONE else {
-            let errorMessage = String(cString: sqlite3_errmsg(connection))
-            throw AppError.databaseQueryFailed(underlying: SQLiteError.execFailed(message: errorMessage))
+            throw AppError.databaseQueryFailed(underlying: SQLiteError.execFailed(message: errorMessage ?? "Unknown error"))
         }
 
         Self.logger.info("Pruned data older than \(retentionDays, privacy: .public) days")

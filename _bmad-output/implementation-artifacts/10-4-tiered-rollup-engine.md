@@ -129,7 +129,7 @@ This story implements the tiered rollup engine that transforms ephemeral poll da
 
 ### Data Flow
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                        ensureRollupsUpToDate()                              │
 │                              (orchestrator)                                  │
@@ -521,7 +521,7 @@ func testPerformanceUnderTypicalLoad() async throws {
 ### Project Structure Notes
 
 **New files to create:**
-```
+```text
 cc-hdrm/Models/
 ├── UsageRollup.swift                    # NEW
 └── TimeRange.swift                      # NEW
@@ -531,7 +531,7 @@ cc-hdrmTests/Models/
 ```
 
 **Modified files:**
-```
+```text
 cc-hdrm/Services/DatabaseManager.swift                 # Add metadata table
 cc-hdrm/Services/HistoricalDataServiceProtocol.swift  # Add new methods
 cc-hdrm/Services/HistoricalDataService.swift          # Implement rollup logic

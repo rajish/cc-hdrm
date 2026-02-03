@@ -843,15 +843,31 @@ struct HistoricalDataServiceTests {
         // Query rollups
         let rollups = try await service.getRolledUpData(range: .week)
 
-        // Should have rollup data
-        // The exact count depends on what raw polls remain in <24h window
-        // But we should be able to find a 5min rollup
-        let fiveMinRollups = rollups.filter { $0.resolution == .fiveMin || $0.periodStart == bucketStart }
+        // Find the 5-minute rollup for our specific bucket
+        let fiveMinRollups = rollups.filter { 
+            $0.resolution == .fiveMin && $0.periodStart == bucketStart 
+        }
 
-        // The aggregates should be: avg=(50+60+55)/3=55, peak=60, min=50
-        // Note: If data is returned as raw (not rolled up yet based on timing), 
-        // this test validates the mechanism works
-        #expect(!rollups.isEmpty || fiveMinRollups.isEmpty)
+        // Verify rollup was created with correct aggregates
+        // Expected: avg=(50+60+55)/3=55, peak=60, min=50 for 5h window
+        // Expected: avg=(40+45+42)/3=42.33, peak=45, min=40 for 7d window
+        #expect(!fiveMinRollups.isEmpty, "Expected 5-minute rollup to be created for bucket \(bucketStart)")
+        
+        if let rollup = fiveMinRollups.first {
+            // Verify 5-hour aggregates
+            if let avg = rollup.fiveHourAvg {
+                #expect(abs(avg - 55.0) < 0.01, "Expected fiveHourAvg ~55.0, got \(avg)")
+            }
+            #expect(rollup.fiveHourPeak == 60.0, "Expected fiveHourPeak 60.0, got \(String(describing: rollup.fiveHourPeak))")
+            #expect(rollup.fiveHourMin == 50.0, "Expected fiveHourMin 50.0, got \(String(describing: rollup.fiveHourMin))")
+            
+            // Verify 7-day aggregates
+            if let avg = rollup.sevenDayAvg {
+                #expect(abs(avg - 42.33) < 0.34, "Expected sevenDayAvg ~42.33, got \(avg)")
+            }
+            #expect(rollup.sevenDayPeak == 45.0, "Expected sevenDayPeak 45.0, got \(String(describing: rollup.sevenDayPeak))")
+            #expect(rollup.sevenDayMin == 40.0, "Expected sevenDayMin 40.0, got \(String(describing: rollup.sevenDayMin))")
+        }
     }
 
     @Test("original data deleted after successful rollup (AC 1)")
