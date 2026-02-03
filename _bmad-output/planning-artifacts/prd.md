@@ -1,5 +1,9 @@
 ---
-stepsCompleted: [step-01-init, step-02-discovery, step-03-success, step-04-journeys, step-05-domain, step-06-innovation, step-07-project-type, step-08-scoping, step-09-functional, step-10-nonfunctional, step-11-polish]
+stepsCompleted: [step-01-init, step-02-discovery, step-03-success, step-04-journeys, step-05-domain, step-06-innovation, step-07-project-type, step-08-scoping, step-09-functional, step-10-nonfunctional, step-11-polish, step-e-01-discovery, step-e-02-review, step-e-03-edit]
+lastEdited: '2026-02-03'
+editHistory:
+  - date: '2026-02-03'
+    changes: 'Updated Phase 3 with brainstorming results (historical tracking, headroom analysis, slope indicator), added FR33-FR45, deferred unexplored items to new Phase 4'
 classification:
   projectType: desktop_app
   domain: general
@@ -7,12 +11,13 @@ classification:
   projectContext: greenfield
 inputDocuments:
   - _bmad-output/planning-artifacts/product-brief-cc-usage-2026-01-30.md
+  - _bmad-output/planning-artifacts/brainstorming-phase3-expansion-2026-02-03.md
 workflowType: 'prd'
 projectName: cc-hdrm
 documentCounts:
   briefs: 1
   research: 0
-  brainstorming: 0
+  brainstorming: 1
   projectDocs: 0
 ---
 
@@ -146,7 +151,7 @@ OAuth tokens expire (observed `expiresAt` ~6h from issue). The Keychain includes
 4. **Background polling** -- every 30-60 seconds, entirely outside Claude conversations
 5. **Threshold notifications** -- macOS native notifications at 80% and 95% (hardcoded)
 6. **Disconnected state** -- clear indicator when API is unreachable
-8. **Subscription tier display** -- Pro/Max shown in expanded panel
+7. **Subscription tier display** -- Pro/Max shown in expanded panel
 
 **Core User Journeys Supported:** All three (onboarding, daily flow, edge case)
 
@@ -164,11 +169,71 @@ OAuth tokens expire (observed `expiresAt` ~6h from issue). The Keychain includes
 
 ### Phase 3: Expansion
 
-- Sonnet-specific usage breakdown
-- Usage graphs -- historical patterns over hours/days/weeks
-- Limit prediction based on usage slope
+#### Historical Usage Tracking
+
+Persist each poll snapshot to a local SQLite database, building a client-agnostic time-series independent of any single Claude client's local stats.
+
+**Storage:** SQLite (bundled with macOS). Year-scale retention at poll frequency generates ~525K records/year (~15-20 MB raw).
+
+**Tiered Rollup Strategy:**
+
+| Data Age   | Resolution        | Purpose                             |
+| ---------- | ----------------- | ----------------------------------- |
+| < 24 hours | Per-poll (~60s)   | Real-time detail, recent debugging  |
+| 1-7 days   | 5-minute averages | Short-term pattern visibility       |
+| 7-30 days  | Hourly averages   | Weekly pattern analysis             |
+| 30+ days   | Daily summary     | Long-term trends, seasonal patterns |
+
+Daily summary includes: average utilization, peak utilization, minimum utilization, and calculated wasted headroom percentage.
+
+**Retention:** Configurable via settings, default 1 year.
+
+**Gap Handling:** Render missing periods as visually distinct (hatched/grey). Never interpolate. Infer reset boundaries from shifts in `resets_at` timestamp between polls.
+
+**Visualization:** Sparkline of last 24 hours in popover (below existing gauges) + full analytics view in a separate window (zoomable, multi-overlay, all retention periods).
+
+**Data per poll:** `{ timestamp, 5h_utilization, 5h_resets_at, 7d_utilization, 7d_resets_at }`
+
+**Research dependency:** Investigate whether Anthropic exposes a historical usage API endpoint to backfill gaps from periods when cc-hdrm was not running.
+
+#### Underutilised Headroom Analysis
+
+The 5-hour and 7-day limits form a nested constraint system. Effective headroom = min(5h remaining capacity, 7d remaining capacity). A user at 10% of 5h but 92% of 7d has very little real headroom.
+
+**Three Waste Categories:**
+
+| Category           | Definition                                                    | User Insight                                                                  |
+| ------------------ | ------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| **5h waste**       | 5h window reset with unused capacity; 7d had room            | "You could have done more in that window"                                     |
+| **7d-constrained** | 5h had headroom but 7d was the binding constraint             | "You were pacing correctly — pushing harder would've hit the weekly wall"     |
+| **True waste**     | Both 5h and 7d had significant remaining capacity at 5h reset | "You genuinely left capacity unused"                                          |
+
+7d-constrained is explicitly **not waste** — the visualization must distinguish this to avoid misleading users.
+
+**Visualization:** Three-band stacked chart in analytics view — used (solid), 7d-constrained (hatched/muted), true available (empty/light). Calculation at render time since the relationship between limits depends on the time horizon analyzed.
+
+#### Usage Slope Indicator
+
+Replaces the original "limit prediction" concept. Explicit time-to-exhaustion predictions have trust problems: usage is bursty, predictions whipsaw, and false precision trains users to ignore the feature. A discrete slope indicator communicates **how fast am I burning** without pretending to know the future.
+
+**Slope Levels:**
+
+| Indicator   | Visual | Meaning                    | Typical Scenario                            |
+| ----------- | ------ | -------------------------- | ------------------------------------------- |
+| **Cooling** | ↘      | Utilization decreasing     | Rolling window moving past older high-usage |
+| **Flat**    | →      | No meaningful change       | Idle, between sessions                      |
+| **Rising**  | ↗      | Moderate consumption rate  | One active session, normal pace             |
+| **Steep**   | ⬆      | Heavy consumption rate     | Multiple sessions or intense conversation   |
+
+**Calculation:** Sample last 10-15 minutes of poll data, compute average rate of change (% per minute), map to discrete levels. Threshold values require tuning with real usage data.
+
+**Display:** Inline next to utilization in menu bar (`78% ↗`), per-window in popover for both 5h and 7d gauges, overlaid on historical analytics.
+
+### Phase 4: Future
+
+- Sonnet-specific usage breakdown (API returns `seven_day_sonnet` data)
 - Linux tray support
-- Extra usage / spending tracking
+- Extra usage / spending tracking (API returns `extra_usage` with spending data)
 
 ### Risk Mitigation
 
@@ -267,7 +332,7 @@ Without cc-hdrm, he'd have kept going, gotten cut off mid-response, lost context
 - No main window -- entire UI lives in the menu bar popover
 - Minimal permissions -- Keychain read/write access (write for token refresh) and outbound HTTPS
 - Background execution via `NSApplication` with no termination on last window close
-- Under 50 MB memory, no persistent storage beyond in-memory state
+- Under 50 MB memory, no persistent storage beyond in-memory state (Phase 1; Phase 3 introduces SQLite for historical data)
 
 ## Functional Requirements
 
@@ -320,6 +385,28 @@ Without cc-hdrm, he'd have kept going, gotten cut off mid-response, lost context
 - FR30: User can access a settings view from the gear menu to configure preferences (Phase 2)
 - FR31: Maintainer can trigger a semver release by including `[patch]`, `[minor]`, or `[major]` in a PR title merged to `master` (Phase 2)
 - FR32: Release changelog is auto-generated from merged PR titles since last tag, with optional maintainer preamble (Phase 2)
+
+### Historical Usage Tracking (Phase 3)
+
+- FR33: App persists each poll snapshot (timestamp, 5h utilization, 5h resets_at, 7d utilization, 7d resets_at) to a local SQLite database
+- FR34: App rolls up historical data at decreasing resolution as data ages, balancing storage efficiency with analytical granularity
+- FR35: User can view a compact 24-hour usage trend of 5h utilization in the popover below existing gauges
+- FR36: User can open a full analytics view in a separate window with zoomable historical charts across all retention periods
+- FR37: App renders data gaps as a visually distinct state with no interpolation of missing data
+- FR38: User can configure data retention period in settings (default 1 year)
+
+### Underutilised Headroom Analysis (Phase 3)
+
+- FR39: App calculates effective headroom as min(5h remaining capacity, 7d remaining capacity)
+- FR40: App detects 5h window resets and classifies unused capacity into three categories: 5h waste, 7d-constrained (not waste), and true waste
+- FR41: User can view a breakdown of used capacity, 7d-constrained capacity, and true available capacity in the analytics view
+
+### Usage Slope Indicator (Phase 3)
+
+- FR42: App computes usage rate of change from recent poll history
+- FR43: App maps rate of change to a discrete 4-level slope indicator (Cooling ↘, Flat →, Rising ↗, Steep ⬆)
+- FR44: User can see the slope indicator inline next to the utilization percentage in the menu bar
+- FR45: User can see per-window slope indicators in the popover for both 5h and 7d gauges
 
 ## Non-Functional Requirements
 
