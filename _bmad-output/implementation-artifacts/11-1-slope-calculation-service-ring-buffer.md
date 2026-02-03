@@ -138,7 +138,8 @@ Within any rate limit window (5h or 7d), utilization **ONLY GOES UP**. You consu
 This is the **first story of Epic 11 (Usage Slope Indicator)**. It establishes the calculation engine that will power slope display in the menu bar (Story 11.3) and popover (Story 11.4).
 
 **Data Flow:**
-```
+
+```text
 PollingEngine -> fetchUsageData() -> UsageResponse
                                         |
                     +-------------------+-------------------+
@@ -248,6 +249,7 @@ func calculateSlope(for window: UsageWindow) -> SlopeLevel {
 ```
 
 **Rate thresholds (% per minute):**
+
 | Rate      | Level   | Meaning                              |
 | --------- | ------- | ------------------------------------ |
 | < 0.3     | Flat    | Idle or light use                    |

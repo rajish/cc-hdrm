@@ -42,21 +42,28 @@ struct SlopeCalculationServiceTests {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
 
         // Add an old poll (20 minutes ago - should be evicted)
+        // This poll has LOW utilization that would drag down the slope if retained
         let oldPoll = createTestPoll(
             timestamp: nowMs - (20 * 60 * 1000),
-            fiveHourUtil: 30.0
+            fiveHourUtil: 10.0  // Very low - would create steep slope if retained
         )
         service.addPoll(oldPoll)
 
-        // Add a recent poll (now) - this should trigger eviction of old poll
-        let recentPoll = createTestPoll(
-            timestamp: nowMs,
-            fiveHourUtil: 50.0
-        )
-        service.addPoll(recentPoll)
+        // Add 21 recent polls over last 10 minutes with steep increase
+        // If old poll is retained, the longer time span would reduce rate to rising
+        // If old poll is evicted, we get steep (24% over 10 min = 2.4%/min)
+        for i in 0..<21 {
+            let poll = createTestPoll(
+                timestamp: nowMs - Int64((10 * 60 * 1000) - (i * 30 * 1000)),
+                fiveHourUtil: 50.0 + Double(i)  // +1% per poll
+            )
+            service.addPoll(poll)
+        }
 
-        // Should still return .flat because we only have 1 entry (old one evicted)
-        #expect(service.calculateSlope(for: .fiveHour) == .flat)
+        // Should be .steep because old poll was evicted
+        // If old poll remained, the 40% increase over 20 min = 2%/min would still be steep,
+        // but starting util would be 10 not 50, changing the math significantly
+        #expect(service.calculateSlope(for: .fiveHour) == .steep)
     }
 
     // MARK: - Insufficient Data Tests (AC #3)

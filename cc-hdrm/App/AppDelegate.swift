@@ -143,7 +143,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             updateCheckService = UpdateCheckService(appState: state, preferencesManager: preferences)
         }
 
+        // Start services with proper sequencing:
+        // 1. Bootstrap slope buffer FIRST (before polling starts) to avoid race condition
+        // 2. Then start polling engine
+        // 3. Other services can start in parallel
         Task {
+            // Bootstrap slope buffer from historical data OFF main thread (SQLite is blocking)
+            // Must complete before polling starts to avoid losing early polls
+            if let histService = self.historicalDataServiceRef,
+               let slopeService = self.slopeCalculationService {
+                do {
+                    // Run SQLite query off MainActor to avoid UI stall during launch
+                    let recentPolls = try await Task.detached {
+                        try await histService.getRecentPolls(hours: 1)
+                    }.value
+                    slopeService.bootstrapFromHistory(recentPolls)
+                    Self.logger.info("Slope buffer bootstrapped with \(recentPolls.count) historical polls")
+                } catch {
+                    // Continue without historical data - buffer will fill naturally
+                    Self.logger.warning("Failed to bootstrap slope buffer: \(error.localizedDescription)")
+                }
+            }
+
+            // NOW start polling (after bootstrap complete)
             await pollingEngine?.start()
             await freshnessMonitor?.start()
             await notificationService?.requestAuthorization()
@@ -152,18 +174,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Fire-and-forget update check — do not block app launch
         Task {
             await updateCheckService?.checkForUpdate()
-        }
-
-        // Bootstrap slope buffer from historical data (fire-and-forget)
-        Task {
-            do {
-                if let recentPolls = try await self.historicalDataServiceRef?.getRecentPolls(hours: 1) {
-                    self.slopeCalculationService?.bootstrapFromHistory(recentPolls)
-                }
-            } catch {
-                // Continue without historical data - buffer will fill naturally
-                Self.logger.warning("Failed to bootstrap slope buffer: \(error.localizedDescription)")
-            }
         }
     }
 
