@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var updateCheckService: (any UpdateCheckServiceProtocol)?
     private var slopeCalculationService: SlopeCalculationService?
     private var historicalDataServiceRef: HistoricalDataService?
+    private var analyticsWindow: AnalyticsWindow?
     private var observationTask: Task<Void, Never>?
     private var eventMonitor: Any?
     private var previousAccessibilityValue: String?
@@ -52,6 +53,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let state = AppState()
         self.appState = state
+
+        // Configure AnalyticsWindow singleton with AppState
+        analyticsWindow = AnalyticsWindow.shared
+        analyticsWindow?.configure(appState: state)
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
@@ -182,6 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         freshnessMonitor?.stop()
         observationTask?.cancel()
         observationTask = nil
+        analyticsWindow?.close()
         removeEventMonitor()
     }
 

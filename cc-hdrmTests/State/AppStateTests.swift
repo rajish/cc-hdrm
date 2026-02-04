@@ -572,4 +572,30 @@ struct AppStateTests {
     func sparklineMinDataPointsConstant() {
         #expect(AppState.sparklineMinDataPoints == 2)
     }
+
+    // MARK: - Analytics Window State Tests (Story 12.3)
+
+    @Test("isAnalyticsWindowOpen starts as false")
+    @MainActor
+    func analyticsWindowInitiallyFalse() {
+        let state = AppState()
+        #expect(state.isAnalyticsWindowOpen == false)
+    }
+
+    @Test("setAnalyticsWindowOpen(true) sets property to true")
+    @MainActor
+    func setAnalyticsWindowOpenTrue() {
+        let state = AppState()
+        state.setAnalyticsWindowOpen(true)
+        #expect(state.isAnalyticsWindowOpen == true)
+    }
+
+    @Test("setAnalyticsWindowOpen(false) sets property to false")
+    @MainActor
+    func setAnalyticsWindowOpenFalse() {
+        let state = AppState()
+        state.setAnalyticsWindowOpen(true)
+        state.setAnalyticsWindowOpen(false)
+        #expect(state.isAnalyticsWindowOpen == false)
+    }
 }
