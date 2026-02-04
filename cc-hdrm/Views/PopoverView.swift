@@ -23,6 +23,19 @@ struct PopoverView: View {
                     .padding(.vertical, 8)
             }
 
+            // Sparkline section (Story 12.4): 24h usage trend visualization
+            // Divider chain per AC-1: gauges -> Divider -> sparkline -> Divider -> [status/update/footer]
+            // The divider below sparkline comes from StatusMessageView, UpdateBadgeView, or Footer (line 54)
+            Divider()
+            Sparkline(
+                data: appState.sparklineData,
+                pollInterval: preferencesManager.pollInterval,
+                onTap: { AnalyticsWindow.shared.toggle() },
+                isAnalyticsOpen: appState.isAnalyticsWindowOpen
+            )
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+
             if let statusMessage = resolvedStatusMessage {
                 Divider()
                 StatusMessageView(title: statusMessage.title, detail: statusMessage.detail)
