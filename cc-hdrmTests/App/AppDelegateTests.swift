@@ -274,7 +274,7 @@ struct AppDelegateMenuBarTests {
 
         let title = delegate.statusItem?.button?.attributedTitle
         #expect(title != nil, "attributedTitle should be set")
-        #expect(title?.string == "\u{2733} 83%", "attributedTitle text should reflect 83% headroom")
+        #expect(title?.string == "83%", "attributedTitle text should reflect 83% headroom")
     }
 
     @Test("status item button has accessibilityLabel set matching AC#6 format")

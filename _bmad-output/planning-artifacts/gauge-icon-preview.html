@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cc-hdrm — Colored Gauge Icon States</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: #0a0a0a;
+    color: #ccc;
+    padding: 40px;
+    min-height: 100vh;
+  }
+  h1 { font-family: 'JetBrains Mono', monospace; font-size: 24px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+  .subtitle { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #555; margin-bottom: 48px; }
+  .section-title { font-family: 'JetBrains Mono', monospace; font-size: 12px; text-transform: uppercase; letter-spacing: 2px; color: #555; margin-bottom: 20px; }
+  .section { margin-bottom: 56px; }
+
+  .legend { display: flex; gap: 24px; margin-bottom: 32px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #777; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 50%; }
+
+  .states-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 14px; }
+  .state-card {
+    background: #141414; border: 1px solid #222; border-radius: 14px;
+    padding: 24px 16px; display: flex; flex-direction: column; align-items: center; gap: 14px;
+  }
+  .state-card:hover { border-color: #333; }
+  .state-label { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 500; text-align: center; }
+
+  .menubar {
+    background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 10px;
+    padding: 8px 20px; display: flex; align-items: center; gap: 16px;
+    font-size: 13px; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    font-weight: 500; color: #ffffffd0; height: 30px; margin-bottom: 12px;
+  }
+  .menubar .right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+  .fake-icon { width: 14px; height: 14px; border-radius: 3px; background: #fff; opacity: 0.3; }
+  .menubar .pct { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; }
+
+  .notes {
+    background: #111; border: 1px solid #1a1a1a; border-radius: 12px; padding: 24px; margin-top: 8px;
+  }
+  .notes p { font-size: 13px; color: #666; line-height: 1.7; margin-bottom: 8px; }
+  .notes p:last-child { margin-bottom: 0; }
+  .notes code { font-family: 'JetBrains Mono', monospace; background: #1a1a1a; padding: 2px 6px; border-radius: 4px; font-size: 12px; color: #888; }
+  .notes strong { color: #999; }
+</style>
+</head>
+<body>
+
+<h1>cc-hdrm — Colored Gauge</h1>
+<p class="subtitle">Right = full · Identical arc geometry · Color matches percentage</p>
+
+<!--
+  GEOMETRY
+  ========
+  Arc center: (18, 24), radius: 14
+  Semicircle: left (4, 24) → right (32, 24)
+
+  For percentage p (0.0–1.0):
+    θ = π × (1 − p)
+    arcEnd    = (18 + 14·cos(θ), 24 − 14·sin(θ))
+    needleEnd = (18 + 10·cos(θ), 24 − 10·sin(θ))
+    large-arc-flag = (p ≥ 0.5) ? 1 : 0
+
+  Thresholds:
+    41–100%  → green  #4ade80
+    21–40%   → yellow #facc15
+     6–20%   → orange #fb923c
+     0–5%    → red    #f87171
+-->
+
+<div class="section">
+  <div class="section-title">Color Thresholds</div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#4ade80"></div> 41–100% — Green</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#facc15"></div> 21–40% — Yellow</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#fb923c"></div> 6–20% — Orange</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f87171"></div> 0–5% — Red</div>
+  </div>
+</div>
+
+<!-- ALL STATES @2x -->
+<div class="section">
+  <div class="section-title">All States — @2x (36×36)</div>
+  <div class="states-row">
+
+    <!-- 100%: θ=0°, arcEnd=(32,24), needleEnd=(28,24), large-arc=1 -->
+    <div class="state-card">
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 24 A14 14 0 0 1 32 24" stroke="#4ade80" stroke-opacity="0.25" stroke-width="3" stroke-linecap="round"/>
+        <path d="M4 24 A14 14 0 0 1 32 24" stroke="#4ade80" stroke-width="3" stroke-linecap="round"/>
+        <line x1="18" y1="24" x2="28" y2="24" stroke="#4ade80" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="18" cy="24" r="2.5" fill="#4ade80"/>
+      </svg>
+      <div class="state-label" style="color:#4ade80">100%</div>
+    </div>
+
+    <!-- 67%: θ=59.4°, cos=0.509 sin=0.861, arcEnd=(25.1,11.9), needleEnd=(23.1,15.4), large-arc=1 -->
+    <div class="state-card">
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 24 A14 14 0 0 1 32 24" stroke="#4ade80" stroke-opacity="0.25" stroke-width="3" stroke-linecap="round"/>
+        <path d="M4 24 A14 14 0 1 1 25.1 11.9" stroke="#4ade80" stroke-width="3" stroke-linecap="round"/>
+        <line x1="18" y1="24" x2="23.1" y2="15.4" stroke="#4ade80" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="18" cy="24" r="2.5" fill="#4ade80"/>
+      </svg>
+      <div class="state-label" style="color:#4ade80">67%</div>
+    </div>
+
+    <!-- 41%: θ=106.2°, cos=−0.279 sin=0.960, arcEnd=(14.1,10.6), needleEnd=(15.2,14.4), large-arc=0 -->
+    <div class="state-card">
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 24 A14 14 0 0 1 32 24" stroke="#4ade80" stroke-opacity="0.25" stroke-width="3" stroke-linecap="round"/>
+        <path d="M4 24 A14 14 0 0 1 14.1 10.6" stroke="#4ade80" stroke-width="3" stroke-linecap="round"/>
+        <line x1="18" y1="24" x2="15.2" y2="14.4" stroke="#4ade80" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="18" cy="24" r="2.5" fill="#4ade80"/>
+      </svg>
+      <div class="state-label" style="color:#4ade80">41%</div>
+    </div>
+
+    <!-- 30%: θ=126°, cos=−0.588 sin=0.809, arcEnd=(9.8,12.7), needleEnd=(12.1,15.9), large-arc=0 -->
+    <div class="state-card">
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 24 A14 14 0 0 1 32 24" stroke="#facc15" stroke-opacity="0.25" stroke-width="3" stroke-linecap="round"/>
+        <path d="M4 24 A14 14 0 0 1 9.8 12.7" stroke="#facc15" stroke-width="3" stroke-linecap="round"/>
+        <line x1="18" y1="24" x2="12.1" y2="15.9" stroke="#facc15" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="18" cy="24" r="2.5" fill="#facc15"/>
+      </svg>
+      <div class="state-label" style="color:#facc15">30%</div>
+    </div>
+
+    <!-- 15%: θ=153°, cos=−0.891 sin=0.454, arcEnd=(5.5,17.6), needleEnd=(9.1,19.5), large-arc=0 -->
+    <div class="state-card">
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 24 A14 14 0 0 1 32 24" stroke="#fb923c" stroke-opacity="0.25" stroke-width="3" stroke-linecap="round"/>
+        <path d="M4 24 A14 14 0 0 1 5.5 17.6" stroke="#fb923c" stroke-width="3" stroke-linecap="round"/>
+        <line x1="18" y1="24" x2="9.1" y2="19.5" stroke="#fb923c" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="18" cy="24" r="2.5" fill="#fb923c"/>
+      </svg>
+      <div class="state-label" style="color:#fb923c">15%</div>
+    </div>
+
+    <!-- 5%: θ=171°, cos=−0.988 sin=0.156, arcEnd=(4.2,21.8), needleEnd=(8.1,22.4), large-arc=0 -->
+    <div class="state-card">
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 24 A14 14 0 0 1 32 24" stroke="#f87171" stroke-opacity="0.25" stroke-width="3" stroke-linecap="round"/>
+        <path d="M4 24 A14 14 0 0 1 4.2 21.8" stroke="#f87171" stroke-width="3" stroke-linecap="round"/>
+        <line x1="18" y1="24" x2="8.1" y2="22.4" stroke="#f87171" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="18" cy="24" r="2.5" fill="#f87171"/>
+      </svg>
+      <div class="state-label" style="color:#f87171">5%</div>
+    </div>
+
+    <!-- 0%: θ=180°, needle at far left, no fill arc -->
+    <div class="state-card">
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 24 A14 14 0 0 1 32 24" stroke="#f87171" stroke-opacity="0.25" stroke-width="3" stroke-linecap="round"/>
+        <line x1="18" y1="24" x2="8" y2="24" stroke="#f87171" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="18" cy="24" r="2.5" fill="#f87171"/>
+      </svg>
+      <div class="state-label" style="color:#f87171">0%</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MENU BAR IN CONTEXT -->
+<div class="section">
+  <div class="section-title">In Menu Bar — Dark Mode</div>
+
+  <div class="menubar">
+    <span style="opacity:0.6">Finder</span>
+    <div class="right">
+      <div class="fake-icon"></div>
+      <svg width="18" height="18" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 24 A14 14 0 0 1 32 24" stroke="#4ade80" stroke-opacity="0.25" stroke-width="3.5" stroke-linecap="round"/>
+        <path d="M4 24 A14 14 0 1 1 25.1 11.9" stroke="#4ade80" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="18" y1="24" x2="23.1" y2="15.4" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="18" cy="24" r="3" fill="#4ade80"/>
+      </svg>
+      <span class="pct" style="color:#4ade80">67%</span>
+      <div class="fake-icon"></div>
+      <span style="font-size:12px; opacity:0.5">Tue 4 Feb 14:32</span>
+    </div>
+  </div>
+
+  <div class="menubar">
+    <span style="opacity:0.6">Finder</span>
+    <div class="right">
+      <div class="fake-icon"></div>
+      <svg width="18" height="18" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 24 A14 14 0 0 1 32 24" stroke="#facc15" stroke-opacity="0.25" stroke-width="3.5" stroke-linecap="round"/>
+        <path d="M4 24 A14 14 0 0 1 9.8 12.7" stroke="#facc15" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="18" y1="24" x2="12.1" y2="15.9" stroke="#facc15" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="18" cy="24" r="3" fill="#facc15"/>
+      </svg>
+      <span class="pct" style="color:#facc15">30%</span>
+      <div class="fake-icon"></div>
+      <span style="font-size:12px; opacity:0.5">Tue 4 Feb 14:32</span>
+    </div>
+  </div>
+
+  <div class="menubar">
+    <span style="opacity:0.6">Finder</span>
+    <div class="right">
+      <div class="fake-icon"></div>
+      <svg width="18" height="18" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 24 A14 14 0 0 1 32 24" stroke="#fb923c" stroke-opacity="0.25" stroke-width="3.5" stroke-linecap="round"/>
+        <path d="M4 24 A14 14 0 0 1 5.5 17.6" stroke="#fb923c" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="18" y1="24" x2="9.1" y2="19.5" stroke="#fb923c" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="18" cy="24" r="3" fill="#fb923c"/>
+      </svg>
+      <span class="pct" style="color:#fb923c">15%</span>
+      <div class="fake-icon"></div>
+      <span style="font-size:12px; opacity:0.5">Tue 4 Feb 14:32</span>
+    </div>
+  </div>
+
+  <div class="menubar">
+    <span style="opacity:0.6">Finder</span>
+    <div class="right">
+      <div class="fake-icon"></div>
+      <svg width="18" height="18" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 24 A14 14 0 0 1 32 24" stroke="#f87171" stroke-opacity="0.25" stroke-width="3.5" stroke-linecap="round"/>
+        <path d="M4 24 A14 14 0 0 1 4.2 21.8" stroke="#f87171" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="18" y1="24" x2="8.1" y2="22.4" stroke="#f87171" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="18" cy="24" r="3" fill="#f87171"/>
+      </svg>
+      <span class="pct" style="color:#f87171">5%</span>
+      <div class="fake-icon"></div>
+      <span style="font-size:12px; opacity:0.5">Tue 4 Feb 14:32</span>
+    </div>
+  </div>
+
+  <div class="menubar">
+    <span style="opacity:0.6">Finder</span>
+    <div class="right">
+      <div class="fake-icon"></div>
+      <svg width="18" height="18" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 24 A14 14 0 0 1 32 24" stroke="#f87171" stroke-opacity="0.25" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="18" y1="24" x2="8" y2="24" stroke="#f87171" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="18" cy="24" r="3" fill="#f87171"/>
+      </svg>
+      <span class="pct" style="color:#f87171">↻ 1h 0m</span>
+      <div class="fake-icon"></div>
+      <span style="font-size:12px; opacity:0.5">Tue 4 Feb 14:32</span>
+    </div>
+  </div>
+</div>
+
+<!-- GEOMETRY REFERENCE -->
+<div class="section">
+  <div class="section-title">Geometry Reference</div>
+  <div class="notes">
+    <p><strong>Arc:</strong> Center <code>(cx, cy)</code>, radius <code>r</code>. Semicircle from left <code>(cx−r, cy)</code> to right <code>(cx+r, cy)</code>.</p>
+    <p><strong>Track &amp; fill share identical arc geometry.</strong> Only the endpoint differs.</p>
+    <p><strong>Needle:</strong> From center, length <code>≈0.71 × r</code>. Same angle as arc endpoint.</p>
+    <p><strong>Angle formula:</strong> For headroom <code>p</code> (0.0–1.0):</p>
+    <p style="padding-left:16px; font-family:'JetBrains Mono',monospace; font-size:12px; color:#888;">
+      θ = π × (1 − p)<br>
+      arcEnd    = (cx + r·cos(θ), cy − r·sin(θ))<br>
+      needleEnd = (cx + needleLen·cos(θ), cy − needleLen·sin(θ))<br>
+      large-arc-flag = (p ≥ 0.5) ? 1 : 0
+    </p>
+    <p><strong>Direction:</strong> 100% → needle right · 0% → needle left</p>
+    <p><strong>Color thresholds:</strong></p>
+    <p style="padding-left:16px">
+      <span style="color:#4ade80">■</span> <code>41–100%</code> → Green <code>#4ade80</code><br>
+      <span style="color:#facc15">■</span> <code>21–40%</code> → Yellow <code>#facc15</code><br>
+      <span style="color:#fb923c">■</span> <code>6–20%</code> → Orange <code>#fb923c</code><br>
+      <span style="color:#f87171">■</span> <code>0–5%</code> → Red <code>#f87171</code>
+    </p>
+  </div>
+</div>
+
+</body>
+</html>

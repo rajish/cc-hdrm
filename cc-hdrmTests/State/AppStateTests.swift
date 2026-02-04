@@ -168,13 +168,13 @@ struct AppStateTests {
 
     // MARK: - Menu Bar Headroom State Tests (Task 7)
 
-    @Test("disconnected connectionStatus → menuBarHeadroomState == .disconnected and menuBarText == sparkle em dash")
+    @Test("disconnected connectionStatus → menuBarHeadroomState == .disconnected and menuBarText == em dash")
     @MainActor
     func menuBarDisconnected() {
         let state = AppState()
         // Default connectionStatus is .disconnected
         #expect(state.menuBarHeadroomState == .disconnected)
-        #expect(state.menuBarText == "\u{2733} \u{2014}")
+        #expect(state.menuBarText == "\u{2014}")
     }
 
     @Test("connected with nil fiveHour → .disconnected")
@@ -183,7 +183,7 @@ struct AppStateTests {
         let state = AppState()
         state.updateConnectionStatus(.connected)
         #expect(state.menuBarHeadroomState == .disconnected)
-        #expect(state.menuBarText == "\u{2733} \u{2014}")
+        #expect(state.menuBarText == "\u{2014}")
     }
 
     @Test("connected with utilization 17.0 → headroom 83% → .normal")
@@ -193,7 +193,7 @@ struct AppStateTests {
         state.updateConnectionStatus(.connected)
         state.updateWindows(fiveHour: WindowState(utilization: 17.0, resetsAt: nil), sevenDay: nil)
         #expect(state.menuBarHeadroomState == .normal)
-        #expect(state.menuBarText == "\u{2733} 83%")
+        #expect(state.menuBarText == "83%")
     }
 
     @Test("connected with utilization 65.0 → headroom 35% → .caution")
@@ -203,7 +203,7 @@ struct AppStateTests {
         state.updateConnectionStatus(.connected)
         state.updateWindows(fiveHour: WindowState(utilization: 65.0, resetsAt: nil), sevenDay: nil)
         #expect(state.menuBarHeadroomState == .caution)
-        #expect(state.menuBarText == "\u{2733} 35%")
+        #expect(state.menuBarText == "35%")
     }
 
     @Test("connected with utilization 85.0 → headroom 15% → .warning")
@@ -213,7 +213,7 @@ struct AppStateTests {
         state.updateConnectionStatus(.connected)
         state.updateWindows(fiveHour: WindowState(utilization: 85.0, resetsAt: nil), sevenDay: nil)
         #expect(state.menuBarHeadroomState == .warning)
-        #expect(state.menuBarText == "\u{2733} 15%")
+        #expect(state.menuBarText == "15%")
     }
 
     @Test("connected with utilization 97.0 → headroom 3% → .critical")
@@ -223,7 +223,7 @@ struct AppStateTests {
         state.updateConnectionStatus(.connected)
         state.updateWindows(fiveHour: WindowState(utilization: 97.0, resetsAt: nil), sevenDay: nil)
         #expect(state.menuBarHeadroomState == .critical)
-        #expect(state.menuBarText == "\u{2733} 3%")
+        #expect(state.menuBarText == "3%")
     }
 
     @Test("connected with utilization 100.0 → headroom 0% → .exhausted")
@@ -233,7 +233,7 @@ struct AppStateTests {
         state.updateConnectionStatus(.connected)
         state.updateWindows(fiveHour: WindowState(utilization: 100.0, resetsAt: nil), sevenDay: nil)
         #expect(state.menuBarHeadroomState == .exhausted)
-        #expect(state.menuBarText == "\u{2733} 0%")
+        #expect(state.menuBarText == "0%")
     }
 
     @Test("tokenExpired → .disconnected")
@@ -242,7 +242,7 @@ struct AppStateTests {
         let state = AppState()
         state.updateConnectionStatus(.tokenExpired)
         #expect(state.menuBarHeadroomState == .disconnected)
-        #expect(state.menuBarText == "\u{2733} \u{2014}")
+        #expect(state.menuBarText == "\u{2014}")
     }
 
     @Test("noCredentials → .disconnected")
@@ -251,7 +251,7 @@ struct AppStateTests {
         let state = AppState()
         state.updateConnectionStatus(.noCredentials)
         #expect(state.menuBarHeadroomState == .disconnected)
-        #expect(state.menuBarText == "\u{2733} \u{2014}")
+        #expect(state.menuBarText == "\u{2014}")
     }
 
     @Test("utilization > 100 clamps headroom to 0%")
@@ -260,7 +260,7 @@ struct AppStateTests {
         let state = AppState()
         state.updateConnectionStatus(.connected)
         state.updateWindows(fiveHour: WindowState(utilization: 110.0, resetsAt: nil), sevenDay: nil)
-        #expect(state.menuBarText == "\u{2733} 0%")
+        #expect(state.menuBarText == "0%")
     }
 
     // MARK: - Headroom Percentage Edge Cases (Task 9)
@@ -271,7 +271,7 @@ struct AppStateTests {
         let state = AppState()
         state.updateConnectionStatus(.connected)
         state.updateWindows(fiveHour: WindowState(utilization: 0.0, resetsAt: nil), sevenDay: nil)
-        #expect(state.menuBarText == "\u{2733} 100%")
+        #expect(state.menuBarText == "100%")
     }
 
     @Test("utilization 50.5 → headroom 49% (Int truncation)")
@@ -281,7 +281,7 @@ struct AppStateTests {
         state.updateConnectionStatus(.connected)
         state.updateWindows(fiveHour: WindowState(utilization: 50.5, resetsAt: nil), sevenDay: nil)
         // Int(100 - 50.5) = Int(49.5) = 49
-        #expect(state.menuBarText == "\u{2733} 49%")
+        #expect(state.menuBarText == "49%")
     }
 
     @Test("utilization 99.9 → headroom 0% display (Int truncation) but .critical state (0.1% actual headroom)")
@@ -292,7 +292,7 @@ struct AppStateTests {
         state.updateWindows(fiveHour: WindowState(utilization: 99.9, resetsAt: nil), sevenDay: nil)
         // Int(100 - 99.9) = Int(0.1) = 0 for display
         // But HeadroomState uses actual 0.1% headroom → 0<0.1<5 → .critical
-        #expect(state.menuBarText == "\u{2733} 0%")
+        #expect(state.menuBarText == "0%")
         #expect(state.menuBarHeadroomState == .critical)
     }
 
@@ -305,7 +305,7 @@ struct AppStateTests {
         state.updateConnectionStatus(.connected)
         let resetsAt = Date().addingTimeInterval(47 * 60 + 10)
         state.updateWindows(fiveHour: WindowState(utilization: 100.0, resetsAt: resetsAt), sevenDay: nil)
-        #expect(state.menuBarText == "\u{2733} \u{21BB} 47m")
+        #expect(state.menuBarText == "\u{21BB} 47m")
         #expect(state.menuBarHeadroomState == .exhausted)
     }
 
@@ -315,7 +315,7 @@ struct AppStateTests {
         let state = AppState()
         state.updateConnectionStatus(.connected)
         state.updateWindows(fiveHour: WindowState(utilization: 100.0, resetsAt: nil), sevenDay: nil)
-        #expect(state.menuBarText == "\u{2733} 0%")
+        #expect(state.menuBarText == "0%")
     }
 
     @Test("5h normal utilization 17 → unchanged 83%")
@@ -324,7 +324,7 @@ struct AppStateTests {
         let state = AppState()
         state.updateConnectionStatus(.connected)
         state.updateWindows(fiveHour: WindowState(utilization: 17.0, resetsAt: nil), sevenDay: nil)
-        #expect(state.menuBarText == "\u{2733} 83%")
+        #expect(state.menuBarText == "83%")
     }
 
     @Test("5h recovers from exhausted → switches back to percentage")
@@ -338,7 +338,7 @@ struct AppStateTests {
 
         // Recovery: utilization drops to 5%
         state.updateWindows(fiveHour: WindowState(utilization: 5.0, resetsAt: nil), sevenDay: nil)
-        #expect(state.menuBarText == "\u{2733} 95%")
+        #expect(state.menuBarText == "95%")
     }
 
     // MARK: - Tighter Constraint Promotion Tests (Story 3.2, Task 9)
@@ -355,7 +355,7 @@ struct AppStateTests {
             sevenDay: WindowState(utilization: 82.0, resetsAt: nil)
         )
         #expect(state.menuBarHeadroomState == .warning)
-        #expect(state.menuBarText == "\u{2733} 18%")
+        #expect(state.menuBarText == "18%")
         #expect(state.displayedWindow == .sevenDay)
     }
 
@@ -369,7 +369,7 @@ struct AppStateTests {
             sevenDay: WindowState(utilization: 96.0, resetsAt: nil)
         )
         #expect(state.menuBarHeadroomState == .critical)
-        #expect(state.menuBarText == "\u{2733} 4%")
+        #expect(state.menuBarText == "4%")
         #expect(state.displayedWindow == .sevenDay)
     }
 

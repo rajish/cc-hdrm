@@ -250,13 +250,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Updates the NSStatusItem's attributed title, color, weight, and accessibility
+    /// Updates the NSStatusItem's image, attributed title, color, weight, and accessibility
     /// based on the current AppState.
     internal func updateMenuBarDisplay() {
         guard let appState else { return }
 
         let state = appState.menuBarHeadroomState
         let text = appState.menuBarText
+
+        // Generate gauge icon based on state
+        let icon: NSImage
+        if state == .disconnected {
+            icon = makeDisconnectedIcon()
+        } else {
+            let window: WindowState? = appState.displayedWindow == .fiveHour ? appState.fiveHour : appState.sevenDay
+            let headroom = min(100, max(0, 100.0 - (window?.utilization ?? 0)))
+            icon = makeGaugeIcon(headroomPercentage: headroom, state: state)
+        }
+        statusItem?.button?.image = icon
 
         let color = NSColor.headroomColor(for: state)
         let font = NSFont.menuBarFont(for: state)
