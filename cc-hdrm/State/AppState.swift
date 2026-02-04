@@ -99,10 +99,11 @@ final class AppState {
         }
     }
 
-    /// Derived menu bar text: sparkle icon + headroom percentage, countdown, or em dash when disconnected.
+    /// Derived menu bar text: headroom percentage, countdown, or em dash when disconnected.
+    /// Note: Sparkle icon removed — gauge icon now provides the visual indicator.
     var menuBarText: String {
         if menuBarHeadroomState == .disconnected {
-            return "\u{2733} \u{2014}" // ✳ —
+            return "\u{2014}" // — (em dash only)
         }
 
         let window: WindowState? = displayedWindow == .fiveHour ? fiveHour : sevenDay
@@ -110,11 +111,11 @@ final class AppState {
         if let window, window.headroomState == .exhausted, let resetsAt = window.resetsAt {
             // Access countdownTick to register with withObservationTracking
             _ = countdownTick
-            return "\u{2733} \u{21BB} \(resetsAt.countdownString())" // ✳ ↻ Xm
+            return "\u{21BB} \(resetsAt.countdownString())" // ↻ Xm
         }
 
         let headroom = max(0, Int(100.0 - (window?.utilization ?? 0)))
-        return "\u{2733} \(headroom)%"
+        return "\(headroom)%"
     }
 
     /// Increments the countdown tick to trigger observation-based re-renders.
