@@ -482,4 +482,94 @@ struct AppStateTests {
         state.tickCountdown()
         #expect(state.countdownTick == 2)
     }
+
+    // MARK: - Sparkline Data Tests (Story 12.1)
+
+    @Test("sparklineData starts empty")
+    @MainActor
+    func sparklineDataInitiallyEmpty() {
+        let state = AppState()
+        #expect(state.sparklineData.isEmpty)
+    }
+
+    @Test("hasSparklineData returns false when empty")
+    @MainActor
+    func hasSparklineDataFalseWhenEmpty() {
+        let state = AppState()
+        #expect(state.hasSparklineData == false)
+    }
+
+    @Test("hasSparklineData returns false with 1 data point")
+    @MainActor
+    func hasSparklineDataFalseWithOne() {
+        let state = AppState()
+        let poll = UsagePoll(
+            id: 1,
+            timestamp: Int64(Date().timeIntervalSince1970 * 1000),
+            fiveHourUtil: 50.0,
+            fiveHourResetsAt: nil,
+            sevenDayUtil: 30.0,
+            sevenDayResetsAt: nil
+        )
+        state.updateSparklineData([poll])
+        #expect(state.hasSparklineData == false)
+    }
+
+    @Test("hasSparklineData returns true with 2+ data points")
+    @MainActor
+    func hasSparklineDataTrueWithTwo() {
+        let state = AppState()
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let polls = [
+            UsagePoll(id: 1, timestamp: now - 60000, fiveHourUtil: 50.0, fiveHourResetsAt: nil, sevenDayUtil: 30.0, sevenDayResetsAt: nil),
+            UsagePoll(id: 2, timestamp: now, fiveHourUtil: 52.0, fiveHourResetsAt: nil, sevenDayUtil: 31.0, sevenDayResetsAt: nil)
+        ]
+        state.updateSparklineData(polls)
+        #expect(state.hasSparklineData == true)
+    }
+
+    @Test("updateSparklineData replaces existing data")
+    @MainActor
+    func updateSparklineDataReplaces() {
+        let state = AppState()
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+
+        let initialPolls = [
+            UsagePoll(id: 1, timestamp: now - 60000, fiveHourUtil: 50.0, fiveHourResetsAt: nil, sevenDayUtil: 30.0, sevenDayResetsAt: nil)
+        ]
+        state.updateSparklineData(initialPolls)
+        #expect(state.sparklineData.count == 1)
+
+        let newPolls = [
+            UsagePoll(id: 2, timestamp: now - 30000, fiveHourUtil: 55.0, fiveHourResetsAt: nil, sevenDayUtil: 32.0, sevenDayResetsAt: nil),
+            UsagePoll(id: 3, timestamp: now, fiveHourUtil: 60.0, fiveHourResetsAt: nil, sevenDayUtil: 35.0, sevenDayResetsAt: nil)
+        ]
+        state.updateSparklineData(newPolls)
+        #expect(state.sparklineData.count == 2)
+        #expect(state.sparklineData[0].id == 2)
+    }
+
+    @Test("sparklineData preserves timestamp ordering")
+    @MainActor
+    func sparklineDataPreservesOrdering() {
+        let state = AppState()
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let polls = [
+            UsagePoll(id: 1, timestamp: now - 120000, fiveHourUtil: 50.0, fiveHourResetsAt: nil, sevenDayUtil: 30.0, sevenDayResetsAt: nil),
+            UsagePoll(id: 2, timestamp: now - 60000, fiveHourUtil: 55.0, fiveHourResetsAt: nil, sevenDayUtil: 32.0, sevenDayResetsAt: nil),
+            UsagePoll(id: 3, timestamp: now, fiveHourUtil: 60.0, fiveHourResetsAt: nil, sevenDayUtil: 35.0, sevenDayResetsAt: nil)
+        ]
+        state.updateSparklineData(polls)
+
+        // Verify ascending order
+        for i in 1..<state.sparklineData.count {
+            #expect(state.sparklineData[i].timestamp > state.sparklineData[i-1].timestamp)
+        }
+    }
+
+    @Test("sparklineMinDataPoints constant is 2")
+    @MainActor
+    func sparklineMinDataPointsConstant() {
+        #expect(AppState.sparklineMinDataPoints == 2)
+    }
 }

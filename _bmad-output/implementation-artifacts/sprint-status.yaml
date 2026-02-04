@@ -97,10 +97,17 @@ development_status:
   10-5-data-query-apis: done
   epic-10-retrospective: done
 
-  epic-11: in-progress
-  11-1-slope-calculation-service-ring-buffer: review
+  epic-11: done
+  11-1-slope-calculation-service-ring-buffer: done
   11-2-slope-level-calculation-mapping: done
-  11-3-menu-bar-slope-display: review
+  11-3-menu-bar-slope-display: done
   11-4-popover-slope-display: done
-  11-5-slope-indicator-component: backlog
+  11-5-slope-indicator-component: cancelled  # Absorbed into 11.4 - SlopeIndicator created there
   epic-11-retrospective: optional
+
+  epic-12: in-progress
+  12-1-sparkline-data-preparation: done
+  12-2-sparkline-component: backlog
+  12-3-sparkline-as-analytics-toggle: backlog
+  12-4-popover-view-integration: backlog
+  epic-12-retrospective: optional

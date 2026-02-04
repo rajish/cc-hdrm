@@ -15,6 +15,7 @@ final class PollingEngine: PollingEngineProtocol {
     private let historicalDataService: (any HistoricalDataServiceProtocol)?
     private let slopeCalculationService: (any SlopeCalculationServiceProtocol)?
     private var pollingTask: Task<Void, Never>?
+    private var sparklineRefreshTask: Task<Void, Never>?
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -61,6 +62,8 @@ final class PollingEngine: PollingEngineProtocol {
         Self.logger.info("Polling engine stopping")
         pollingTask?.cancel()
         pollingTask = nil
+        sparklineRefreshTask?.cancel()
+        sparklineRefreshTask = nil
     }
 
     // MARK: - Internal (exposed for testing)
@@ -178,6 +181,27 @@ final class PollingEngine: PollingEngineProtocol {
                 let fiveHourSlope = slopeService.calculateSlope(for: .fiveHour)
                 let sevenDaySlope = slopeService.calculateSlope(for: .sevenDay)
                 appState.updateSlopes(fiveHour: fiveHourSlope, sevenDay: sevenDaySlope)
+            }
+
+            // Cancel any in-flight sparkline refresh to prevent races
+            sparklineRefreshTask?.cancel()
+
+            // Refresh sparkline data for popover (async, non-blocking)
+            sparklineRefreshTask = Task { [weak self] in
+                guard let self, !Task.isCancelled else { return }
+                do {
+                    if let data = try await historicalDataService?.getRecentPolls(hours: 24) {
+                        guard !Task.isCancelled else { return }
+                        // MainActor.run required: Task escapes @MainActor context of PollingEngine
+                        await MainActor.run {
+                            appState.updateSparklineData(data)
+                        }
+                        Self.logger.debug("Sparkline data refreshed: \(data.count) points")
+                    }
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    Self.logger.error("Failed to refresh sparkline data: \(error.localizedDescription)")
+                }
             }
 
             Self.logger.info("Usage data fetched and applied successfully")
