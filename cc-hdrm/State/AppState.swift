@@ -48,6 +48,10 @@ final class AppState {
     private(set) var fiveHourSlope: SlopeLevel = .flat
     private(set) var sevenDaySlope: SlopeLevel = .flat
 
+    /// Whether the analytics window is currently open.
+    /// Updated by AnalyticsWindow on window open/close.
+    private(set) var isAnalyticsWindowOpen: Bool = false
+
     /// Poll data for the 24h sparkline visualization. Updated on each successful poll cycle.
     /// Data is ordered by timestamp ascending. Preserved across connection state changes.
     private(set) var sparklineData: [UsagePoll] = []
@@ -192,6 +196,12 @@ final class AppState {
     /// - Parameter data: Poll data ordered by timestamp ascending from HistoricalDataService
     func updateSparklineData(_ data: [UsagePoll]) {
         self.sparklineData = data
+    }
+
+    /// Sets the analytics window open state.
+    /// Called by AnalyticsWindow when window opens or closes.
+    func setAnalyticsWindowOpen(_ open: Bool) {
+        self.isAnalyticsWindowOpen = open
     }
 
     /// Sets `lastUpdated` to an arbitrary date. Test use only — not available in release builds.
