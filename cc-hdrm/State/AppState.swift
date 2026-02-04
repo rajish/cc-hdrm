@@ -99,7 +99,19 @@ final class AppState {
         }
     }
 
+    /// The slope level for the currently displayed window.
+    /// Returns fiveHourSlope when 5h window is displayed, sevenDaySlope when 7d is promoted.
+    var displayedSlope: SlopeLevel {
+        switch displayedWindow {
+        case .fiveHour:
+            return fiveHourSlope
+        case .sevenDay:
+            return sevenDaySlope
+        }
+    }
+
     /// Derived menu bar text: headroom percentage, countdown, or em dash when disconnected.
+    /// Appends slope arrow when slope is actionable (rising/steep) and not in exhausted state.
     /// Note: Sparkle icon removed — gauge icon now provides the visual indicator.
     var menuBarText: String {
         if menuBarHeadroomState == .disconnected {
@@ -115,6 +127,13 @@ final class AppState {
         }
 
         let headroom = max(0, Int(100.0 - (window?.utilization ?? 0)))
+        let slope = displayedSlope
+
+        // Append slope arrow only when actionable (rising/steep) AND not exhausted
+        // Per edge case #5: exhausted without resetsAt shows percentage only, no slope
+        if slope.isActionable && window?.headroomState != .exhausted {
+            return "\(headroom)% \(slope.arrow)"
+        }
         return "\(headroom)%"
     }
 
