@@ -368,9 +368,9 @@ struct AppStateMenuBarSlopeTests {
         #expect(appState.menuBarText == "83%")    // No arrow
     }
     
-    @Test("menuBarText excludes arrow when 7d promoted AND exhausted")
+    @Test("7d exhausted does not promote - stays on 5h with no slope arrow")
     @MainActor
-    func menuBarTextSevenDayPromotedExhausted() {
+    func sevenDayExhaustedDoesNotPromote() {
         let appState = AppState()
         appState.updateConnectionStatus(.connected)
         let resetsAt7d = Date().addingTimeInterval(2 * 3600 + 13 * 60)  // 2h 13m
@@ -380,10 +380,10 @@ struct AppStateMenuBarSlopeTests {
         )
         appState.updateSlopes(fiveHour: .flat, sevenDay: .steep)
         
-        // 7d is promoted (0% headroom < 80% 5h headroom) - but since exhausted, no arrow
-        #expect(appState.displayedWindow == .sevenDay)
-        #expect(appState.menuBarText.hasPrefix("\u{21BB}"))  // Countdown
-        #expect(!appState.menuBarText.contains("\u{2B06}"))  // No steep arrow
+        // 7d exhausted is NOT promoted (displayedWindow requires warning/critical, not exhausted)
+        // So 5h is displayed with 80% headroom and no slope arrow (fiveHourSlope is .flat)
+        #expect(appState.displayedWindow == .fiveHour)
+        #expect(appState.menuBarText == "80%")  // 5h headroom, no arrow (flat)
     }
 }
 ```
@@ -410,7 +410,7 @@ After implementation, perform this manual verification:
 | 7 | 5h normal, slope .rising | Percentage + arrow | `78% ↗` |
 | 8 | 5h normal, slope .steep | Percentage + arrow | `65% ⬆` |
 | 9 | 7d promoted (warning), slope .rising | 7d percentage + 7d slope arrow | `12% ↗` |
-| 10 | 7d promoted AND exhausted | 7d countdown only, no slope | `↻ 2h 13m` |
+| 10 | 7d exhausted (NOT promoted) | Stays on 5h (exhausted ≠ warning/critical) | `80%` (5h headroom) |
 | 11 | Insufficient slope data (<10 min) | SlopeCalculationService returns .flat | `83%` (no arrow) |
 | 12 | App just launched (default state) | Slope defaults to .flat | `XX%` (no arrow) |
 
