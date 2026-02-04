@@ -248,7 +248,7 @@ Note: The gauge icon is now separate (commit 75f93a5), so text width is independ
 ### Project Structure Notes
 
 **Files to modify:**
-```
+```text
 cc-hdrm/State/AppState.swift
   - Add displayedSlope computed property (after line 99)
   - Modify menuBarText computed property (lines 104-119)
@@ -258,7 +258,7 @@ cc-hdrm/App/AppDelegate.swift
 ```
 
 **Test file options (choose one):**
-```
+```text
 Option A: Extend existing file
   cc-hdrmTests/State/AppStateTests.swift
   - Add new @Suite("AppState Menu Bar Slope Display") section
