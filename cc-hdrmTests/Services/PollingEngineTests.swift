@@ -93,6 +93,9 @@ private final class PEMockHistoricalDataService: HistoricalDataServiceProtocol, 
     var shouldThrow = false
     var mockLastPoll: UsagePoll?
     var mockResetEvents: [ResetEvent] = []
+    var recentPollsToReturn: [UsagePoll] = []
+    var shouldThrowOnGetRecentPolls = false
+    var getRecentPollsCallCount = 0
 
     func persistPoll(_ response: UsageResponse) async throws {
         try await persistPoll(response, tier: nil)
@@ -108,7 +111,11 @@ private final class PEMockHistoricalDataService: HistoricalDataServiceProtocol, 
     }
 
     func getRecentPolls(hours: Int) async throws -> [UsagePoll] {
-        return []
+        getRecentPollsCallCount += 1
+        if shouldThrowOnGetRecentPolls {
+            throw AppError.databaseQueryFailed(underlying: NSError(domain: "test", code: 2))
+        }
+        return recentPollsToReturn
     }
 
     func getLastPoll() async throws -> UsagePoll? {
@@ -554,5 +561,185 @@ struct PollingEngineTests {
 
         #expect(appState.connectionStatus == .disconnected)
         #expect(appState.statusMessage?.title == "Unexpected API response format")
+    }
+}
+
+// MARK: - PollingEngine Sparkline Tests (Story 12.1)
+
+@Suite("PollingEngine Sparkline Tests")
+struct PollingEngineSparklineTests {
+
+    @Test("poll cycle updates sparkline data on success")
+    @MainActor
+    func pollCycleUpdatesSparklineData() async throws {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(result: successResponse())
+        let mockHistorical = PEMockHistoricalDataService()
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let testPolls = [
+            UsagePoll(id: 1, timestamp: now - 60000, fiveHourUtil: 50.0, fiveHourResetsAt: nil, sevenDayUtil: 30.0, sevenDayResetsAt: nil),
+            UsagePoll(id: 2, timestamp: now, fiveHourUtil: 52.0, fiveHourResetsAt: nil, sevenDayUtil: 31.0, sevenDayResetsAt: nil)
+        ]
+        mockHistorical.recentPollsToReturn = testPolls
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            historicalDataService: mockHistorical
+        )
+
+        await engine.performPollCycle()
+
+        // Wait for async sparkline refresh to complete
+        let timeout = Date().addingTimeInterval(1.0)
+        while appState.sparklineData.isEmpty && Date() < timeout {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(appState.sparklineData.count == 2)
+        #expect(appState.sparklineData[0].timestamp < appState.sparklineData[1].timestamp)
+        #expect(mockHistorical.getRecentPollsCallCount >= 1)
+    }
+
+    @Test("sparkline refresh failure does not prevent poll cycle completion")
+    @MainActor
+    func sparklineRefreshFailureDoesNotBlockPoll() async throws {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(result: successResponse())
+        let mockHistorical = PEMockHistoricalDataService()
+        mockHistorical.shouldThrowOnGetRecentPolls = true
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            historicalDataService: mockHistorical
+        )
+
+        // Poll should complete successfully despite sparkline failure
+        await engine.performPollCycle()
+
+        // Main state should be updated
+        #expect(appState.connectionStatus == .connected)
+        #expect(appState.fiveHour?.utilization == 18.0)
+
+        // Wait briefly to ensure async task had time to run
+        try await Task.sleep(for: .milliseconds(50))
+
+        // Sparkline data should remain empty (refresh failed)
+        #expect(appState.sparklineData.isEmpty)
+        #expect(mockHistorical.getRecentPollsCallCount >= 1)
+    }
+
+    @Test("sparkline data preserves timestamp ascending order")
+    @MainActor
+    func sparklineDataPreservesTimestampOrder() async throws {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(result: successResponse())
+        let mockHistorical = PEMockHistoricalDataService()
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        // Data already sorted ascending by timestamp (as returned by HistoricalDataService)
+        let testPolls = [
+            UsagePoll(id: 1, timestamp: now - 120000, fiveHourUtil: 48.0, fiveHourResetsAt: nil, sevenDayUtil: 28.0, sevenDayResetsAt: nil),
+            UsagePoll(id: 2, timestamp: now - 60000, fiveHourUtil: 50.0, fiveHourResetsAt: nil, sevenDayUtil: 30.0, sevenDayResetsAt: nil),
+            UsagePoll(id: 3, timestamp: now, fiveHourUtil: 52.0, fiveHourResetsAt: nil, sevenDayUtil: 31.0, sevenDayResetsAt: nil)
+        ]
+        mockHistorical.recentPollsToReturn = testPolls
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            historicalDataService: mockHistorical
+        )
+
+        await engine.performPollCycle()
+
+        // Wait for async sparkline refresh to complete
+        let timeout = Date().addingTimeInterval(1.0)
+        while appState.sparklineData.isEmpty && Date() < timeout {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(appState.sparklineData.count == 3)
+
+        // Verify ascending order is preserved
+        for i in 1..<appState.sparklineData.count {
+            #expect(appState.sparklineData[i].timestamp > appState.sparklineData[i-1].timestamp)
+        }
+    }
+
+    @Test("sparkline data not cleared when no historical service")
+    @MainActor
+    func noHistoricalServiceKeepsEmptySparklineData() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(result: successResponse())
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            historicalDataService: nil  // No historical service
+        )
+
+        await engine.performPollCycle()
+
+        // Poll should complete successfully
+        #expect(appState.connectionStatus == .connected)
+        #expect(appState.fiveHour?.utilization == 18.0)
+
+        // Sparkline data should remain empty (no service to populate it)
+        #expect(appState.sparklineData.isEmpty)
+    }
+
+    @Test("sparkline data includes polls with nil fiveHourUtil (edge case)")
+    @MainActor
+    func sparklineDataIncludesNilUtilPolls() async throws {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(result: successResponse())
+        let mockHistorical = PEMockHistoricalDataService()
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        // Include a poll with nil fiveHourUtil (valid per story Dev Notes)
+        let testPolls = [
+            UsagePoll(id: 1, timestamp: now - 60000, fiveHourUtil: 50.0, fiveHourResetsAt: nil, sevenDayUtil: 30.0, sevenDayResetsAt: nil),
+            UsagePoll(id: 2, timestamp: now - 30000, fiveHourUtil: nil, fiveHourResetsAt: nil, sevenDayUtil: 32.0, sevenDayResetsAt: nil),
+            UsagePoll(id: 3, timestamp: now, fiveHourUtil: 52.0, fiveHourResetsAt: nil, sevenDayUtil: 31.0, sevenDayResetsAt: nil)
+        ]
+        mockHistorical.recentPollsToReturn = testPolls
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            historicalDataService: mockHistorical
+        )
+
+        await engine.performPollCycle()
+
+        // Wait for async sparkline refresh to complete
+        let timeout = Date().addingTimeInterval(1.0)
+        while appState.sparklineData.count < 3 && Date() < timeout {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        // All 3 polls should be present, including the one with nil fiveHourUtil
+        #expect(appState.sparklineData.count == 3)
+        #expect(appState.sparklineData[1].fiveHourUtil == nil)
     }
 }

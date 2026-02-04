@@ -48,6 +48,18 @@ final class AppState {
     private(set) var fiveHourSlope: SlopeLevel = .flat
     private(set) var sevenDaySlope: SlopeLevel = .flat
 
+    /// Poll data for the 24h sparkline visualization. Updated on each successful poll cycle.
+    /// Data is ordered by timestamp ascending. Preserved across connection state changes.
+    private(set) var sparklineData: [UsagePoll] = []
+
+    /// Minimum data points required for sparkline rendering.
+    static let sparklineMinDataPoints = 2
+
+    /// Whether enough sparkline data exists for rendering (minimum 2 data points for a line).
+    var hasSparklineData: Bool {
+        sparklineData.count >= Self.sparklineMinDataPoints
+    }
+
     /// Counter incremented every 60 seconds to trigger observation-based re-renders of countdown text.
     private(set) var countdownTick: UInt = 0
 
@@ -174,6 +186,12 @@ final class AppState {
     func updateSlopes(fiveHour: SlopeLevel, sevenDay: SlopeLevel) {
         self.fiveHourSlope = fiveHour
         self.sevenDaySlope = sevenDay
+    }
+
+    /// Updates the sparkline data from recent polls.
+    /// - Parameter data: Poll data ordered by timestamp ascending from HistoricalDataService
+    func updateSparklineData(_ data: [UsagePoll]) {
+        self.sparklineData = data
     }
 
     /// Sets `lastUpdated` to an arbitrary date. Test use only — not available in release builds.
