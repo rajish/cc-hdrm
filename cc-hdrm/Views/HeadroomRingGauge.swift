@@ -12,6 +12,23 @@ struct HeadroomRingGauge: View {
     let ringSize: CGFloat
     /// Stroke width of the ring.
     let strokeWidth: CGFloat
+    /// Optional slope level to display below percentage. Defaults to `nil` for backward compatibility.
+    let slopeLevel: SlopeLevel?
+
+    /// Initializer with default nil slope for backward compatibility.
+    init(
+        headroomPercentage: Double?,
+        windowLabel: String,
+        ringSize: CGFloat,
+        strokeWidth: CGFloat,
+        slopeLevel: SlopeLevel? = nil
+    ) {
+        self.headroomPercentage = headroomPercentage
+        self.windowLabel = windowLabel
+        self.ringSize = ringSize
+        self.strokeWidth = strokeWidth
+        self.slopeLevel = slopeLevel
+    }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -68,10 +85,17 @@ struct HeadroomRingGauge: View {
                     value: fillAmount
                 )
 
-            // Center percentage text
-            Text(centerText)
-                .font(.system(.body, weight: .bold))
-                .foregroundStyle(fillColor)
+            // Center content: percentage + optional slope
+            VStack(spacing: 0) {
+                Text(centerText)
+                    .font(.system(.body, weight: .bold))
+                    .foregroundStyle(fillColor)
+
+                // Slope indicator: shown only when slope provided AND connected
+                if let slope = slopeLevel, headroomPercentage != nil {
+                    SlopeIndicator(slopeLevel: slope, headroomState: headroomState)
+                }
+            }
         }
         .frame(width: ringSize, height: ringSize)
         .accessibilityElement(children: .ignore)
