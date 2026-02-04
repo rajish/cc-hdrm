@@ -293,7 +293,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             let window: WindowState? = appState.displayedWindow == .fiveHour ? appState.fiveHour : appState.sevenDay
             let headroom = max(0, Int(100.0 - (window?.utilization ?? 0)))
-            accessibilityValue = "cc-hdrm: Claude headroom \(headroom) percent, \(state.rawValue)"
+            let slope = appState.displayedSlope
+            if slope.isActionable {
+                accessibilityValue = "cc-hdrm: Claude headroom \(headroom) percent, \(state.rawValue), \(slope.accessibilityLabel)"
+            } else {
+                accessibilityValue = "cc-hdrm: Claude headroom \(headroom) percent, \(state.rawValue)"
+            }
         }
 
         statusItem?.button?.setAccessibilityLabel(accessibilityValue)

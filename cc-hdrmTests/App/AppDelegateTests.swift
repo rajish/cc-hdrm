@@ -391,4 +391,101 @@ struct AppDelegateMenuBarTests {
             #expect(font.fontName == expectedFont.fontName, "Critical state should use bold weight")
         }
     }
+
+    // MARK: - Slope Accessibility Tests (Story 11.3, AC #5)
+
+    @Test("accessibility includes slope when rising (AC #5)")
+    @MainActor
+    func accessibilityIncludesSlopeWhenRising() async {
+        let mockEngine = MockPollingEngine()
+        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
+
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+        try? await Task.sleep(for: .milliseconds(50))
+
+        guard let appState = delegate.appState else {
+            #expect(Bool(false), "AppState should exist")
+            return
+        }
+
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(fiveHour: WindowState(utilization: 22.0, resetsAt: Date().addingTimeInterval(3600)), sevenDay: nil)
+        appState.updateSlopes(fiveHour: .rising, sevenDay: .flat)
+        delegate.updateMenuBarDisplay()
+
+        let label = delegate.statusItem?.button?.accessibilityLabel() as? String
+        #expect(label?.contains("rising") == true, "Accessibility should include 'rising' slope label when actionable")
+    }
+
+    @Test("accessibility includes slope when steep (AC #5)")
+    @MainActor
+    func accessibilityIncludesSlopeWhenSteep() async {
+        let mockEngine = MockPollingEngine()
+        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
+
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+        try? await Task.sleep(for: .milliseconds(50))
+
+        guard let appState = delegate.appState else {
+            #expect(Bool(false), "AppState should exist")
+            return
+        }
+
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(fiveHour: WindowState(utilization: 35.0, resetsAt: Date().addingTimeInterval(3600)), sevenDay: nil)
+        appState.updateSlopes(fiveHour: .steep, sevenDay: .flat)
+        delegate.updateMenuBarDisplay()
+
+        let label = delegate.statusItem?.button?.accessibilityLabel() as? String
+        #expect(label?.contains("steep") == true, "Accessibility should include 'steep' slope label when actionable")
+    }
+
+    @Test("accessibility excludes slope when flat (AC #5)")
+    @MainActor
+    func accessibilityExcludesSlopeWhenFlat() async {
+        let mockEngine = MockPollingEngine()
+        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
+
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+        try? await Task.sleep(for: .milliseconds(50))
+
+        guard let appState = delegate.appState else {
+            #expect(Bool(false), "AppState should exist")
+            return
+        }
+
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(fiveHour: WindowState(utilization: 17.0, resetsAt: Date().addingTimeInterval(3600)), sevenDay: nil)
+        appState.updateSlopes(fiveHour: .flat, sevenDay: .flat)
+        delegate.updateMenuBarDisplay()
+
+        let label = delegate.statusItem?.button?.accessibilityLabel() as? String
+        #expect(label?.contains("flat") == false, "Accessibility should NOT include slope when flat (not actionable)")
+        #expect(label?.contains("rising") == false, "Accessibility should NOT include rising when slope is flat")
+        #expect(label?.contains("steep") == false, "Accessibility should NOT include steep when slope is flat")
+    }
+
+    @Test("accessibility excludes slope when exhausted even with actionable slope (AC #5)")
+    @MainActor
+    func accessibilityExcludesSlopeWhenExhausted() async {
+        let mockEngine = MockPollingEngine()
+        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
+
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+        try? await Task.sleep(for: .milliseconds(50))
+
+        guard let appState = delegate.appState else {
+            #expect(Bool(false), "AppState should exist")
+            return
+        }
+
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(fiveHour: WindowState(utilization: 100.0, resetsAt: Date().addingTimeInterval(720)), sevenDay: nil)
+        appState.updateSlopes(fiveHour: .steep, sevenDay: .flat)
+        delegate.updateMenuBarDisplay()
+
+        let label = delegate.statusItem?.button?.accessibilityLabel() as? String
+        #expect(label?.contains("exhausted") == true, "Accessibility should contain 'exhausted'")
+        #expect(label?.contains("steep") == false, "Accessibility should NOT include slope when exhausted")
+    }
 }
