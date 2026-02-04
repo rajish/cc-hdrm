@@ -16,13 +16,14 @@ struct SevenDayGaugeSection: View {
         appState.sevenDay?.headroomState ?? .disconnected
     }
 
-    /// Combined VoiceOver announcement (AC #7):
-    /// "7-day headroom: [X] percent, resets in [relative], at [absolute]"
-    private var combinedAccessibilityLabel: String {
+    /// Combined VoiceOver announcement (AC #7) + Story 11.4 AC #4:
+    /// "7-day headroom: [X] percent, [slope level], resets in [relative], at [absolute]"
+    /// Internal (not private) to allow @testable import verification.
+    var combinedAccessibilityLabel: String {
         guard let headroom else {
             return "7-day headroom: unavailable"
         }
-        var label = "7-day headroom: \(Int(max(0, headroom))) percent"
+        var label = "7-day headroom: \(Int(max(0, headroom))) percent, \(appState.sevenDaySlope.accessibilityLabel)"
         if let resetsAt = appState.sevenDay?.resetsAt {
             label += ", resets in \(resetsAt.countdownString()), \(resetsAt.absoluteTimeString())"
         }
@@ -38,12 +39,13 @@ struct SevenDayGaugeSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                // Ring gauge: 56px diameter, 4px stroke (AC #1-#2)
+                // Ring gauge: 56px diameter, 4px stroke (AC #1-#2) + slope display (Story 11.4)
                 HeadroomRingGauge(
                     headroomPercentage: headroom,
                     windowLabel: "7d",
                     ringSize: 56,
-                    strokeWidth: 4
+                    strokeWidth: 4,
+                    slopeLevel: appState.sevenDaySlope
                 )
 
                 // Countdown: relative + absolute (AC #4, #5)
