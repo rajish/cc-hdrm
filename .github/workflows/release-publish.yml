@@ -199,6 +199,7 @@ jobs:
 
       - name: Commit changelog update
         if: steps.detect.outputs.release == 'true'
+        continue-on-error: true
         env:
           NEW_VERSION: ${{ steps.detect.outputs.version }}
         run: |
@@ -208,6 +209,7 @@ jobs:
           git diff --cached --quiet && { echo "No changelog changes to commit."; exit 0; }
           git commit -m "chore: update changelog for v${NEW_VERSION} [skip ci]"
           git push
+          echo "Changelog committed successfully"
 
       - name: Tag release
         if: steps.detect.outputs.release == 'true'
