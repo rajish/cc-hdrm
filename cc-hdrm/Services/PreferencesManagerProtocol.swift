@@ -17,5 +17,10 @@ protocol PreferencesManagerProtocol: AnyObject {
     var launchAtLogin: Bool { get set }
     var dismissedVersion: String? { get set }
 
+    /// User-configured custom 5-hour credit limit for unknown tiers. Nil if unset.
+    var customFiveHourCredits: Int? { get set }
+    /// User-configured custom 7-day credit limit for unknown tiers. Nil if unset.
+    var customSevenDayCredits: Int? { get set }
+
     func resetToDefaults()
 }

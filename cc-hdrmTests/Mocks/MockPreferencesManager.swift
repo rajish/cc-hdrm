@@ -8,6 +8,8 @@ final class MockPreferencesManager: PreferencesManagerProtocol {
     var pollInterval: TimeInterval = PreferencesDefaults.pollInterval
     var launchAtLogin: Bool = PreferencesDefaults.launchAtLogin
     var dismissedVersion: String?
+    var customFiveHourCredits: Int?
+    var customSevenDayCredits: Int?
     var resetToDefaultsCallCount = 0
 
     func resetToDefaults() {
@@ -17,5 +19,7 @@ final class MockPreferencesManager: PreferencesManagerProtocol {
         pollInterval = PreferencesDefaults.pollInterval
         launchAtLogin = PreferencesDefaults.launchAtLogin
         dismissedVersion = nil
+        customFiveHourCredits = nil
+        customSevenDayCredits = nil
     }
 }

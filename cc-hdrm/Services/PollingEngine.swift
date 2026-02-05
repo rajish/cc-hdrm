@@ -148,6 +148,13 @@ final class PollingEngine: PollingEngineProtocol {
                 )
             }
 
+            // Resolve credit limits from tier string each cycle (tier could change on subscription upgrade)
+            let resolvedLimits = RateLimitTier.resolve(
+                tierString: credentials.rateLimitTier,
+                preferencesManager: preferencesManager
+            )
+            appState.updateCreditLimits(resolvedLimits)
+
             appState.updateWindows(fiveHour: fiveHourState, sevenDay: sevenDayState)
             await notificationService?.evaluateThresholds(fiveHour: fiveHourState, sevenDay: sevenDayState)
             appState.updateConnectionStatus(.connected)
@@ -178,8 +185,9 @@ final class PollingEngine: PollingEngineProtocol {
                 )
                 slopeService.addPoll(poll)
 
+                let normFactor = resolvedLimits?.normalizationFactor
                 let fiveHourSlope = slopeService.calculateSlope(for: .fiveHour)
-                let sevenDaySlope = slopeService.calculateSlope(for: .sevenDay)
+                let sevenDaySlope = slopeService.calculateSlope(for: .sevenDay, normalizationFactor: normFactor)
                 appState.updateSlopes(fiveHour: fiveHourSlope, sevenDay: sevenDaySlope)
             }
 
@@ -254,6 +262,7 @@ final class PollingEngine: PollingEngineProtocol {
     }
 
     private func handleCredentialError(_ error: any Error) {
+        appState.updateCreditLimits(nil)
         appState.updateConnectionStatus(.noCredentials)
         appState.updateStatusMessage(StatusMessage(
             title: "No Claude credentials found",

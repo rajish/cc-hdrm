@@ -81,7 +81,7 @@ final class SlopeCalculationService: SlopeCalculationServiceProtocol, @unchecked
         }
     }
 
-    func calculateSlope(for window: UsageWindow) -> SlopeLevel {
+    func calculateSlope(for window: UsageWindow, normalizationFactor: Double?) -> SlopeLevel {
         lock.withLock {
             // Extract entries with non-nil utilization for the target window
             let entries: [(timestamp: Int64, util: Double)] = buffer.compactMap { entry in
@@ -123,11 +123,19 @@ final class SlopeCalculationService: SlopeCalculationServiceProtocol, @unchecked
             // Calculate rate of change (% per minute)
             let ratePerMinute = (newest.util - oldest.util) / timeSpanMinutes
 
+            // Apply credit normalization for 7d window so slope thresholds are meaningful
+            let effectiveRate: Double
+            if window == .sevenDay, let factor = normalizationFactor {
+                effectiveRate = ratePerMinute * factor
+            } else {
+                effectiveRate = ratePerMinute
+            }
+
             // Map rate to slope level
             // Note: ratePerMinute should always be >= 0 (utilization only increases)
             // Negative rates can only occur if buffer spans a reset boundary - treat as flat
             let level: SlopeLevel
-            switch ratePerMinute {
+            switch effectiveRate {
             case ..<Self.flatThreshold:
                 level = .flat
             case Self.flatThreshold..<Self.steepThreshold:
@@ -136,7 +144,7 @@ final class SlopeCalculationService: SlopeCalculationServiceProtocol, @unchecked
                 level = .steep
             }
 
-            Self.logger.debug("\(window.rawValue) slope: rate=\(String(format: "%.3f", ratePerMinute))%/min, level=\(level.rawValue)")
+            Self.logger.debug("\(window.rawValue) slope: raw=\(String(format: "%.3f", ratePerMinute))%/min, effective=\(String(format: "%.3f", effectiveRate))%/min, level=\(level.rawValue)")
             return level
         }
     }

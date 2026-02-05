@@ -47,9 +47,10 @@ development_status:
   2-3-data-freshness-tracking: done
   epic-2-retrospective: optional
 
-  epic-3: done
+  epic-3: done  # Completed: Story 3.3 code review passed
   3-1-menu-bar-headroom-display-with-color-weight: done
   3-2-context-adaptive-display-tighter-constraint-promotion: done
+  3-3-refined-7d-promotion-credit-math-slope-normalization: done  # Course correction: replaces 3.2 promotion logic, absorbs 14.1 credit limits
   epic-3-retrospective: optional
 
   epic-4: done

@@ -54,7 +54,7 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 - **Error handling / graceful degradation** — every component must handle disconnected, token-expired, and no-credentials states consistently using the same grey "—" visual language.
 - **Accessibility** — VoiceOver labels, color independence (number + color + font weight), keyboard navigation, reduced motion support. Applies to all custom UI components.
 - **Data freshness** — staleness tracking affects menu bar display, popover timestamp, and StatusMessageView visibility. Must be centrally managed.
-- **Dual-window logic** — both 5h and 7d headroom tracked independently with independent threshold state machines. The "tighter constraint" promotion logic affects menu bar display.
+- **Dual-window logic** — both 5h and 7d headroom tracked independently with independent threshold state machines. The "tighter constraint" promotion uses credit-math: 7d promotes to menu bar only when `remaining_7d_credits / 5h_credit_limit < 1` (can't fit one more full 5h cycle). GaugeIcon shows colored dot for ambient 7d awareness at caution/warning/critical, "7d" label when promoted. Requires `RateLimitTier` credit limits; falls back to percentage comparison on unknown tiers.
 
 ## Starter Template Evaluation
 
@@ -899,8 +899,7 @@ protocol SlopeCalculationServiceProtocol {
 }
 
 enum SlopeLevel: String {
-    case cooling  // ↘ utilization decreasing
-    case flat     // → no meaningful change
+    case flat     // → no meaningful change (includes negative rates from reset boundaries)
     case rising   // ↗ moderate consumption
     case steep    // ⬆ heavy consumption
 }
@@ -910,17 +909,20 @@ enum SlopeLevel: String {
 
 **Calculation:**
 1. Sample buffer for specified window (5h or 7d)
-2. Compute average rate of change (% per minute)
+2. Compute average rate of change:
+   - **5h:** raw percentage rate (% per minute) — unchanged
+   - **7d:** credit-normalized rate = `raw_7d_rate × (7d_credit_limit / 5h_credit_limit)` — compensates for the ~12.6x larger 7d pool so both windows produce meaningful slope readings at the same thresholds. Requires `RateLimitTier` credit limits; falls back to raw percentage on unknown tier.
 3. Map to discrete level:
 
-| Rate (% / min) | Level   |
-| -------------- | ------- |
-| < -0.5         | Cooling |
-| -0.5 to 0.3    | Flat    |
-| 0.3 to 1.5     | Rising  |
-| > 1.5          | Steep   |
+| Rate (normalized % / min) | Level   |
+| ------------------------- | ------- |
+| < 0.3                     | Flat    |
+| 0.3 to 1.5                | Rising  |
+| > 1.5                     | Steep   |
 
 **Trigger:** Recalculate on every poll cycle. Slope calculation is trivial (average of ~15-30 numbers from in-memory buffer). Ensures menu bar slope arrow is always current.
+
+**Credit normalization dependency:** `SlopeCalculationService` needs access to the `RateLimitTier` normalization factor (`7d_limit / 5h_limit`). Inject via tier property or closure — avoid importing heavy services.
 
 #### HeadroomAnalysisService
 
@@ -1089,7 +1091,7 @@ func renderMenuBarText() -> String {
     switch fiveHourSlope {
     case .rising: return "\(base) ↗"
     case .steep:  return "\(base) ⬆"
-    case .flat, .cooling: return base
+    case .flat: return base
     }
 }
 ```
@@ -1151,7 +1153,6 @@ struct SlopeIndicator: View {
 extension SlopeLevel {
     var arrow: String {
         switch self {
-        case .cooling: return "↘"
         case .flat: return "→"
         case .rising: return "↗"
         case .steep: return "⬆"
@@ -1160,7 +1161,7 @@ extension SlopeLevel {
     
     var color: Color {
         switch self {
-        case .cooling, .flat: return .secondary
+        case .flat: return .secondary
         case .rising, .steep: return .headroomColor  // matches current headroom state
         }
     }

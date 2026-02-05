@@ -15,6 +15,18 @@ enum GaugeIcon {
     /// Canvas size for menu bar icons (renders @2x on Retina as 36×36px)
     private static let canvasSize = NSSize(width: 18, height: 18)
 
+    // MARK: - Seven Day Overlay
+
+    /// Overlay state for the 7d window indicator on the gauge icon.
+    enum SevenDayOverlay: Equatable {
+        /// No overlay — 7d is normal or data unavailable.
+        case none
+        /// Colored dot indicating 7d is in caution/warning/critical.
+        case dot(HeadroomState)
+        /// "7d" label indicating the menu bar is currently showing 7d headroom.
+        case promoted
+    }
+
     /// Geometry constants derived from HTML preview (gauge-icon-preview.html).
     /// Using flipped coordinates (origin top-left, Y down) to match menu bar display.
     private enum Geometry {
@@ -34,24 +46,43 @@ enum GaugeIcon {
         static let centerDotRadius: CGFloat = 1.5
         /// Padding for disconnected X icon.
         static let disconnectedPadding: CGFloat = 5.0
+        /// 7d dot center X (top-right corner).
+        static let dotCenterX: CGFloat = 14.5
+        /// 7d dot center Y (top-right corner).
+        static let dotCenterY: CGFloat = 3.5
+        /// 7d dot radius.
+        static let dotRadius: CGFloat = 2.0
+        /// 7d label font size.
+        static let labelFontSize: CGFloat = 6.0
     }
 
     // MARK: - Public API
 
-    /// Creates a semicircular gauge icon for the menu bar.
+    /// Creates a semicircular gauge icon for the menu bar with optional 7d overlay.
     ///
     /// The gauge shows:
     /// - Fill level corresponding to headroom percentage (0-100%)
     /// - Color matching the current `HeadroomState`
     /// - Needle pointing from left (0%) to right (100%)
+    /// - Optional 7d overlay: colored dot or "7d" label in top-right corner
     ///
     /// - Parameters:
     ///   - headroomPercentage: Headroom value 0-100. Values outside this range are clamped.
     ///   - state: The `HeadroomState` determining the gauge color.
+    ///   - sevenDayOverlay: The 7d overlay to render (dot, promoted label, or none).
     /// - Returns: An 18×18pt `NSImage` with `isTemplate = false`.
-    static func make(headroomPercentage: Double, state: HeadroomState) -> NSImage {
+    static func make(headroomPercentage: Double, state: HeadroomState, sevenDayOverlay: SevenDayOverlay = .none) -> NSImage {
         let image = NSImage(size: canvasSize, flipped: true) { _ in
             drawGauge(headroomPercentage: headroomPercentage, state: state)
+            // Draw overlay AFTER gauge so it renders on top
+            switch sevenDayOverlay {
+            case .none:
+                break
+            case .dot(let overlayState):
+                drawSevenDayDot(state: overlayState)
+            case .promoted:
+                drawSevenDayLabel(state: state)
+            }
             return true
         }
         image.isTemplate = false
@@ -190,6 +221,46 @@ enum GaugeIcon {
         dotPath.fill()
     }
 
+    /// Draws a small colored dot in the top-right corner for 7d state indication.
+    /// Only draws for valid dot states (caution, warning, critical). Silently skips
+    /// invalid states (normal, exhausted, disconnected) as a defensive guard.
+    private static func drawSevenDayDot(state: HeadroomState) {
+        // Guard: dot is only meaningful for caution/warning/critical states
+        guard state == .caution || state == .warning || state == .critical else {
+            assertionFailure("drawSevenDayDot called with invalid state: \(state). Expected caution, warning, or critical.")
+            return
+        }
+
+        let cx = Geometry.dotCenterX
+        let cy = Geometry.dotCenterY
+        let r = Geometry.dotRadius
+        let dotRect = NSRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2)
+        let dotPath = NSBezierPath(ovalIn: dotRect)
+
+        let color = NSColor.headroomColor(for: state)
+        color.setFill()
+        dotPath.fill()
+    }
+
+    /// Draws a tiny "7d" text label in the top-right corner when 7d is promoted.
+    /// Clamps draw position to ensure the label doesn't exceed the canvas boundary.
+    private static func drawSevenDayLabel(state: HeadroomState) {
+        let font = NSFont.systemFont(ofSize: Geometry.labelFontSize, weight: .bold)
+        let color = NSColor.headroomColor(for: state)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: color
+        ]
+        let text = NSAttributedString(string: "7d", attributes: attributes)
+        let textSize = text.size()
+        // Center "7d" in the dot area, clamped to canvas bounds
+        let idealX = Geometry.dotCenterX - textSize.width / 2
+        let clampedX = min(idealX, canvasSize.width - textSize.width)
+        let clampedY = max(Geometry.dotCenterY - textSize.height / 2, 0)
+        let drawPoint = NSPoint(x: clampedX, y: clampedY)
+        text.draw(at: drawPoint)
+    }
+
     /// Draws the disconnected X icon.
     private static func drawDisconnectedX(in rect: NSRect) {
         let color = NSColor.headroomColor(for: .disconnected)
@@ -216,9 +287,9 @@ enum GaugeIcon {
 // MARK: - Legacy Function Wrappers (for backward compatibility)
 
 /// Creates a semicircular gauge icon for the menu bar.
-/// - Note: Prefer `GaugeIcon.make(headroomPercentage:state:)` for new code.
+/// - Note: Prefer `GaugeIcon.make(headroomPercentage:state:sevenDayOverlay:)` for new code.
 func makeGaugeIcon(headroomPercentage: Double, state: HeadroomState) -> NSImage {
-    GaugeIcon.make(headroomPercentage: headroomPercentage, state: state)
+    GaugeIcon.make(headroomPercentage: headroomPercentage, state: state, sevenDayOverlay: .none)
 }
 
 /// Creates a distinct "X" icon for the disconnected state.

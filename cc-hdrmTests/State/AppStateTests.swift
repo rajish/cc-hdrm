@@ -341,98 +341,106 @@ struct AppStateTests {
         #expect(state.menuBarText == "95%")
     }
 
-    // MARK: - Tighter Constraint Promotion Tests (Story 3.2, Task 9)
+    // MARK: - Credit-Math Promotion Tests (Story 3.3)
 
-    @Test("5h 72% normal, 7d 18% warning → promotes 7d")
+    @Test("Pro tier, 7d utilization 95% → quotas=0.45 → promotes 7d")
     @MainActor
-    func promotionSevenDayWarning() {
+    func creditMathProTierPromotes() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
-        // 5h: utilization 28 → headroom 72% → .normal
-        // 7d: utilization 82 → headroom 18% → .warning
+        state.updateCreditLimits(RateLimitTier.pro.creditLimits)
+        // 7d: utilization 95 → remaining = 0.05 * 5,000,000 = 250,000 → quotas = 250,000/550,000 = 0.45
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 95.0, resetsAt: nil)
+        )
+        #expect(state.displayedWindow == .sevenDay)
+    }
+
+    @Test("Pro tier, 7d utilization 80% → quotas=1.82 → stays 5h")
+    @MainActor
+    func creditMathProTierStays5h() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateCreditLimits(RateLimitTier.pro.creditLimits)
+        // 7d: utilization 80 → remaining = 0.20 * 5,000,000 = 1,000,000 → quotas = 1,000,000/550,000 = 1.82
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 80.0, resetsAt: nil)
+        )
+        #expect(state.displayedWindow == .fiveHour)
+    }
+
+    @Test("Max 5x tier, 7d utilization 95% → quotas=0.63 → promotes 7d")
+    @MainActor
+    func creditMathMax5xTierPromotes() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateCreditLimits(RateLimitTier.max5x.creditLimits)
+        // 7d: utilization 95 → remaining = 0.05 * 41,666,700 = 2,083,335 → quotas = 2,083,335/3,300,000 = 0.63
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 95.0, resetsAt: nil)
+        )
+        #expect(state.displayedWindow == .sevenDay)
+    }
+
+    @Test("Max 5x tier, 7d utilization 90% → quotas=1.26 → stays 5h")
+    @MainActor
+    func creditMathMax5xTierStays5h() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateCreditLimits(RateLimitTier.max5x.creditLimits)
+        // 7d: utilization 90 → remaining = 0.10 * 41,666,700 = 4,166,670 → quotas = 4,166,670/3,300,000 = 1.26
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 90.0, resetsAt: nil)
+        )
+        #expect(state.displayedWindow == .fiveHour)
+    }
+
+    @Test("nil tier (fallback) → 5h 72%, 7d 18% warning → promotes 7d via percentage rule")
+    @MainActor
+    func fallbackPromotionPercentageRule() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        // No credit limits — falls back to Story 3.2 rule
         state.updateWindows(
             fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
             sevenDay: WindowState(utilization: 82.0, resetsAt: nil)
         )
-        #expect(state.menuBarHeadroomState == .warning)
-        #expect(state.menuBarText == "18%")
         #expect(state.displayedWindow == .sevenDay)
     }
 
-    @Test("5h 72% normal, 7d 4% critical → promotes 7d")
+    @Test("nil tier (fallback) → 5h 35% caution, 7d 30% caution → stays 5h (7d not warning/critical)")
     @MainActor
-    func promotionSevenDayCritical() {
+    func fallbackNoPromotionCaution() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
-        state.updateWindows(
-            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
-            sevenDay: WindowState(utilization: 96.0, resetsAt: nil)
-        )
-        #expect(state.menuBarHeadroomState == .critical)
-        #expect(state.menuBarText == "4%")
-        #expect(state.displayedWindow == .sevenDay)
-    }
-
-    @Test("5h 35% caution, 7d 30% caution → stays on 5h (7d not warning/critical)")
-    @MainActor
-    func noPromotionSevenDayCaution() {
-        let state = AppState()
-        state.updateConnectionStatus(.connected)
-        // 5h: utilization 65 → headroom 35% → .caution
-        // 7d: utilization 70 → headroom 30% → .caution
+        // No credit limits — falls back to Story 3.2 rule
         state.updateWindows(
             fiveHour: WindowState(utilization: 65.0, resetsAt: nil),
             sevenDay: WindowState(utilization: 70.0, resetsAt: nil)
         )
-        #expect(state.menuBarHeadroomState == .caution)
         #expect(state.displayedWindow == .fiveHour)
     }
 
-    @Test("5h 12% warning, 7d 18% warning → stays on 5h (7d headroom > 5h headroom)")
+    @Test("5h exhausted + Pro tier with quotas < 1 → stays 5h (exhausted guard fires first)")
     @MainActor
-    func noPromotionSevenDayHigherHeadroom() {
+    func exhaustedGuardOverridesCreditMath() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
-        // 5h: utilization 88 → headroom 12% → .warning
-        // 7d: utilization 82 → headroom 18% → .warning
+        state.updateCreditLimits(RateLimitTier.pro.creditLimits)
+        let resetsAt = Date().addingTimeInterval(30 * 60)
+        // 5h: utilization 100 → exhausted → exhausted guard fires first
+        // 7d: utilization 95 → quotas = 0.45 < 1 → would promote, but exhausted guard prevents it
         state.updateWindows(
-            fiveHour: WindowState(utilization: 88.0, resetsAt: nil),
-            sevenDay: WindowState(utilization: 82.0, resetsAt: nil)
-        )
-        #expect(state.menuBarHeadroomState == .warning)
-        #expect(state.displayedWindow == .fiveHour)
-    }
-
-    @Test("5h 72%, 7d nil → stays on 5h")
-    @MainActor
-    func noPromotionSevenDayNil() {
-        let state = AppState()
-        state.updateConnectionStatus(.connected)
-        state.updateWindows(
-            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
-            sevenDay: nil
+            fiveHour: WindowState(utilization: 100.0, resetsAt: resetsAt),
+            sevenDay: WindowState(utilization: 95.0, resetsAt: nil)
         )
         #expect(state.displayedWindow == .fiveHour)
-    }
-
-    @Test("7d recovers → reverts to 5h display")
-    @MainActor
-    func promotionRevertsOnRecovery() {
-        let state = AppState()
-        state.updateConnectionStatus(.connected)
-        // Initially 7d is warning with lower headroom
-        state.updateWindows(
-            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
-            sevenDay: WindowState(utilization: 82.0, resetsAt: nil)
-        )
-        #expect(state.displayedWindow == .sevenDay)
-
-        // 7d recovers to 50% headroom (utilization 50)
-        state.updateWindows(
-            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
-            sevenDay: WindowState(utilization: 50.0, resetsAt: nil)
-        )
-        #expect(state.displayedWindow == .fiveHour)
+        #expect(state.menuBarHeadroomState == .exhausted)
+        #expect(state.menuBarText.contains("\u{21BB}"), "Should show 5h countdown, not 7d percentage")
     }
 
     @Test("both 5h and 7d exhausted → stays on 5h (countdown more useful)")
@@ -440,34 +448,114 @@ struct AppStateTests {
     func bothExhausted() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
+        state.updateCreditLimits(RateLimitTier.pro.creditLimits)
         let resetsAt5h = Date().addingTimeInterval(20 * 60)
         let resetsAt7d = Date().addingTimeInterval(3 * 3600)
         state.updateWindows(
             fiveHour: WindowState(utilization: 100.0, resetsAt: resetsAt5h),
             sevenDay: WindowState(utilization: 100.0, resetsAt: resetsAt7d)
         )
-        // Both exhausted, headroom both 0% — 7d headroom (0) is NOT < 5h headroom (0), so no promotion
         #expect(state.displayedWindow == .fiveHour)
         #expect(state.menuBarHeadroomState == .exhausted)
         #expect(state.menuBarText.contains("\u{21BB}"), "Should show countdown for 5h")
     }
 
-    @Test("5h exhausted, 7d warning → stays on 5h (exhausted countdown takes priority)")
+    @Test("5h exhausted, 7d warning, nil tier → stays on 5h (exhausted guard fires first)")
     @MainActor
-    func fiveHourExhaustedSevenDayWarning() {
+    func fiveHourExhaustedSevenDayWarningFallback() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
         let resetsAt = Date().addingTimeInterval(30 * 60)
-        // 5h: utilization 100 → headroom 0% → .exhausted
-        // 7d: utilization 85 → headroom 15% → .warning
         state.updateWindows(
             fiveHour: WindowState(utilization: 100.0, resetsAt: resetsAt),
             sevenDay: WindowState(utilization: 85.0, resetsAt: nil)
         )
-        // 7d headroom (15%) > 5h headroom (0%) → 7d headroom is NOT lower, no promotion
         #expect(state.displayedWindow == .fiveHour)
         #expect(state.menuBarHeadroomState == .exhausted)
         #expect(state.menuBarText.contains("\u{21BB}"), "Should show 5h countdown, not 7d percentage")
+    }
+
+    // MARK: - quotasRemaining Tests (Story 3.3)
+
+    @Test("quotasRemaining returns correct value for Pro tier with 7d utilization 90%")
+    @MainActor
+    func quotasRemainingProTier90() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateCreditLimits(RateLimitTier.pro.creditLimits)
+        // 7d: utilization 90 → remaining = 0.10 * 5,000,000 = 500,000 → quotas = 500,000/550,000 = 0.909
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 90.0, resetsAt: nil)
+        )
+        let quotas = state.quotasRemaining
+        #expect(quotas != nil)
+        #expect(abs(quotas! - 0.909) < 0.01)
+    }
+
+    @Test("quotasRemaining returns nil when creditLimits is nil")
+    @MainActor
+    func quotasRemainingNilWhenNoLimits() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 90.0, resetsAt: nil)
+        )
+        #expect(state.quotasRemaining == nil)
+    }
+
+    @Test("quotasRemaining returns nil when sevenDay is nil")
+    @MainActor
+    func quotasRemainingNilWhenNoSevenDay() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateCreditLimits(RateLimitTier.pro.creditLimits)
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
+            sevenDay: nil
+        )
+        #expect(state.quotasRemaining == nil)
+    }
+
+    @Test("Boundary: Pro tier, 7d utilization exactly 89% → quotas=1.0 → stays 5h (strict less-than)")
+    @MainActor
+    func creditMathBoundaryExactlyOne() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateCreditLimits(RateLimitTier.pro.creditLimits)
+        // 7d: utilization 89 → remaining = 0.11 * 5,000,000 = 550,000 → quotas = 550,000/550,000 = 1.0
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 89.0, resetsAt: nil)
+        )
+        #expect(state.displayedWindow == .fiveHour, "quotas == 1.0 exactly should NOT promote (strict less-than)")
+    }
+
+    @Test("5h 72%, 7d nil, with credit limits → stays on 5h")
+    @MainActor
+    func noPromotionSevenDayNilWithLimits() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateCreditLimits(RateLimitTier.pro.creditLimits)
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
+            sevenDay: nil
+        )
+        #expect(state.displayedWindow == .fiveHour)
+    }
+
+    @Test("quotasRemaining returns nil when fiveHourCredits is 0 (defensive guard)")
+    @MainActor
+    func quotasRemainingNilWhenZeroCredits() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateCreditLimits(CreditLimits(fiveHourCredits: 0, sevenDayCredits: 1_000_000))
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 90.0, resetsAt: nil)
+        )
+        #expect(state.quotasRemaining == nil, "Should return nil, not infinity")
     }
 
     // MARK: - Countdown Tick Tests (Story 3.2)

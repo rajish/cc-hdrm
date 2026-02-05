@@ -405,10 +405,13 @@ Alex's mental model is depletion-based: he has a tank of capacity, and it drains
 
 **Menu bar footprint:**
 - Target width: comparable to clock or single iStat module
-- Format: Claude sparkle icon + percentage or countdown (e.g., "✳ 83%" or "✳ ↻ 12m")
-- Sparkle icon (Claude asterisk/sparkle) as prefix — provides instant brand recognition and distinguishes cc-hdrm from other menu bar monitors
-- Sparkle icon is monochrome, matching the headroom color token (shifts color with state)
-- Disconnected state: "✳ —" in grey
+- Format: GaugeIcon (semicircular gauge) + percentage or countdown (e.g., "67%" or "↻ 12m")
+- GaugeIcon serves as the primary visual anchor with color reflecting headroom state
+- GaugeIcon corner indicator for 7d awareness:
+  - **Colored dot** when 7d is in caution/warning/critical but NOT promoted — dot uses 7d HeadroomState color
+  - **"7d" label** when 7d IS promoted (remaining 7d budget can't sustain one more 5h cycle) — makes source switch unambiguous
+  - **Empty** when 7d is normal (>40% headroom) or disconnected — quiet when everything is fine
+- Disconnected state: "—" in grey
 
 ### Accessibility Considerations
 
@@ -585,20 +588,24 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["Menu bar shows 5h headroom: '72%' green"] --> B[Poll cycle: 7d headroom drops to 18%]
-    B --> C{Is 7d headroom < 5h headroom\nAND 7d in warning/critical?}
-    C -->|Yes| D["Menu bar switches to 7d: '18%' orange, semibold"]
-    D --> E[macOS notification:\n'Claude 7-day headroom at 18% —\nresets in 2d 1h at Mon 7:05 PM']
-    E --> F[Alex clicks to expand popover]
-    F --> G[Sees 5h gauge: 72% green\nSees 7d gauge: 18% orange\nUnderstands 7d is the constraint]
-    G --> H[Alex paces work over the weekend]
-    C -->|No| I[Menu bar continues showing 5h headroom]
+    A["Menu bar shows 5h headroom: '72%' green"] --> B[Poll cycle: 7d headroom drops to 35%]
+    B --> C[Gauge icon shows colored dot\nin 7d caution color — yellow]
+    C --> D[Alex notices the dot, glances at popover]
+    D --> E["Sees 7d gauge: 35% yellow\n'6 full 5h quotas left'\nUnderstands 7d is getting tight\nbut 5h limit and slope still visible"]
+    E --> F[Poll cycle: 7d drops further\nremaining_7d_credits / 5h_limit < 1]
+    F --> G{Can 7d sustain one more\nfull 5h cycle?}
+    G -->|No: quotas < 1| H["Menu bar promotes 7d: '8%' red, bold\nGauge icon shows '7d' label\n5h info moves to popover only"]
+    H --> I[macOS notification:\n'Claude 7-day headroom at 8% —\nresets in 2d 1h at Mon 7:05 PM']
+    I --> J[Alex paces work over the weekend]
+    G -->|Yes: quotas >= 1| K["Menu bar keeps showing 5h\nDot warns about 7d state"]
 ```
 
 **Key UX decisions:**
-- Menu bar automatically promotes whichever window is the tighter constraint
-- Only switches when the tighter window is in warning or critical — not just lower
-- Popover always shows both, so expanding reveals the full picture
+- 7d awareness via colored dot on gauge icon — appears at caution/warning/critical without hiding 5h info
+- 7d promotes to menu bar only when remaining 7d budget can't sustain one more full 5h cycle (credit-math rule: `remaining_7d_credits / 5h_credit_limit < 1`)
+- When promoted, a "7d" label on the gauge icon makes the source switch unambiguous
+- Popover always shows both windows, plus "X full 5h quotas left" in the 7d section for transparency
+- 5h limit, slope indicator, and all 5h data remain visible until 7d is genuinely the binding constraint
 - 7d notifications use "7-day" in the text to distinguish from 5h alerts
 
 ### Journey 5: Token Expiry — "The tool hiccup"
@@ -641,13 +648,13 @@ Failure states (disconnected, token expired, no credentials) all follow the same
 Every failure state includes automatic recovery polling. Alex never needs to manually retry, restart, or reconfigure. The app heals itself when the underlying condition resolves.
 
 **Tighter Constraint Pattern:**
-When multiple usage windows exist, the menu bar always shows the tighter (more urgent) constraint. The popover always shows all windows. This ensures the most important information is in the peripheral view while full context is one click away.
+When 7d remaining budget can't sustain one more full 5h cycle (`remaining_7d_credits / 5h_credit_limit < 1`), the menu bar promotes 7d as the binding constraint. Otherwise, 5h stays primary with a colored dot on the gauge icon providing ambient 7d awareness at caution/warning/critical. The popover always shows both windows plus "X full 5h quotas left" in the 7d section. This ensures 5h info (the primary working context) is visible unless 7d is genuinely binding.
 
 ### Flow Optimization Principles
 
 1. **Zero-step recovery** — Every failure state auto-recovers. Alex never clicks "retry" or restarts the app.
 2. **Single source of truth** — Menu bar, popover, and notifications always show consistent data from the same poll cycle.
-3. **Promote by urgency** — The menu bar shows whichever window is the tighter constraint. The popover shows everything.
+3. **Promote by binding constraint** — The menu bar shows 7d only when it's genuinely the binding constraint (can't fit one more 5h cycle). Otherwise 5h stays primary with a dot for 7d awareness. The popover shows everything.
 4. **Factual notifications** — Every notification contains: what (headroom %), which window (5h/7d), when relative (resets in Xm), when absolute (at X:XX PM).
 5. **AFK resilience** — Warnings are never silently lost. Persistent notifications + menu bar state change ensure Alex knows what happened while away.
 
@@ -731,7 +738,7 @@ When multiple usage windows exist, the menu bar always shows the tighter (more u
 
 **Sparkle icon:** The Claude asterisk/sparkle serves as a persistent brand anchor. It ensures Alex can instantly identify cc-hdrm among other menu bar items. The icon is monochrome and shifts color with the headroom state — green sparkle at normal, red sparkle at critical, grey sparkle when disconnected.
 
-**Context-adaptive logic:** Automatically switches between percentage and countdown based on exhaustion state. When 7d is tighter constraint and in warning/critical, switches to show 7d headroom.
+**Context-adaptive logic:** Automatically switches between percentage and countdown based on exhaustion state. When 7d can't sustain one more full 5h cycle (`remaining_7d_credits / 5h_credit_limit < 1`), switches to show 7d headroom. GaugeIcon shows "7d" label in corner when promoted, colored dot in 7d state color when 7d is in caution/warning/critical but not promoted.
 
 **Accessibility:** VoiceOver reads "Claude headroom: 83 percent, normal" or "Claude headroom exhausted, resets in 12 minutes."
 
@@ -826,17 +833,29 @@ All five MVP components are required for the first launch. No phasing within MVP
 
 Every headroom state is expressed consistently across all three communication channels. No channel ever contradicts another.
 
-**State → Channel mapping:**
+**State → Channel mapping (5h displayed — default):**
 
-| State            | Menu Bar Text  | Menu Bar Color       | Menu Bar Weight | Popover Gauge | Notification           |
-| ---------------- | -------------- | -------------------- | --------------- | ------------- | ---------------------- |
-| Normal (> 40%)   | "✳ 83%"       | `.headroomNormal`    | Regular         | Green fill    | None                   |
-| Caution (20-40%) | "✳ 35%"       | `.headroomCaution`   | Medium          | Yellow fill   | None                   |
-| Warning (5-20%)  | "✳ 17%"       | `.headroomWarning`   | Semibold        | Orange fill   | Fires once             |
-| Critical (< 5%)  | "✳ 4%"        | `.headroomCritical`  | Bold            | Red fill      | Fires once, persistent |
-| Exhausted (0%)   | "✳ ↻ 12m"     | `.headroomExhausted` | Bold            | Empty ring    | None (already warned)  |
-| Disconnected     | "✳ —"         | `.disconnected`      | Regular         | Empty grey    | Fires once             |
-| Token expired    | "✳ —"         | `.disconnected`      | Regular         | Empty grey    | Fires once             |
+| State            | Menu Bar Text | Menu Bar Color       | Menu Bar Weight | Gauge Corner          | Popover Gauge | Notification           |
+| ---------------- | ------------- | -------------------- | --------------- | --------------------- | ------------- | ---------------------- |
+| Normal (> 40%)   | "83%"         | `.headroomNormal`    | Regular         | (see 7d rules below)  | Green fill    | None                   |
+| Caution (20-40%) | "35%"         | `.headroomCaution`   | Medium          | (see 7d rules below)  | Yellow fill   | None                   |
+| Warning (5-20%)  | "17%"         | `.headroomWarning`   | Semibold        | (see 7d rules below)  | Orange fill   | Fires once             |
+| Critical (< 5%)  | "4%"          | `.headroomCritical`  | Bold            | (see 7d rules below)  | Red fill      | Fires once, persistent |
+| Exhausted (0%)   | "↻ 12m"       | `.headroomExhausted` | Bold            | (see 7d rules below)  | Empty ring    | None (already warned)  |
+| Disconnected     | "—"           | `.disconnected`      | Regular         | Empty                 | Empty grey    | Fires once             |
+| Token expired    | "—"           | `.disconnected`      | Regular         | Empty                 | Empty grey    | Fires once             |
+
+**7d Gauge Corner indicator rules:**
+
+| 7d State              | Promotion Status       | Gauge Corner           |
+| --------------------- | ---------------------- | ---------------------- |
+| Normal (> 40%)        | Not promoted           | Empty (quiet)          |
+| Caution (20-40%)      | Not promoted           | Yellow dot             |
+| Warning (5-20%)       | Not promoted           | Orange dot             |
+| Critical (< 5%)       | Not promoted           | Red dot                |
+| Any (quotas < 1)      | Promoted               | "7d" label             |
+
+**7d promotion rule:** 7d takes over the menu bar display only when `remaining_7d_credits / 5h_credit_limit < 1` (can't fit one more full 5h cycle in the remaining 7d budget). This is a credit-math calculation requiring known tier credit limits. On unknown tiers without user override, falls back to percentage comparison (7d headroom < 5h headroom AND 7d in warning/critical).
 
 **Consistency rule:** If the menu bar shows orange, the popover gauge is orange, and if a notification was fired for that state, it said "orange-level" information. All three channels always reflect the same poll cycle data.
 
@@ -861,7 +880,7 @@ Every headroom state is expressed consistently across all three communication ch
 
 - **Percentage → countdown (exhaustion):** Instant switch on next poll. No transition animation for the text content change — the shift from "4%" to "↻ 8m" should feel like a clear state change, not a gradual morph.
 - **Countdown → percentage (recovery):** Instant switch. Green color returns immediately. Gauge animates fill from 0% to new value.
-- **5h → 7d promotion (tighter constraint):** Menu bar switches to 7d value on next poll. No visual indication that the *source* changed — the number and color speak for themselves. Popover always shows both, so context is one click away.
+- **5h → 7d promotion (tighter constraint):** Menu bar switches to 7d value on next poll when remaining 7d budget can't sustain one more 5h cycle. GaugeIcon corner shows "7d" label to make the source switch unambiguous. Popover always shows both, so context is one click away. Promotion is preceded by colored dot phase (caution/warning/critical) that provides early ambient warning before full promotion fires.
 
 ### Data Freshness Pattern
 

@@ -180,8 +180,8 @@ Alex's usage data flows automatically — the app fetches from the Claude API in
 **FRs covered:** FR3, FR4, FR14, FR15, FR20, FR21, FR22
 
 ### Epic 3: Always-Visible Menu Bar Headroom
-Alex glances at his menu bar and instantly knows how much headroom he has — color-coded, weight-escalated percentage that registers in peripheral vision in under one second.
-**FRs covered:** FR6, FR7
+Alex glances at his menu bar and instantly knows how much headroom he has — color-coded, weight-escalated percentage that registers in peripheral vision in under one second. Story 3.3 (course correction) refines the 7d promotion rule to credit-math, adds gauge corner dot/label for 7d awareness, normalizes slope to credit terms, and adds quotas display.
+**FRs covered:** FR6, FR7, FR39 (partial — credit-math promotion)
 
 ### Epic 4: Detailed Usage Panel
 Alex clicks to expand and sees the full picture — both usage windows with ring gauges, countdowns with relative and absolute times, subscription tier, data freshness, and app controls.
@@ -460,6 +460,54 @@ So that I always see the most relevant information without any manual action.
 **Given** a VoiceOver user focuses the menu bar during exhausted state
 **When** VoiceOver reads the element
 **Then** it announces "cc-hdrm: Claude headroom exhausted, resets in [X] minutes"
+
+### Story 3.3: Refined 7d Promotion Rule, Credit-Math Slope Normalization & Popover Quotas Display (Course Correction)
+
+As a developer using Claude Code,
+I want the 7d headroom to promote to the menu bar only when the remaining 7d budget can't sustain one more full 5h cycle, a colored dot on the gauge icon when 7d is in caution or worse, the slope calculation normalized to credit terms so 7d slope is meaningful, and a "quotas remaining" display in the popover 7d section,
+So that I always see 5h limit and slope (my primary working context), get ambient 7d awareness without losing 5h info, and can see at a glance how many 5h cycles I have left in my weekly budget.
+
+**Course correction:** Replaces Story 3.2's promotion logic (which fired too aggressively, hiding 5h info). Also enhances Epic 11 slope calculation and absorbs Story 14.1 (RateLimitTier credit limits) as a prerequisite.
+
+**Acceptance Criteria:**
+
+**Given** the RateLimitTier enum is defined
+**When** referenced across the codebase
+**Then** it includes cases `.pro`, `.max5x`, `.max20x` with `fiveHourCredits` and `sevenDayCredits` properties (Pro: 550K/5M, Max 5x: 3.3M/41.67M, Max 20x: 11M/83.33M)
+**And** maps from Keychain `rateLimitTier` strings to enum cases
+**And** falls back to PreferencesManager custom limits, then nil on unknown tiers
+
+**Given** valid credit limits are available and both 5h and 7d usage data are present
+**When** `AppState.displayedWindow` is evaluated
+**Then** it calculates `quotas_remaining = remaining_7d_credits / 5h_credit_limit`
+**And** if `quotas_remaining < 1.0`, the 7d window is promoted to the menu bar
+**And** if `quotas_remaining >= 1.0`, the 5h window is displayed
+**And** on unknown tiers without override, falls back to the original Story 3.2 percentage-comparison rule
+
+**Given** 7d is NOT promoted AND 7d headroom state is caution, warning, or critical
+**When** the GaugeIcon renders
+**Then** a small colored dot in the 7d HeadroomState color appears in a corner of the gauge icon
+
+**Given** 7d IS promoted (quotas < 1)
+**When** the GaugeIcon renders
+**Then** a small "7d" text label appears in the corner position (replacing the dot)
+
+**Given** valid credit limits are available
+**When** `SlopeCalculationService.calculateSlope(for: .sevenDay)` is called
+**Then** it normalizes: `rate = raw_7d_rate × (7d_credit_limit / 5h_credit_limit)` and maps using existing thresholds
+**And** 5h slope calculation is unchanged
+**And** on unknown tiers, falls back to raw percentage-based calculation
+
+**Given** valid credit limits and the popover is open with 7d data
+**When** SevenDayGaugeSection renders
+**Then** it displays "X full 5h quotas left" below the countdown (always visible, verbose format)
+**And** hidden when credit limits are unavailable
+
+**Given** a VoiceOver user focuses the 7d gauge
+**When** VoiceOver reads the element
+**Then** it announces quotas remaining as part of the reading
+
+_Full acceptance criteria with implementation details: see `_bmad-output/implementation-artifacts/3-3-refined-7d-promotion-credit-math-slope-normalization.md`_
 
 ## Epic 4: Detailed Usage Panel
 
@@ -1184,8 +1232,7 @@ So that the display is simple and actionable rather than noisy continuous values
 **When** calculateSlope(for: .fiveHour) is called
 **Then** it computes the average rate of change (% per minute) across the buffer
 **And** maps the rate to SlopeLevel:
-- Rate < -0.5% per min → .cooling (↘)
-- Rate -0.5 to 0.3% per min → .flat (→)
+- Rate < 0.3% per min → .flat (→)
 - Rate 0.3 to 1.5% per min → .rising (↗)
 - Rate > 1.5% per min → .steep (⬆)
 
@@ -1197,7 +1244,7 @@ So that the display is simple and actionable rather than noisy continuous values
 **Given** the SlopeLevel enum is defined
 **When** referenced across the codebase
 **Then** it includes properties: arrow (String), color (Color), accessibilityLabel (String)
-**And** .cooling and .flat use secondary color; .rising and .steep use headroom color
+**And** .flat uses secondary color; .rising and .steep use headroom color
 
 ### Story 11.3: Menu Bar Slope Display (Escalation-Only)
 
@@ -1214,7 +1261,7 @@ So that the compact footprint is preserved during calm periods.
 **Then** it displays "✳ XX% ↗" or "✳ XX% ⬆" (slope arrow appended)
 **And** the arrow uses the same color as the percentage
 
-**Given** AppState.fiveHourSlope is .flat or .cooling
+**Given** AppState.fiveHourSlope is .flat
 **When** MenuBarTextRenderer renders
 **Then** it displays "✳ XX%" (no arrow) — same as Phase 1
 
@@ -1268,12 +1315,12 @@ So that slope display is consistent across menu bar and popover.
 **Given** SlopeIndicator is instantiated with a SlopeLevel and size
 **When** the view renders
 **Then** it displays the appropriate arrow character (↘ → ↗ ⬆)
-**And** color matches the level: secondary for cooling/flat, headroom color for rising/steep
+**And** color matches the level: secondary for flat, headroom color for rising/steep
 **And** font size matches the size parameter
 
 **Given** any SlopeIndicator instance
 **When** accessibility is evaluated
-**Then** it has .accessibilityLabel set to the slope level name ("cooling", "flat", "rising", "steep")
+**Then** it has .accessibilityLabel set to the slope level name ("flat", "rising", "steep")
 
 ## Epic 12: 24h Sparkline & Analytics Launcher (Phase 3)
 
@@ -1570,7 +1617,9 @@ So that I trust the visualization isn't fabricating data.
 
 Alex sees the real story behind his usage — a three-band breakdown showing what he actually used, what was blocked by the weekly limit (not waste!), and what he genuinely left on the table.
 
-### Story 14.1: Rate Limit Tier & Credit Limits
+### Story 14.1: Rate Limit Tier & Credit Limits (Absorbed into Story 3.3)
+
+**Note:** This story's RateLimitTier enum implementation was absorbed into Story 3.3 (course correction) which required credit limits for the revised promotion rule, slope normalization, and quotas display. The enum created by Story 3.3 satisfies all requirements below and is available for Stories 14.2-14.5.
 
 As a developer using Claude Code,
 I want cc-hdrm to know the credit limits for my subscription tier,

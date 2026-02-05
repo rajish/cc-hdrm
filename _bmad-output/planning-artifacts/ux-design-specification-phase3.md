@@ -63,15 +63,21 @@ A discrete 4-level slope indicator showing burn rate, displayed contextually in 
 ### Calculation
 
 - Sample last 10-15 minutes of poll data
-- Compute average rate of change (% per minute)
-- Map to discrete levels:
+- Compute average rate of change, **normalized to credit terms**:
+  - **5h window:** rate = Δ(5h_util%) / Δtime — unchanged, 5h is the reference scale
+  - **7d window:** rate = Δ(7d_util%) × (7d_credit_limit / 5h_credit_limit) / Δtime — normalization factor compensates for the ~12.6x larger 7d pool, making the same underlying token consumption produce the same slope reading regardless of which window is displayed
+- Map normalized rate to discrete levels:
 
-| Rate (% / min) | Level   |
-| -------------- | ------- |
-| < -0.5         | Cooling |
-| -0.5 to 0.3    | Flat    |
-| 0.3 to 1.5     | Rising  |
-| > 1.5          | Steep   |
+| Rate (normalized % / min) | Level   |
+| ------------------------- | ------- |
+| < -0.5                    | Cooling |
+| -0.5 to 0.3               | Flat    |
+| 0.3 to 1.5                | Rising  |
+| > 1.5                     | Steep   |
+
+**Credit normalization rationale:** Without normalization, the 7d window's percentage moves ~12.6x slower than 5h for the same token burn rate, causing 7d slope to read "flat" almost always. By expressing the rate as a fraction of the 5h credit limit, both windows use the same thresholds meaningfully. Example: a 0.08%/min raw 7d rate × 12.63 normalization factor = 1.01%/min normalized → "rising" (correct).
+
+**Fallback:** On unknown tiers without user-configured credit limits, slope falls back to raw percentage-based calculation (7d slope remains less sensitive but functional).
 
 Threshold values will require tuning with real usage data.
 
@@ -92,21 +98,30 @@ Threshold values will require tuning with real usage data.
 
 ### Popover Display: Always Visible
 
-Both gauges in the popover always show their slope indicator, regardless of level:
+Both gauges in the popover always show their slope indicator, regardless of level. The 7d gauge section additionally shows how many full 5h quotas fit in the remaining 7d budget:
 
 ```
-┌──────────────────┐
-│    ◯ 5h gauge    │
-│     78% ↗        │  ← slope always visible
-│  resets in 1h 12m│
-│  at 5:17 PM      │
-├──────────────────┤
-│    ◯ 7d gauge    │
-│     42% →        │  ← even flat is shown
-│  resets in 2d 1h │
-│  at Mon 7:05 PM  │
-└──────────────────┘
+┌──────────────────────┐
+│    ◯ 5h gauge        │
+│     78% ↗            │  ← slope always visible
+│  resets in 1h 12m    │
+│  at 5:17 PM          │
+├──────────────────────┤
+│    ◯ 7d gauge        │
+│     42% →            │  ← even flat is shown (credit-normalized)
+│  resets in 2d 1h     │
+│  at Mon 7:05 PM      │
+│  6 full 5h quotas left│  ← quotas remaining (always visible)
+└──────────────────────┘
 ```
+
+**Quotas remaining display:**
+- Calculated as `floor(remaining_7d_credits / 5h_credit_limit)`
+- Always visible in the 7d section when credit limits are known
+- Hidden entirely when credit limits are unavailable (unknown tier, no override)
+- When quotas < 1: displayed in 7d headroom color (warning/critical red) — this is the same threshold that triggers 7d promotion to the menu bar
+- Format: verbose "X full 5h quotas left" to avoid ambiguity
+- VoiceOver: announced as part of the 7d gauge reading
 
 ### Accessibility
 
@@ -457,11 +472,10 @@ Below the three-band bar:
 **Purpose:** Display the discrete slope arrow with appropriate styling.
 
 **Props:**
-- `slope: SlopeLevel` (`.cooling`, `.flat`, `.rising`, `.steep`)
+- `slope: SlopeLevel` (`.flat`, `.rising`, `.steep`)
 - `size: CGFloat` (matches adjacent text size)
 
 **Rendering:**
-- Cooling: ↘ (system secondary color)
 - Flat: → (system secondary color)
 - Rising: ↗ (headroom color)
 - Steep: ⬆ (headroom color, slightly bolder)

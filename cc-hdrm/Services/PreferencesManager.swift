@@ -17,6 +17,8 @@ final class PreferencesManager: PreferencesManagerProtocol {
         static let pollInterval = "com.cc-hdrm.pollInterval"
         static let launchAtLogin = "com.cc-hdrm.launchAtLogin"
         static let dismissedVersion = "com.cc-hdrm.dismissedVersion"
+        static let customFiveHourCredits = "com.cc-hdrm.customFiveHourCredits"
+        static let customSevenDayCredits = "com.cc-hdrm.customSevenDayCredits"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -131,6 +133,36 @@ final class PreferencesManager: PreferencesManagerProtocol {
         }
     }
 
+    // MARK: - Custom Credit Limits
+
+    var customFiveHourCredits: Int? {
+        get {
+            let value = defaults.integer(forKey: Keys.customFiveHourCredits)
+            return value > 0 ? value : nil
+        }
+        set {
+            if let newValue {
+                defaults.set(newValue, forKey: Keys.customFiveHourCredits)
+            } else {
+                defaults.removeObject(forKey: Keys.customFiveHourCredits)
+            }
+        }
+    }
+
+    var customSevenDayCredits: Int? {
+        get {
+            let value = defaults.integer(forKey: Keys.customSevenDayCredits)
+            return value > 0 ? value : nil
+        }
+        set {
+            if let newValue {
+                defaults.set(newValue, forKey: Keys.customSevenDayCredits)
+            } else {
+                defaults.removeObject(forKey: Keys.customSevenDayCredits)
+            }
+        }
+    }
+
     // MARK: - Reset
 
     func resetToDefaults() {
@@ -140,5 +172,7 @@ final class PreferencesManager: PreferencesManagerProtocol {
         defaults.removeObject(forKey: Keys.pollInterval)
         defaults.removeObject(forKey: Keys.launchAtLogin)
         defaults.removeObject(forKey: Keys.dismissedVersion)
+        defaults.removeObject(forKey: Keys.customFiveHourCredits)
+        defaults.removeObject(forKey: Keys.customSevenDayCredits)
     }
 }
