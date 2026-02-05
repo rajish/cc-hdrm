@@ -24,41 +24,43 @@ jobs:
       - name: Select Xcode 26.2
         run: sudo xcode-select -s /Applications/Xcode_26.2.app
 
-      - name: Detect version bump commit
+      - name: Detect version bump
         id: detect
         run: |
           BEFORE="${{ github.event.before }}"
           SHA="${{ github.sha }}"
 
-          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-            echo "Initial or force push — checking HEAD commit only."
-            VERSION_BUMP_COMMIT=$(git log -1 --format='%s' | grep -m1 '^chore: bump version to ' || true)
-          else
-            VERSION_BUMP_COMMIT=$(git log --format='%s' "${BEFORE}..${SHA}" | grep -m1 '^chore: bump version to ' || true)
-          fi
+          # Extract version from Info.plist at a given commit
+          get_version() {
+            git show "$1:cc-hdrm/Info.plist" 2>/dev/null \
+              | sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' \
+              || echo ""
+          }
 
-          if [ -z "$VERSION_BUMP_COMMIT" ]; then
-            echo "No version bump commit found. Skipping release."
+          NEW_VERSION=$(get_version "$SHA")
+          if [ -z "$NEW_VERSION" ]; then
+            echo "::error::Could not read version from Info.plist at HEAD"
             echo "release=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          NEW_VERSION="${VERSION_BUMP_COMMIT//chore: bump version to /}"
-          echo "Detected version: ${NEW_VERSION}"
+          # Handle initial push (no previous commit)
+          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            echo "Initial push — treating as version bump to ${NEW_VERSION}"
+            OLD_VERSION=""
+          else
+            OLD_VERSION=$(get_version "$BEFORE")
+          fi
+
+          if [ "$OLD_VERSION" = "$NEW_VERSION" ]; then
+            echo "No version change detected (${OLD_VERSION}). Skipping release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Version bump detected: ${OLD_VERSION:-<none>} → ${NEW_VERSION}"
           echo "release=true" >> "$GITHUB_OUTPUT"
           echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
-
-      - name: Validate version against Info.plist
-        if: steps.detect.outputs.release == 'true'
-        env:
-          NEW_VERSION: ${{ steps.detect.outputs.version }}
-        run: |
-          PLIST_VERSION=$(sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' cc-hdrm/Info.plist)
-          if [ "$NEW_VERSION" != "$PLIST_VERSION" ]; then
-            echo "::error::Version mismatch: commit says ${NEW_VERSION} but Info.plist says ${PLIST_VERSION}"
-            exit 1
-          fi
-          echo "Version validated: ${NEW_VERSION}"
 
       - name: Check tag does not already exist
         if: steps.detect.outputs.release == 'true'
