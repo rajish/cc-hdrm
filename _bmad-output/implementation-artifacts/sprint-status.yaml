@@ -105,9 +105,9 @@ development_status:
   11-5-slope-indicator-component: cancelled  # Absorbed into 11.4 - SlopeIndicator created there
   epic-11-retrospective: optional
 
-  epic-12: in-progress
+  epic-12: done
   12-1-sparkline-data-preparation: done
   12-2-sparkline-component: done
-  12-3-sparkline-as-analytics-toggle: review
-  12-4-popover-view-integration: review
+  12-3-sparkline-as-analytics-toggle: done
+  12-4-popover-view-integration: done
   epic-12-retrospective: optional

@@ -1,6 +1,6 @@
 # Story 12.4: PopoverView Integration
 
-Status: review
+Status: done
 
 ## Story
 
