@@ -4,10 +4,10 @@ A macOS menu bar utility that shows how much Claude capacity you have left. Buil
 
 ## What It Does
 
-cc-hdrm sits in your menu bar and shows your remaining headroom — the percentage of your token quota still available in the current window. Click it to see ring gauges for both 5-hour and 7-day windows, reset countdowns, and your subscription tier.
+cc-hdrm sits in your menu bar and shows your remaining headroom — the percentage of your token quota still available in the current window, plus a burn rate indicator so you know how fast you're consuming it. Click to see ring gauges for both 5-hour and 7-day windows, a 24-hour usage sparkline, reset countdowns, and your subscription tier.
 
 <p align="center">
-  <img src="headroom_green.png" alt="cc-hdrm showing 67% remaining headroom for 5-hour window and 79% for 7-day window" width="336">
+  <img src="headroom_green.png" alt="cc-hdrm popover showing 5-hour and 7-day ring gauges with slope indicators, 24-hour usage sparkline, and reset countdowns" width="336">
 </p>
 
 ### Key Features
@@ -17,6 +17,9 @@ cc-hdrm sits in your menu bar and shows your remaining headroom — the percenta
 - **Zero tokens spent** — polls the API for quota data, not the chat API
 - **Background polling** every 30 seconds with automatic token refresh
 - **Color-coded thresholds** — green, yellow, orange, red as headroom drops
+- **Burn rate indicator** — slope arrows (→ ↗ ⬆) show whether usage is flat, rising, or steep
+- **24-hour sparkline** — see your usage sawtooth pattern at a glance
+- **Threshold notifications** — get warned at 20% and 5% headroom before you hit the wall
 - **Data freshness tracking** — clear indicator when data is stale or API is unreachable
 
 ## Requirements
@@ -135,7 +138,9 @@ The [`release-publish.yml`](.github/workflows/release-publish.yml) GitHub Action
 
 ## Status
 
-This project is in active development. Core functionality (menu bar headroom display, background polling, token refresh, popover with ring gauges) is implemented and working. Notification support for low-headroom thresholds is planned.
+Core functionality is complete: menu bar headroom display with burn rate, background polling, token refresh, popover with ring gauges and sparkline, and threshold notifications.
+
+**Coming soon:** Full analytics window with zoomable historical charts and a three-band headroom breakdown that separates *what you used*, *what the weekly limit blocked*, and *what you actually left on the table*. Stop blaming yourself for "wasted" capacity that was never yours to use.
 
 ## Contributing
 
