@@ -9,19 +9,27 @@ struct SparklinePathBuilderTests {
 
     // MARK: - Gap Threshold Calculation (Subtask 3.6)
 
-    @Test("gapThresholdMs returns 1.5x poll interval in milliseconds")
-    func gapThresholdCalculation() {
-        // 30s poll interval -> 45,000ms threshold
-        #expect(SparklinePathBuilder.gapThresholdMs(pollInterval: 30) == 45_000)
+    @Test("gapThresholdMs uses 5-minute minimum for normal poll intervals")
+    func gapThresholdUsesMinimum() {
+        let fiveMinMs: Int64 = 5 * 60 * 1000
 
-        // 60s poll interval -> 90,000ms threshold
-        #expect(SparklinePathBuilder.gapThresholdMs(pollInterval: 60) == 90_000)
+        // 30s poll interval -> 5 min minimum (45s * 1.5 = 45s < 5 min)
+        #expect(SparklinePathBuilder.gapThresholdMs(pollInterval: 30) == fiveMinMs)
 
-        // 10s poll interval -> 15,000ms threshold
-        #expect(SparklinePathBuilder.gapThresholdMs(pollInterval: 10) == 15_000)
+        // 60s poll interval -> 5 min minimum (90s < 5 min)
+        #expect(SparklinePathBuilder.gapThresholdMs(pollInterval: 60) == fiveMinMs)
 
-        // 300s (5min) poll interval -> 450,000ms threshold
+        // 10s poll interval -> 5 min minimum (15s < 5 min)
+        #expect(SparklinePathBuilder.gapThresholdMs(pollInterval: 10) == fiveMinMs)
+    }
+
+    @Test("gapThresholdMs falls back to 1.5x for very long poll intervals")
+    func gapThresholdFallsBackForLongIntervals() {
+        // 300s (5min) poll interval -> 1.5x = 450s = 7.5 min > 5 min minimum
         #expect(SparklinePathBuilder.gapThresholdMs(pollInterval: 300) == 450_000)
+
+        // 600s (10min) poll interval -> 1.5x = 900s = 15 min > 5 min minimum
+        #expect(SparklinePathBuilder.gapThresholdMs(pollInterval: 600) == 900_000)
     }
 
     // MARK: - X-Axis Proportional Mapping (Subtask 3.9)
@@ -84,13 +92,13 @@ struct SparklinePathBuilderTests {
 
     // MARK: - Reset Boundary Detection (Subtask 3.4, 3.5)
 
-    @Test("isResetBoundary detects when fiveHourResetsAt changes")
+    @Test("isResetBoundary detects when fiveHourResetsAt changes by more than jitter tolerance")
     func resetBoundaryByResetsAtChange() {
         let prev = UsagePoll(
             id: 1,
             timestamp: 1000,
             fiveHourUtil: 80.0,
-            fiveHourResetsAt: 5000,
+            fiveHourResetsAt: 5_000_000, // First 5h window
             sevenDayUtil: nil,
             sevenDayResetsAt: nil
         )
@@ -98,7 +106,78 @@ struct SparklinePathBuilderTests {
             id: 2,
             timestamp: 2000,
             fiveHourUtil: 10.0, // Dropped due to reset
-            fiveHourResetsAt: 10000, // Different reset time
+            fiveHourResetsAt: 23_000_000, // Next 5h window (hours later)
+            sevenDayUtil: nil,
+            sevenDayResetsAt: nil
+        )
+
+        #expect(SparklinePathBuilder.isResetBoundary(from: prev, to: curr) == true)
+    }
+
+    @Test("isResetBoundary ignores sub-second API jitter in fiveHourResetsAt")
+    func noResetBoundaryForApiJitter() {
+        // The Claude API returns fiveHourResetsAt with ±500ms jitter on every poll.
+        // This must NOT be treated as a reset boundary.
+        let prev = UsagePoll(
+            id: 1,
+            timestamp: 1000,
+            fiveHourUtil: 23.0,
+            fiveHourResetsAt: 1_770_307_199_745, // Typical API value
+            sevenDayUtil: nil,
+            sevenDayResetsAt: nil
+        )
+        let curr = UsagePoll(
+            id: 2,
+            timestamp: 31000,
+            fiveHourUtil: 23.0,
+            fiveHourResetsAt: 1_770_307_200_353, // ~608ms jitter — same logical window
+            sevenDayUtil: nil,
+            sevenDayResetsAt: nil
+        )
+
+        #expect(SparklinePathBuilder.isResetBoundary(from: prev, to: curr) == false)
+    }
+
+    @Test("isResetBoundary ignores jitter up to tolerance threshold (60 seconds)")
+    func noResetBoundaryWithinTolerance() {
+        let baseResetTime: Int64 = 1_770_307_200_000
+        let prev = UsagePoll(
+            id: 1,
+            timestamp: 1000,
+            fiveHourUtil: 30.0,
+            fiveHourResetsAt: baseResetTime,
+            sevenDayUtil: nil,
+            sevenDayResetsAt: nil
+        )
+        let curr = UsagePoll(
+            id: 2,
+            timestamp: 2000,
+            fiveHourUtil: 31.0,
+            fiveHourResetsAt: baseResetTime + 59_999, // Just under 60s tolerance
+            sevenDayUtil: nil,
+            sevenDayResetsAt: nil
+        )
+
+        #expect(SparklinePathBuilder.isResetBoundary(from: prev, to: curr) == false)
+    }
+
+    @Test("isResetBoundary triggers at exactly tolerance boundary")
+    func resetBoundaryAtExactTolerance() {
+        let baseResetTime: Int64 = 1_770_307_200_000
+        let tolerance = SparklinePathBuilder.resetsAtJitterToleranceMs
+        let prev = UsagePoll(
+            id: 1,
+            timestamp: 1000,
+            fiveHourUtil: 80.0,
+            fiveHourResetsAt: baseResetTime,
+            sevenDayUtil: nil,
+            sevenDayResetsAt: nil
+        )
+        let curr = UsagePoll(
+            id: 2,
+            timestamp: 2000,
+            fiveHourUtil: 10.0,
+            fiveHourResetsAt: baseResetTime + tolerance + 1, // Just over tolerance
             sevenDayUtil: nil,
             sevenDayResetsAt: nil
         )
@@ -390,6 +469,173 @@ struct SparklinePathBuilderTests {
         #expect(points[points.count - 1].x == 200, "Last point should be at x=200 (full width)")
     }
 
+    // MARK: - Jitter Tolerance Integration Test
+
+    @Test("buildSegments produces one segment for continuous polling with fiveHourResetsAt jitter")
+    func continuousPollingWithJitterProducesOneSegment() {
+        let size = CGSize(width: 200, height: 40)
+        let baseResetTime: Int64 = 1_770_307_200_000
+        // Simulate 20 polls at 30s intervals with ±500ms resets_at jitter (real API behavior)
+        let polls: [UsagePoll] = (0..<20).map { i in
+            let jitter = Int64.random(in: -500...500)
+            return UsagePoll(
+                id: Int64(i),
+                timestamp: Int64(i) * 30_000,
+                fiveHourUtil: 23.0 + Double(i) * 0.3, // Slowly increasing
+                fiveHourResetsAt: baseResetTime + jitter,
+                sevenDayUtil: nil,
+                sevenDayResetsAt: nil
+            )
+        }
+
+        let gapThreshold = SparklinePathBuilder.gapThresholdMs(pollInterval: 30)
+        let segments = SparklinePathBuilder.buildSegments(from: polls, size: size, gapThresholdMs: gapThreshold)
+
+        let dataSegments = segments.filter { !$0.isGap }
+        #expect(dataSegments.count == 1, "Continuous polling with jittering resets_at should produce exactly one data segment, not \(dataSegments.count)")
+        #expect(segments.filter { $0.isGap }.isEmpty, "Should have no gaps in continuous 30s polling")
+    }
+
+    // MARK: - Reset Boundary in Path (Subtask 3.4)
+
+    // MARK: - Short Segment Merging (Power Nap filtering)
+
+    @Test("mergeShortSegments converts isolated short-duration data segments to gaps")
+    func mergesShortDurationSegments() {
+        let size = CGSize(width: 200, height: 40)
+        let shortDuration: Int64 = 90_000  // 90 seconds — well under 5 min threshold
+
+        // Simulate: [data 10min] [gap] [data 90s (Power Nap)] [gap] [data 10min]
+        let segments: [SparklinePathBuilder.PathSegment] = [
+            .init(points: [(0, 10), (10, 10), (20, 8), (30, 8), (40, 6)], isGap: false, pollCount: 20, durationMs: 600_000),
+            .init(points: [(40, 40), (80, 40)], isGap: true, pollCount: 0, durationMs: 3_600_000),
+            .init(points: [(80, 12), (85, 12), (90, 11)], isGap: false, pollCount: 3, durationMs: shortDuration),
+            .init(points: [(90, 40), (150, 40)], isGap: true, pollCount: 0, durationMs: 7_200_000),
+            .init(points: [(150, 20), (160, 18), (170, 16), (180, 14)], isGap: false, pollCount: 20, durationMs: 600_000),
+        ]
+
+        let merged = SparklinePathBuilder.mergeShortSegments(segments, size: size)
+
+        let dataSegments = merged.filter { !$0.isGap }
+        let gapSegments = merged.filter { $0.isGap }
+
+        #expect(dataSegments.count == 2, "Should keep the two long data segments")
+        #expect(gapSegments.count == 1, "Three consecutive gaps should merge into one")
+
+        if let mergedGap = gapSegments.first {
+            #expect(mergedGap.points[0].x == 40, "Merged gap should start at x=40")
+            #expect(mergedGap.points[1].x == 150, "Merged gap should end at x=150")
+        }
+    }
+
+    @Test("mergeShortSegments keeps segments at or above minimum duration")
+    func keepsLongEnoughSegments() {
+        let size = CGSize(width: 200, height: 40)
+        let minDuration = SparklinePathBuilder.minimumSegmentDurationMs
+
+        // Segment exactly at minimum duration, sandwiched between gaps — should be kept
+        let segments: [SparklinePathBuilder.PathSegment] = [
+            .init(points: [(0, 40), (20, 40)], isGap: true, pollCount: 0, durationMs: 3_600_000),
+            .init(points: [(20, 20), (30, 20), (40, 18), (50, 16)], isGap: false, pollCount: 10, durationMs: minDuration),
+            .init(points: [(50, 40), (80, 40)], isGap: true, pollCount: 0, durationMs: 3_600_000),
+        ]
+
+        let merged = SparklinePathBuilder.mergeShortSegments(segments, size: size)
+
+        let dataSegments = merged.filter { !$0.isGap }
+        #expect(dataSegments.count == 1, "Should keep the segment at minimum duration")
+        #expect(dataSegments[0].isGap == false, "Should remain a data segment")
+    }
+
+    @Test("mergeShortSegments handles empty input")
+    func mergeShortSegmentsEmpty() {
+        let size = CGSize(width: 200, height: 40)
+        let merged = SparklinePathBuilder.mergeShortSegments([], size: size)
+        #expect(merged.isEmpty)
+    }
+
+    @Test("mergeShortSegments handles all-gap input")
+    func mergeShortSegmentsAllGaps() {
+        let size = CGSize(width: 200, height: 40)
+        let segments: [SparklinePathBuilder.PathSegment] = [
+            .init(points: [(0, 40), (50, 40)], isGap: true, pollCount: 0, durationMs: 3_600_000),
+            .init(points: [(50, 40), (100, 40)], isGap: true, pollCount: 0, durationMs: 3_600_000),
+        ]
+
+        let merged = SparklinePathBuilder.mergeShortSegments(segments, size: size)
+
+        #expect(merged.count == 1, "Consecutive gaps should merge")
+        #expect(merged[0].isGap == true)
+        #expect(merged[0].points[0].x == 0, "Merged gap starts at 0")
+        #expect(merged[0].points[1].x == 100, "Merged gap ends at 100")
+    }
+
+    @Test("mergeShortSegments keeps short data segment when not sandwiched between gaps")
+    func keepsShortSegmentWhenNotIsolated() {
+        let size = CGSize(width: 200, height: 40)
+
+        // Short segment alone (no surrounding gaps) — keep it (e.g., start of data collection)
+        let segments: [SparklinePathBuilder.PathSegment] = [
+            .init(points: [(50, 20), (60, 18)], isGap: false, pollCount: 1, durationMs: 30_000),
+        ]
+
+        let merged = SparklinePathBuilder.mergeShortSegments(segments, size: size)
+
+        #expect(merged.count == 1, "Should keep the segment")
+        #expect(merged[0].isGap == false, "Not isolated, so should remain data")
+    }
+
+    @Test("mergeShortSegments converts short data segment sandwiched between gaps")
+    func convertsIsolatedShortSegment() {
+        let size = CGSize(width: 200, height: 40)
+
+        // Short segment between two gaps — Power Nap noise
+        let segments: [SparklinePathBuilder.PathSegment] = [
+            .init(points: [(0, 40), (50, 40)], isGap: true, pollCount: 0, durationMs: 3_600_000),
+            .init(points: [(50, 20), (60, 18)], isGap: false, pollCount: 2, durationMs: 60_000),
+            .init(points: [(60, 40), (100, 40)], isGap: true, pollCount: 0, durationMs: 3_600_000),
+        ]
+
+        let merged = SparklinePathBuilder.mergeShortSegments(segments, size: size)
+
+        #expect(merged.count == 1, "Should merge into a single gap")
+        #expect(merged[0].isGap == true, "Isolated short segment should become a gap")
+    }
+
+    @Test("mergeShortSegments keeps short data segment adjacent to real data")
+    func keepsShortSegmentAdjacentToData() {
+        let size = CGSize(width: 200, height: 40)
+
+        // Short segment next to a real data segment (not isolated)
+        let segments: [SparklinePathBuilder.PathSegment] = [
+            .init(points: [(0, 10), (10, 10), (20, 8), (30, 8)], isGap: false, pollCount: 20, durationMs: 600_000),
+            .init(points: [(30, 12), (40, 11)], isGap: false, pollCount: 2, durationMs: 60_000),  // short but adjacent to data
+            .init(points: [(40, 40), (100, 40)], isGap: true, pollCount: 0, durationMs: 3_600_000),
+        ]
+
+        let merged = SparklinePathBuilder.mergeShortSegments(segments, size: size)
+
+        let dataSegments = merged.filter { !$0.isGap }
+        #expect(dataSegments.count == 2, "Both data segments should be kept — short one is not isolated")
+    }
+
+    @Test("mergeShortSegments preserves gap segments unchanged")
+    func preservesExistingGaps() {
+        let size = CGSize(width: 200, height: 40)
+        let segments: [SparklinePathBuilder.PathSegment] = [
+            .init(points: [(0, 10), (10, 10), (20, 8), (30, 8)], isGap: false, pollCount: 20, durationMs: 600_000),
+            .init(points: [(30, 40), (80, 40)], isGap: true, pollCount: 0, durationMs: 3_600_000),
+            .init(points: [(80, 12), (90, 10), (100, 8), (110, 6)], isGap: false, pollCount: 20, durationMs: 600_000),
+        ]
+
+        let merged = SparklinePathBuilder.mergeShortSegments(segments, size: size)
+
+        #expect(merged.count == 3, "All segments should be preserved")
+        #expect(merged[0].isGap == false)
+        #expect(merged[1].isGap == true)
+        #expect(merged[2].isGap == false)
+    }
+
     // MARK: - Reset Boundary in Path (Subtask 3.4)
 
     @Test("buildSegments creates vertical drop at reset boundary")
@@ -472,6 +718,44 @@ struct SparklineComponentTests {
             isAnalyticsOpen: true
         )
         _ = sparkline.body
+    }
+
+    @Test("Sparkline suppresses Power Nap spikes in rendered segments")
+    @MainActor
+    func suppressesPowerNapSpikes() {
+        // Simulate: active usage -> sleep (gap) -> Power Nap (2 polls) -> sleep (gap) -> wake (active)
+        let polls = [
+            // Active period: 5 polls at 30s intervals
+            UsagePoll(id: 1, timestamp: 0, fiveHourUtil: 40.0, fiveHourResetsAt: 100000, sevenDayUtil: nil, sevenDayResetsAt: nil),
+            UsagePoll(id: 2, timestamp: 30000, fiveHourUtil: 42.0, fiveHourResetsAt: 100000, sevenDayUtil: nil, sevenDayResetsAt: nil),
+            UsagePoll(id: 3, timestamp: 60000, fiveHourUtil: 45.0, fiveHourResetsAt: 100000, sevenDayUtil: nil, sevenDayResetsAt: nil),
+            UsagePoll(id: 4, timestamp: 90000, fiveHourUtil: 47.0, fiveHourResetsAt: 100000, sevenDayUtil: nil, sevenDayResetsAt: nil),
+            // Gap: user sleeps (3 hours)
+            // Power Nap: 2 polls
+            UsagePoll(id: 5, timestamp: 10890000, fiveHourUtil: 12.0, fiveHourResetsAt: 100000, sevenDayUtil: nil, sevenDayResetsAt: nil),
+            UsagePoll(id: 6, timestamp: 10920000, fiveHourUtil: 12.3, fiveHourResetsAt: 100000, sevenDayUtil: nil, sevenDayResetsAt: nil),
+            // Gap: back to sleep (4 hours)
+            // Wake up: active usage resumes
+            UsagePoll(id: 7, timestamp: 25320000, fiveHourUtil: 2.0, fiveHourResetsAt: 200000, sevenDayUtil: nil, sevenDayResetsAt: nil),
+            UsagePoll(id: 8, timestamp: 25350000, fiveHourUtil: 5.0, fiveHourResetsAt: 200000, sevenDayUtil: nil, sevenDayResetsAt: nil),
+            UsagePoll(id: 9, timestamp: 25380000, fiveHourUtil: 8.0, fiveHourResetsAt: 200000, sevenDayUtil: nil, sevenDayResetsAt: nil),
+            UsagePoll(id: 10, timestamp: 25410000, fiveHourUtil: 12.0, fiveHourResetsAt: 200000, sevenDayUtil: nil, sevenDayResetsAt: nil),
+        ]
+
+        let size = CGSize(width: 200, height: 40)
+        let gapThreshold = SparklinePathBuilder.gapThresholdMs(pollInterval: 30)
+        let rawSegments = SparklinePathBuilder.buildSegments(from: polls, size: size, gapThresholdMs: gapThreshold)
+        let segments = SparklinePathBuilder.mergeShortSegments(rawSegments, size: size)
+
+        // The Power Nap 2-poll segment should be absorbed into the gap
+        let dataSegments = segments.filter { !$0.isGap }
+        #expect(dataSegments.count == 2, "Should have active-before-sleep and active-after-wake segments only")
+
+        // Verify the Power Nap segment (30s duration) was absorbed into a gap
+        let gapSegments = segments.filter { $0.isGap }
+        #expect(gapSegments.count == 1, "Power Nap gap + surrounding gaps should merge into one")
+        // The two edge data segments (polls 1-4 and polls 7-10) are kept because
+        // they are not sandwiched between gaps (at array edges).
     }
 
     @Test("Sparkline handles data with gaps")
