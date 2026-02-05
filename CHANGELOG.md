@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-02-05
+
+### Changed
+
+- Release 1.1.3
+
 ## [1.1.2] - 2026-02-05
 
 ### Changed
@@ -92,7 +98,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Launch at login via SMAppService
 - Xcode project with XcodeGen configuration
 
-[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.1.3...HEAD
+[1.1.3]: https://github.com/rajish/cc-hdrm/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/rajish/cc-hdrm/compare/v1.0.2...v1.1.2
 [1.0.2]: https://github.com/rajish/cc-hdrm/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/rajish/cc-hdrm/compare/v1.0.0...v1.0.1
