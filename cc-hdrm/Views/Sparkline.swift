@@ -12,7 +12,19 @@ struct SparklinePathBuilder {
         let points: [(x: CGFloat, y: CGFloat)]
         /// Whether this segment represents a data gap (no interpolation).
         let isGap: Bool
+        /// Number of source poll data points that contributed to this segment.
+        /// Step-area rendering inflates path points (N polls → ~2N-1 points),
+        /// so this tracks the actual poll count for filtering decisions.
+        let pollCount: Int
+        /// Time span of this segment in milliseconds (last poll timestamp - first poll timestamp).
+        /// Used to filter brief wake events (Power Nap) that produce short data segments.
+        let durationMs: Int64
     }
+
+    /// Minimum utilization change (in percentage points) to render a visible step.
+    /// Changes below this are API noise (floating-point jitter in the sliding window)
+    /// and are suppressed — the horizontal line continues at the last rendered level.
+    static let utilizationNoiseThreshold: Double = 1.0
 
     /// Builds path segments from poll data for rendering.
     /// - Parameters:
@@ -43,14 +55,20 @@ struct SparklinePathBuilder {
         let timeRange = firstTimestamp...lastTimestamp
         var segments: [PathSegment] = []
         var currentSegmentPoints: [(x: CGFloat, y: CGFloat)] = []
+        var currentSegmentPollCount = 0
+        var currentSegmentStartTimestamp: Int64 = 0
+        var currentSegmentLastTimestamp: Int64 = 0
         var previousPoll: UsagePoll?
+        // Track the last utilization level that was actually rendered as a step.
+        // Small fluctuations below the noise threshold extend the horizontal line
+        // at this level instead of creating a visible step.
+        var renderedUtil: Double?
 
         for poll in validPolls {
             // Skip if we can't get the utilization (should not happen after filter, but defensive)
             guard let currentUtil = poll.fiveHourUtil else { continue }
 
             let x = xPosition(for: poll.timestamp, in: size, timeRange: timeRange)
-            let y = yPosition(for: currentUtil, in: size)
 
             if let prev = previousPoll {
                 let timeDelta = poll.timestamp - prev.timestamp
@@ -59,7 +77,11 @@ struct SparklinePathBuilder {
                 if timeDelta > gapThresholdMs {
                     // End current segment if it has points
                     if !currentSegmentPoints.isEmpty {
-                        segments.append(PathSegment(points: currentSegmentPoints, isGap: false))
+                        segments.append(PathSegment(
+                            points: currentSegmentPoints, isGap: false,
+                            pollCount: currentSegmentPollCount,
+                            durationMs: currentSegmentLastTimestamp - currentSegmentStartTimestamp
+                        ))
                     }
 
                     // Add gap segment
@@ -67,47 +89,87 @@ struct SparklinePathBuilder {
                     let gapEndX = x
                     segments.append(PathSegment(
                         points: [(x: gapStartX, y: size.height), (x: gapEndX, y: size.height)],
-                        isGap: true
+                        isGap: true,
+                        pollCount: 0,
+                        durationMs: timeDelta
                     ))
 
-                    // Start new segment
+                    // Start new segment — reset rendered level
+                    let y = yPosition(for: currentUtil, in: size)
                     currentSegmentPoints = [(x: x, y: y)]
+                    currentSegmentPollCount = 1
+                    currentSegmentStartTimestamp = poll.timestamp
+                    currentSegmentLastTimestamp = poll.timestamp
+                    renderedUtil = currentUtil
                 } else if isResetBoundary(from: prev, to: poll) {
                     // Reset boundary: drop to baseline then start fresh
-                    if let prevUtil = prev.fiveHourUtil {
-                        let prevY = yPosition(for: prevUtil, in: size)
-                        // Add horizontal line to current timestamp at previous util
-                        currentSegmentPoints.append((x: x, y: prevY))
-                        // Drop to baseline
+                    if let rendered = renderedUtil {
+                        let renderedY = yPosition(for: rendered, in: size)
+                        currentSegmentPoints.append((x: x, y: renderedY))
                         currentSegmentPoints.append((x: x, y: size.height))
                     }
-                    // End this segment
                     if !currentSegmentPoints.isEmpty {
-                        segments.append(PathSegment(points: currentSegmentPoints, isGap: false))
+                        segments.append(PathSegment(
+                            points: currentSegmentPoints, isGap: false,
+                            pollCount: currentSegmentPollCount,
+                            durationMs: currentSegmentLastTimestamp - currentSegmentStartTimestamp
+                        ))
                     }
-                    // Start new segment from baseline
+                    // Start new segment from baseline — reset rendered level
+                    let y = yPosition(for: currentUtil, in: size)
                     currentSegmentPoints = [(x: x, y: size.height), (x: x, y: y)]
+                    currentSegmentPollCount = 1
+                    currentSegmentStartTimestamp = poll.timestamp
+                    currentSegmentLastTimestamp = poll.timestamp
+                    renderedUtil = currentUtil
                 } else {
-                    // Normal step: horizontal then vertical (step-area pattern)
-                    if let prevUtil = prev.fiveHourUtil {
-                        let prevY = yPosition(for: prevUtil, in: size)
-                        // Horizontal line from previous point to current timestamp at previous util level
-                        currentSegmentPoints.append((x: x, y: prevY))
+                    // Normal step: check if the change is significant enough to render
+                    let changeFromRendered = abs(currentUtil - (renderedUtil ?? currentUtil))
+
+                    if changeFromRendered >= utilizationNoiseThreshold {
+                        // Significant change: create a visible step
+                        if let rendered = renderedUtil {
+                            let renderedY = yPosition(for: rendered, in: size)
+                            currentSegmentPoints.append((x: x, y: renderedY))
+                        }
+                        let y = yPosition(for: currentUtil, in: size)
+                        currentSegmentPoints.append((x: x, y: y))
+                        renderedUtil = currentUtil
                     }
-                    // Vertical step to current util level
-                    currentSegmentPoints.append((x: x, y: y))
+                    // else: change is noise — skip this poll's vertical step,
+                    // the horizontal line continues at the rendered level
+                    currentSegmentPollCount += 1
+                    currentSegmentLastTimestamp = poll.timestamp
                 }
             } else {
                 // First valid point
+                let y = yPosition(for: currentUtil, in: size)
                 currentSegmentPoints.append((x: x, y: y))
+                currentSegmentPollCount = 1
+                currentSegmentStartTimestamp = poll.timestamp
+                currentSegmentLastTimestamp = poll.timestamp
+                renderedUtil = currentUtil
             }
 
             previousPoll = poll
         }
 
-        // Add final segment if any points remain
+        // Add final segment: extend horizontal line to the last timestamp
         if !currentSegmentPoints.isEmpty {
-            segments.append(PathSegment(points: currentSegmentPoints, isGap: false))
+            if let rendered = renderedUtil, let lastPoll = validPolls.last {
+                let lastX = xPosition(for: lastPoll.timestamp, in: size, timeRange: timeRange)
+                let renderedY = yPosition(for: rendered, in: size)
+                // Extend the last rendered level to the end of the data
+                if let lastPoint = currentSegmentPoints.last,
+                   lastPoint.x < lastX {
+                    currentSegmentPoints.append((x: lastX, y: renderedY))
+                }
+            }
+            segments.append(PathSegment(
+                points: currentSegmentPoints, isGap: false,
+                pollCount: currentSegmentPollCount,
+                durationMs: currentSegmentLastTimestamp - currentSegmentStartTimestamp
+            ))
         }
 
         return segments
@@ -139,16 +201,24 @@ struct SparklinePathBuilder {
         return size.height * (1 - clamped / 100.0)
     }
 
+    /// Maximum jitter in milliseconds tolerated for fiveHourResetsAt comparisons.
+    /// The Claude API returns fiveHourResetsAt with sub-second jitter (±500ms)
+    /// around the same logical reset timestamp. A real reset shifts the value by
+    /// hours (next 5-hour window). 60 seconds is well above jitter but far below
+    /// any real window change.
+    static let resetsAtJitterToleranceMs: Int64 = 60_000
+
     /// Determines if there's a reset boundary between two consecutive polls.
     /// - Parameters:
     ///   - previous: The previous poll
     ///   - current: The current poll
     /// - Returns: True if a reset occurred between the polls
     static func isResetBoundary(from previous: UsagePoll, to current: UsagePoll) -> Bool {
-        // Primary detection: fiveHourResetsAt changed
+        // Primary detection: fiveHourResetsAt changed significantly
+        // (ignoring sub-second API jitter)
         if let prevResetsAt = previous.fiveHourResetsAt,
            let currResetsAt = current.fiveHourResetsAt,
-           prevResetsAt != currResetsAt {
+           abs(prevResetsAt - currResetsAt) > resetsAtJitterToleranceMs {
             return true
         }
 
@@ -163,11 +233,86 @@ struct SparklinePathBuilder {
         return false
     }
 
+    /// Minimum duration in milliseconds for an isolated segment to be rendered as data.
+    /// Isolated segments (sandwiched between gaps) shorter than this are Power Nap noise.
+    /// 5 minutes filters brief wake events while keeping real active sessions.
+    static let minimumSegmentDurationMs: Int64 = 5 * 60 * 1000
+
+    /// Post-processes segments to merge isolated short data segments into gaps.
+    /// Brief wake events (e.g., Power Nap) produce short data segments between
+    /// two gaps that appear as noise spikes. Only these isolated short segments are
+    /// absorbed — short segments at the edges or adjacent to other data are kept.
+    /// - Parameters:
+    ///   - segments: Raw segments from buildSegments
+    ///   - size: Drawing area size for gap coordinate calculation
+    /// - Returns: Cleaned segments with isolated short data segments converted to gaps
+    static func mergeShortSegments(
+        _ segments: [PathSegment],
+        size: CGSize
+    ) -> [PathSegment] {
+        guard !segments.isEmpty else { return [] }
+
+        // First pass: convert only isolated short data segments to gaps.
+        // A segment is "isolated" if both its neighbors are actual gap segments.
+        let processed: [PathSegment] = segments.enumerated().map { index, segment in
+            guard !segment.isGap && segment.durationMs < minimumSegmentDurationMs else {
+                return segment
+            }
+
+            let prevIsGap = index > 0 && segments[index - 1].isGap
+            let nextIsGap = index < segments.count - 1 && segments[index + 1].isGap
+
+            // Only convert if sandwiched between two gaps
+            guard prevIsGap && nextIsGap else { return segment }
+
+            guard let firstX = segment.points.first?.x,
+                  let lastX = segment.points.last?.x else {
+                return segment
+            }
+            return PathSegment(
+                points: [(x: firstX, y: size.height), (x: lastX, y: size.height)],
+                isGap: true,
+                pollCount: 0,
+                durationMs: 0
+            )
+        }
+
+        // Second pass: merge consecutive gaps
+        var merged: [PathSegment] = []
+        for segment in processed {
+            if segment.isGap,
+               let last = merged.last,
+               last.isGap,
+               let lastStart = last.points.first,
+               let currentEnd = segment.points.last {
+                // Merge: extend previous gap to cover this one
+                merged[merged.count - 1] = PathSegment(
+                    points: [(x: lastStart.x, y: size.height), (x: currentEnd.x, y: size.height)],
+                    isGap: true,
+                    pollCount: 0,
+                    durationMs: 0
+                )
+            } else {
+                merged.append(segment)
+            }
+        }
+
+        return merged
+    }
+
+    /// Minimum gap duration to be visually significant in the sparkline.
+    /// Brief interruptions (Power Nap, system sleep < 5 min) are absorbed into the
+    /// current segment where the noise threshold suppresses API jitter.
+    /// Only gaps >= 5 minutes create a visible break in the sparkline.
+    static let sparklineGapThresholdMs: Int64 = 5 * 60 * 1000
+
     /// Calculates the gap threshold based on poll interval.
+    /// Uses a fixed 5-minute minimum to absorb brief Power Nap wakes,
+    /// falling back to 1.5x poll interval if the poll interval is very long.
     /// - Parameter pollInterval: The poll interval in seconds
-    /// - Returns: Gap threshold in milliseconds (1.5x poll interval)
+    /// - Returns: Gap threshold in milliseconds
     static func gapThresholdMs(pollInterval: TimeInterval) -> Int64 {
-        Int64(pollInterval * 1000 * 1.5)
+        max(sparklineGapThresholdMs, Int64(pollInterval * 1000 * 1.5))
     }
 }
 
@@ -221,14 +366,13 @@ struct Sparkline: View {
     private var chartView: some View {
         Canvas { context, size in
             let gapThreshold = SparklinePathBuilder.gapThresholdMs(pollInterval: pollInterval)
-            let segments = SparklinePathBuilder.buildSegments(from: data, size: size, gapThresholdMs: gapThreshold)
+            let rawSegments = SparklinePathBuilder.buildSegments(from: data, size: size, gapThresholdMs: gapThreshold)
+            let segments = SparklinePathBuilder.mergeShortSegments(rawSegments, size: size)
 
             for segment in segments {
                 if segment.isGap {
-                    // Render gap as filled region with tertiary color at 20% opacity
                     drawGapRegion(context: context, segment: segment, size: size)
                 } else {
-                    // Render data segment as step-area path
                     drawDataSegment(context: context, segment: segment, size: size)
                 }
             }
@@ -304,8 +448,8 @@ struct Sparkline: View {
         var path = Path()
         path.addRect(CGRect(x: startX, y: 0, width: endX - startX, height: size.height))
 
-        // System tertiary fill at 20% opacity
-        context.fill(path, with: .color(Color(nsColor: .tertiarySystemFill).opacity(0.2)))
+        // Gap fill visible in both light and dark mode
+        context.fill(path, with: .color(Color.gray.opacity(0.15)))
     }
 
     private func drawAnalyticsIndicatorDot(context: GraphicsContext, size: CGSize) {
