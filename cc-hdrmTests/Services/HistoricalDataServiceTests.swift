@@ -448,6 +448,9 @@ struct HistoricalDataServiceTests {
         )
         try await service.persistPoll(response1, tier: "my_tier")
 
+        // Small delay to ensure different timestamps (peak lookup uses timestamp < currentTimestamp)
+        try await Task.sleep(for: .milliseconds(10))
+
         let response2 = UsageResponse(
             fiveHour: WindowUsage(utilization: 5.0, resetsAt: "2026-02-03T15:00:00Z"),
             sevenDay: WindowUsage(utilization: 45.0, resetsAt: "2026-02-10T00:00:00Z"),
@@ -480,6 +483,9 @@ struct HistoricalDataServiceTests {
             extraUsage: nil
         )
         try await service.persistPoll(response1, tier: nil)
+
+        // Small delay to ensure different timestamps (peak lookup uses timestamp < currentTimestamp)
+        try await Task.sleep(for: .milliseconds(10))
 
         let response2 = UsageResponse(
             fiveHour: WindowUsage(utilization: 10.0, resetsAt: "2026-02-03T15:00:00Z"),
@@ -660,6 +666,7 @@ struct HistoricalDataServiceTests {
         let service = HistoricalDataService(databaseManager: dbManager)
 
         // Insert polls with increasing utilization
+        // Small delays ensure different timestamps (peak lookup uses timestamp < currentTimestamp)
         for util in [10.0, 30.0, 75.0, 50.0] {
             let response = UsageResponse(
                 fiveHour: WindowUsage(utilization: util, resetsAt: "2026-02-03T10:00:00Z"),
@@ -668,6 +675,7 @@ struct HistoricalDataServiceTests {
                 extraUsage: nil
             )
             try await service.persistPoll(response, tier: nil)
+            try await Task.sleep(for: .milliseconds(10))
         }
 
         // Now trigger a reset - the peak should be 75.0
