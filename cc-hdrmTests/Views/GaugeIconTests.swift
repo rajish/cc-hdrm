@@ -118,4 +118,76 @@ struct GaugeIconTests {
         #expect(image.size.width == 18)
         #expect(image.size.height == 18)
     }
+
+    // MARK: - 7d Overlay Tests (Story 3.3)
+
+    @Test("Gauge with warning dot overlay produces valid 18x18 image")
+    func overlayDotWarning() {
+        let image = GaugeIcon.make(headroomPercentage: 83, state: .normal, sevenDayOverlay: .dot(.warning))
+        #expect(image.size.width == 18)
+        #expect(image.size.height == 18)
+        #expect(image.isTemplate == false)
+    }
+
+    @Test("Gauge with caution dot overlay produces valid 18x18 image")
+    func overlayDotCaution() {
+        let image = GaugeIcon.make(headroomPercentage: 83, state: .normal, sevenDayOverlay: .dot(.caution))
+        #expect(image.size.width == 18)
+        #expect(image.size.height == 18)
+    }
+
+    @Test("Gauge with critical dot overlay produces valid 18x18 image")
+    func overlayDotCritical() {
+        let image = GaugeIcon.make(headroomPercentage: 83, state: .normal, sevenDayOverlay: .dot(.critical))
+        #expect(image.size.width == 18)
+        #expect(image.size.height == 18)
+    }
+
+    @Test("Gauge with promoted overlay produces valid 18x18 image (7d label)")
+    func overlayPromoted() {
+        let image = GaugeIcon.make(headroomPercentage: 18, state: .warning, sevenDayOverlay: .promoted)
+        #expect(image.size.width == 18)
+        #expect(image.size.height == 18)
+    }
+
+    @Test("Gauge with .none overlay produces valid image (backward compat)")
+    func overlayNone() {
+        let image = GaugeIcon.make(headroomPercentage: 83, state: .normal, sevenDayOverlay: .none)
+        #expect(image.size.width == 18)
+        #expect(image.size.height == 18)
+    }
+
+    @Test("Legacy makeGaugeIcon still works (no regression)")
+    func legacyMakeGaugeIconStillWorks() {
+        let image = makeGaugeIcon(headroomPercentage: 83, state: .normal)
+        #expect(image.size.width == 18)
+        #expect(image.size.height == 18)
+        #expect(image.isTemplate == false)
+    }
+
+    @Test("Overlay .dot produces image with different pixel data than .none (structural verification)")
+    func overlayDotChangesImageData() {
+        let baseImage = GaugeIcon.make(headroomPercentage: 83, state: .normal, sevenDayOverlay: .none)
+        let dotImage = GaugeIcon.make(headroomPercentage: 83, state: .normal, sevenDayOverlay: .dot(.warning))
+
+        let baseData = baseImage.tiffRepresentation
+        let dotData = dotImage.tiffRepresentation
+
+        #expect(baseData != nil)
+        #expect(dotData != nil)
+        #expect(baseData != dotData, "Dot overlay should produce different pixel data than no overlay")
+    }
+
+    @Test("Overlay .promoted produces image with different pixel data than .none (structural verification)")
+    func overlayPromotedChangesImageData() {
+        let baseImage = GaugeIcon.make(headroomPercentage: 18, state: .warning, sevenDayOverlay: .none)
+        let promotedImage = GaugeIcon.make(headroomPercentage: 18, state: .warning, sevenDayOverlay: .promoted)
+
+        let baseData = baseImage.tiffRepresentation
+        let promotedData = promotedImage.tiffRepresentation
+
+        #expect(baseData != nil)
+        #expect(promotedData != nil)
+        #expect(baseData != promotedData, "Promoted overlay should produce different pixel data than no overlay")
+    }
 }

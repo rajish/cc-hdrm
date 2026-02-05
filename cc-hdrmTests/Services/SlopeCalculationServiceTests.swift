@@ -337,6 +337,121 @@ struct SlopeCalculationServiceTests {
         #expect(true)
     }
 
+    // MARK: - Credit Normalization Tests (Story 3.3)
+
+    @Test("7d slope with normalization: 0.08%/min raw * 12.63 = ~1.01%/min → .rising")
+    func normalizedSevenDayRising() {
+        let service = SlopeCalculationService()
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+
+        // Create 25 polls over 12 minutes with raw 7d rate ~0.08%/min
+        // Total increase: 0.08 * 12 = 0.96% over 12 min
+        for i in 0..<25 {
+            let poll = createTestPoll(
+                timestamp: nowMs - Int64((12 * 60 * 1000) - (i * 30 * 1000)),
+                sevenDayUtil: 30.0 + (Double(i) * 0.04) // 0.04 per 30s = 0.08%/min
+            )
+            service.addPoll(poll)
+        }
+
+        // Without normalization: 0.08%/min → .flat
+        #expect(service.calculateSlope(for: .sevenDay, normalizationFactor: nil) == .flat)
+
+        // With normalization (12.63): 0.08 * 12.63 = ~1.01%/min → .rising
+        #expect(service.calculateSlope(for: .sevenDay, normalizationFactor: 12.63) == .rising)
+    }
+
+    @Test("7d slope with normalization: 0.15%/min raw * 12.63 = ~1.89%/min → .steep")
+    func normalizedSevenDaySteep() {
+        let service = SlopeCalculationService()
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+
+        // Create 25 polls over 12 minutes with raw 7d rate ~0.15%/min
+        for i in 0..<25 {
+            let poll = createTestPoll(
+                timestamp: nowMs - Int64((12 * 60 * 1000) - (i * 30 * 1000)),
+                sevenDayUtil: 30.0 + (Double(i) * 0.075) // 0.075 per 30s = 0.15%/min
+            )
+            service.addPoll(poll)
+        }
+
+        // With normalization (12.63): 0.15 * 12.63 = ~1.89%/min → .steep
+        #expect(service.calculateSlope(for: .sevenDay, normalizationFactor: 12.63) == .steep)
+    }
+
+    @Test("5h slope is unchanged regardless of normalization factor")
+    func fiveHourSlopeUnchangedWithNormalization() {
+        let service = SlopeCalculationService()
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+
+        // Create 25 polls with 5h rising rate (~0.75%/min)
+        for i in 0..<25 {
+            let poll = createTestPoll(
+                timestamp: nowMs - Int64((12 * 60 * 1000) - (i * 30 * 1000)),
+                fiveHourUtil: 50.0 + (Double(i) * 0.36) // ~0.72%/min → rising
+            )
+            service.addPoll(poll)
+        }
+
+        // 5h slope should be .rising regardless of normalization factor
+        #expect(service.calculateSlope(for: .fiveHour, normalizationFactor: 12.63) == .rising)
+        #expect(service.calculateSlope(for: .fiveHour, normalizationFactor: nil) == .rising)
+    }
+
+    @Test("7d slope with nil normalization falls back to raw rate")
+    func sevenDaySlopeFallbackRawRate() {
+        let service = SlopeCalculationService()
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+
+        // Raw 7d rate 0.08%/min → .flat without normalization
+        for i in 0..<25 {
+            let poll = createTestPoll(
+                timestamp: nowMs - Int64((12 * 60 * 1000) - (i * 30 * 1000)),
+                sevenDayUtil: 30.0 + (Double(i) * 0.04)
+            )
+            service.addPoll(poll)
+        }
+
+        #expect(service.calculateSlope(for: .sevenDay, normalizationFactor: nil) == .flat)
+    }
+
+    @Test("7d slope with Pro normalization (9.09): 0.02%/min raw → ~0.18%/min → .flat")
+    func normalizedSevenDayStillFlat() {
+        let service = SlopeCalculationService()
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+
+        // Raw 7d rate ~0.02%/min
+        for i in 0..<25 {
+            let poll = createTestPoll(
+                timestamp: nowMs - Int64((12 * 60 * 1000) - (i * 30 * 1000)),
+                sevenDayUtil: 30.0 + (Double(i) * 0.01) // 0.01 per 30s = 0.02%/min
+            )
+            service.addPoll(poll)
+        }
+
+        // With Pro factor (9.09): 0.02 * 9.09 = 0.18%/min → still .flat (< 0.3)
+        #expect(service.calculateSlope(for: .sevenDay, normalizationFactor: 9.09) == .flat)
+    }
+
+    @Test("calculateSlope(for:) convenience (no-arg) same as normalizationFactor: nil")
+    func convenienceOverloadBackwardCompat() {
+        let service = SlopeCalculationService()
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+
+        for i in 0..<25 {
+            let poll = createTestPoll(
+                timestamp: nowMs - Int64((12 * 60 * 1000) - (i * 30 * 1000)),
+                sevenDayUtil: 30.0 + (Double(i) * 0.04)
+            )
+            service.addPoll(poll)
+        }
+
+        // Both should return same result
+        let withNil = service.calculateSlope(for: .sevenDay, normalizationFactor: nil)
+        let noArg = service.calculateSlope(for: .sevenDay)
+        #expect(withNil == noArg)
+    }
+
     // MARK: - Edge Cases
 
     @Test("nil utilization values are excluded from calculation")

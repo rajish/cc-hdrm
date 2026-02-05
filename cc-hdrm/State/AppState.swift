@@ -47,6 +47,7 @@ final class AppState {
     private(set) var availableUpdate: AvailableUpdate?
     private(set) var fiveHourSlope: SlopeLevel = .flat
     private(set) var sevenDaySlope: SlopeLevel = .flat
+    private(set) var creditLimits: CreditLimits?
 
     /// Whether the analytics window is currently open.
     /// Updated by AnalyticsWindow on window open/close.
@@ -81,13 +82,33 @@ final class AppState {
         return DataFreshness(lastUpdated: lastUpdated)
     }
 
+    /// How many full 5h quotas remain in the 7d budget. Nil when credit limits are unavailable
+    /// or when `fiveHourCredits` is zero (defensive guard — prevents inf propagation).
+    var quotasRemaining: Double? {
+        guard let limits = creditLimits,
+              limits.fiveHourCredits > 0,
+              let sevenDay else { return nil }
+        let remaining7d = (100.0 - sevenDay.utilization) / 100.0 * Double(limits.sevenDayCredits)
+        return remaining7d / Double(limits.fiveHourCredits)
+    }
+
     /// Which window is currently displayed in the menu bar.
-    /// 7-day promotes when it has lower headroom AND is in warning or critical state.
+    /// Credit-math path: promotes 7d only when remaining 7d credits can't sustain one more full 5h cycle.
+    /// Fallback path (unknown tier): uses Story 3.2 percentage-comparison rule.
     var displayedWindow: DisplayedWindow {
         guard connectionStatus == .connected, fiveHour != nil else {
             return .fiveHour
         }
 
+        // Exhausted countdown always takes precedence over 7d promotion
+        if fiveHour?.headroomState == .exhausted { return .fiveHour }
+
+        // Credit-math path (when tier is known)
+        if let quotas = quotasRemaining {
+            return quotas < 1.0 ? .sevenDay : .fiveHour
+        }
+
+        // Fallback: Story 3.2 percentage-comparison rule (unknown tier)
         let fiveHourHeadroom = 100.0 - (fiveHour?.utilization ?? 100.0)
         let sevenDayHeadroom = 100.0 - (sevenDay?.utilization ?? 100.0)
 
@@ -184,6 +205,12 @@ final class AppState {
     /// Updates or clears the available update info.
     func updateAvailableUpdate(_ update: AvailableUpdate?) {
         self.availableUpdate = update
+    }
+
+    /// Updates the resolved credit limits from the current tier.
+    /// Called by PollingEngine after resolving tier from Keychain credentials each poll cycle.
+    func updateCreditLimits(_ limits: CreditLimits?) {
+        self.creditLimits = limits
     }
 
     /// Updates the slope levels for both time windows.

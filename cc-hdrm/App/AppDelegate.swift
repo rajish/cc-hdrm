@@ -271,7 +271,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             let window: WindowState? = appState.displayedWindow == .fiveHour ? appState.fiveHour : appState.sevenDay
             let headroom = min(100, max(0, 100.0 - (window?.utilization ?? 0)))
-            icon = makeGaugeIcon(headroomPercentage: headroom, state: state)
+
+            // Determine 7d overlay: promoted label, colored dot, or none
+            let sevenDayOverlay: GaugeIcon.SevenDayOverlay
+            if appState.sevenDay == nil {
+                sevenDayOverlay = .none
+            } else if appState.displayedWindow == .sevenDay {
+                sevenDayOverlay = .promoted
+            } else if let sdState = appState.sevenDay?.headroomState,
+                      sdState == .caution || sdState == .warning || sdState == .critical {
+                sevenDayOverlay = .dot(sdState)
+            } else {
+                sevenDayOverlay = .none
+            }
+
+            icon = GaugeIcon.make(headroomPercentage: headroom, state: state, sevenDayOverlay: sevenDayOverlay)
         }
         statusItem?.button?.image = icon
 
