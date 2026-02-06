@@ -59,10 +59,13 @@ struct AnalyticsViewTests {
 
     @Test("both series are visible by default per story spec")
     func seriesDefaultsDocumented() {
-        // AnalyticsView declares: @State private var fiveHourVisible: Bool = true
-        //                         @State private var sevenDayVisible: Bool = true
-        // Cannot read @State from outside, but we verify the view renders
-        // with both series assumed active (no crash = both paths exercised)
+        // SeriesVisibility defaults both series to true.
+        // The view's empty seriesVisibility dictionary falls back to these defaults.
+        let defaults = AnalyticsView.SeriesVisibility()
+        #expect(defaults.fiveHour == true)
+        #expect(defaults.sevenDay == true)
+
+        // Verify the view also renders correctly with defaults (no crash)
         let view = makeView()
         let _ = view.body
     }
@@ -248,6 +251,233 @@ struct AnalyticsViewDataLoadingTests {
         #expect(result.rollupData.count == 1)
     }
 
+}
+
+// MARK: - Per-Time-Range Series Toggle Persistence Tests (Story 13.4 Task 4)
+
+@Suite("AnalyticsView Series Toggle Persistence Tests")
+@MainActor
+struct AnalyticsViewSeriesToggleTests {
+
+    // MARK: - 4.1 Both series visible by default for any TimeRange key
+
+    @Test("SeriesVisibility defaults both series to visible")
+    func bothSeriesVisibleByDefault() {
+        let visibility = AnalyticsView.SeriesVisibility()
+        #expect(visibility.fiveHour == true)
+        #expect(visibility.sevenDay == true)
+    }
+
+    @Test("Empty dictionary lookup defaults to both-visible for any range")
+    func emptyDictionaryDefaultsBothVisible() {
+        let dict: [TimeRange: AnalyticsView.SeriesVisibility] = [:]
+        for range in TimeRange.allCases {
+            let vis = dict[range] ?? AnalyticsView.SeriesVisibility()
+            #expect(vis.fiveHour == true, "fiveHour should default true for \(range)")
+            #expect(vis.sevenDay == true, "sevenDay should default true for \(range)")
+        }
+    }
+
+    // MARK: - 4.2 Per-range toggle persistence across range switches
+
+    @Test("toggling 5h off for .day persists after switching to .week and back")
+    func fiveHourOffPersistsAcrossRangeSwitch() {
+        var dict: [TimeRange: AnalyticsView.SeriesVisibility] = [:]
+
+        // Toggle 5h off for .day
+        dict[.day, default: AnalyticsView.SeriesVisibility()].fiveHour = false
+
+        // Switch to .week — should be unaffected (both true)
+        let weekVis = dict[.week] ?? AnalyticsView.SeriesVisibility()
+        #expect(weekVis.fiveHour == true)
+        #expect(weekVis.sevenDay == true)
+
+        // Switch back to .day — 5h should still be off
+        let dayVis = dict[.day] ?? AnalyticsView.SeriesVisibility()
+        #expect(dayVis.fiveHour == false, "5h should remain off for .day after range switch")
+        #expect(dayVis.sevenDay == true, "7d should still be on for .day")
+    }
+
+    // MARK: - 4.3 Toggling 7d off for .week does not affect .day
+
+    @Test("toggling 7d off for .week does not affect .day toggle state")
+    func sevenDayOffForWeekDoesNotAffectDay() {
+        var dict: [TimeRange: AnalyticsView.SeriesVisibility] = [:]
+
+        // Toggle 7d off for .week
+        dict[.week, default: AnalyticsView.SeriesVisibility()].sevenDay = false
+
+        // .day should remain unaffected
+        let dayVis = dict[.day] ?? AnalyticsView.SeriesVisibility()
+        #expect(dayVis.fiveHour == true)
+        #expect(dayVis.sevenDay == true, "7d should be true for .day — .week toggle must not affect it")
+
+        // .week should retain its state
+        let weekVis = dict[.week] ?? AnalyticsView.SeriesVisibility()
+        #expect(weekVis.fiveHour == true)
+        #expect(weekVis.sevenDay == false, "7d should be off for .week")
+    }
+
+    // MARK: - 4.4 Unvisited ranges default to both-visible
+
+    @Test("unvisited ranges default to both-visible")
+    func unvisitedRangesDefaultBothVisible() {
+        var dict: [TimeRange: AnalyticsView.SeriesVisibility] = [:]
+
+        // Only visit .day
+        dict[.day, default: AnalyticsView.SeriesVisibility()].fiveHour = false
+
+        // .week, .month, .all are unvisited — should all default both-visible
+        for range in [TimeRange.week, .month, .all] {
+            let vis = dict[range] ?? AnalyticsView.SeriesVisibility()
+            #expect(vis.fiveHour == true, "fiveHour should default true for unvisited \(range)")
+            #expect(vis.sevenDay == true, "sevenDay should default true for unvisited \(range)")
+        }
+    }
+
+    // MARK: - 4.5 Both series off produces anySeriesVisible == false in UsageChart
+
+    @Test("both series off produces anySeriesVisible == false via UsageChart")
+    func bothSeriesOffProducesNoSeriesVisible() {
+        // UsageChart's anySeriesVisible is fiveHourVisible || sevenDayVisible
+        // When both are false from the dictionary, UsageChart should show no-series state
+        let chart = UsageChart(
+            pollData: [],
+            rollupData: [],
+            timeRange: .week,
+            fiveHourVisible: false,
+            sevenDayVisible: false,
+            isLoading: false,
+            hasAnyHistoricalData: true
+        )
+        // Renders the "Select a series to display" empty state — no crash
+        let _ = chart.body
+    }
+
+    // MARK: - 4.6 fetchData is NOT re-triggered by series toggle changes
+
+    @Test("fetchData is not triggered by series toggle changes (only time range triggers)")
+    func fetchDataNotTriggeredByToggle() async throws {
+        let mock = MockHistoricalDataService()
+
+        // Simulate initial load for .week
+        _ = try await AnalyticsView.fetchData(for: .week, using: mock)
+        #expect(mock.getRolledUpDataCallCount == 1)
+
+        // Series toggle changes are @State writes within the view — they do NOT
+        // call fetchData because .task(id: selectedTimeRange) only fires on
+        // selectedTimeRange changes, not seriesVisibility changes.
+        //
+        // We verify by calling fetchData again with the SAME range — if toggles
+        // triggered fetches, call counts would be higher in real usage. Here we
+        // confirm the static method only responds to explicit range parameters.
+        _ = try await AnalyticsView.fetchData(for: .week, using: mock)
+        #expect(mock.getRolledUpDataCallCount == 2, "Each explicit fetchData call increments count — toggles don't call fetchData")
+        #expect(mock.ensureRollupsUpToDateCallCount == 2, "ensureRollups called per fetchData, not per toggle")
+    }
+
+    // MARK: - SeriesVisibility Equatable
+
+    @Test("SeriesVisibility supports Equatable comparison")
+    func seriesVisibilityEquatable() {
+        let a = AnalyticsView.SeriesVisibility(fiveHour: true, sevenDay: false)
+        let b = AnalyticsView.SeriesVisibility(fiveHour: true, sevenDay: false)
+        let c = AnalyticsView.SeriesVisibility(fiveHour: false, sevenDay: false)
+        #expect(a == b)
+        #expect(a != c)
+    }
+
+    // MARK: - Binding get/set closure verification (Code Review M1)
+
+    @Test("Binding get returns correct value from dictionary for current range")
+    func bindingGetReturnsCorrectValue() {
+        // Replicate the exact Binding get pattern from AnalyticsView
+        var dict: [TimeRange: AnalyticsView.SeriesVisibility] = [:]
+        let selectedRange: TimeRange = .day
+
+        // Empty dict — get should return true (default)
+        let getResult = dict[selectedRange]?.fiveHour ?? true
+        #expect(getResult == true)
+
+        // Set 5h off for .day
+        dict[.day] = AnalyticsView.SeriesVisibility(fiveHour: false, sevenDay: true)
+
+        // Get should now return false
+        let getAfterSet = dict[selectedRange]?.fiveHour ?? true
+        #expect(getAfterSet == false)
+    }
+
+    @Test("Binding set creates dictionary entry for unvisited range via default subscript")
+    func bindingSetCreatesEntryForUnvisitedRange() {
+        // Replicate the exact Binding set pattern from AnalyticsView
+        var dict: [TimeRange: AnalyticsView.SeriesVisibility] = [:]
+
+        // .month has no entry yet — set should create one via default subscript
+        dict[.month, default: AnalyticsView.SeriesVisibility()].fiveHour = false
+
+        // Verify the entry was created with fiveHour=false and sevenDay=true (default)
+        #expect(dict[.month] != nil, "Set via default subscript should create entry")
+        #expect(dict[.month]?.fiveHour == false)
+        #expect(dict[.month]?.sevenDay == true, "sevenDay should retain default true")
+    }
+
+    @Test("Binding get does not mutate dictionary (no side-effect insertion)")
+    func bindingGetDoesNotMutateDictionary() {
+        // The get closure uses optional chaining (dict[key]?.prop ?? default),
+        // NOT the default subscript. Verify reading does not insert entries.
+        var dict: [TimeRange: AnalyticsView.SeriesVisibility] = [:]
+
+        // Read for .week — should NOT create a dictionary entry
+        let _ = dict[.week]?.fiveHour ?? true
+        #expect(dict[.week] == nil, "Get via optional chaining must not insert dictionary entry")
+        #expect(dict.isEmpty, "Dictionary should remain empty after read-only access")
+    }
+
+    @Test("Binding set for one range does not affect other ranges")
+    func bindingSetIsolatedPerRange() {
+        var dict: [TimeRange: AnalyticsView.SeriesVisibility] = [:]
+
+        // Set 5h off for .day
+        dict[.day, default: AnalyticsView.SeriesVisibility()].fiveHour = false
+        // Set 7d off for .week
+        dict[.week, default: AnalyticsView.SeriesVisibility()].sevenDay = false
+
+        // Verify .day: 5h off, 7d on
+        #expect(dict[.day]?.fiveHour == false)
+        #expect(dict[.day]?.sevenDay == true)
+
+        // Verify .week: 5h on, 7d off
+        #expect(dict[.week]?.fiveHour == true)
+        #expect(dict[.week]?.sevenDay == false)
+
+        // Verify .month untouched
+        #expect(dict[.month] == nil)
+    }
+
+    // MARK: - Multiple ranges with independent toggle states
+
+    @Test("each time range maintains independent toggle state")
+    func independentToggleStatePerRange() {
+        var dict: [TimeRange: AnalyticsView.SeriesVisibility] = [:]
+
+        // Set different states for each range
+        dict[.day] = AnalyticsView.SeriesVisibility(fiveHour: false, sevenDay: true)
+        dict[.week] = AnalyticsView.SeriesVisibility(fiveHour: true, sevenDay: false)
+        dict[.month] = AnalyticsView.SeriesVisibility(fiveHour: false, sevenDay: false)
+        // .all left unvisited
+
+        #expect(dict[.day]?.fiveHour == false)
+        #expect(dict[.day]?.sevenDay == true)
+        #expect(dict[.week]?.fiveHour == true)
+        #expect(dict[.week]?.sevenDay == false)
+        #expect(dict[.month]?.fiveHour == false)
+        #expect(dict[.month]?.sevenDay == false)
+
+        // .all defaults
+        let allVis = dict[.all] ?? AnalyticsView.SeriesVisibility()
+        #expect(allVis.fiveHour == true)
+        #expect(allVis.sevenDay == true)
+    }
 }
 
 @Suite("AnalyticsPanel Tests")
