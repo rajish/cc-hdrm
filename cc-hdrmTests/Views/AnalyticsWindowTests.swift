@@ -22,7 +22,7 @@ struct AnalyticsWindowTests {
     func toggleOpensWindow() {
         let appState = AppState()
         let window = AnalyticsWindow.shared
-        window.configure(appState: appState)
+        window.configure(appState: appState, historicalDataService: MockHistoricalDataService())
 
         // Window should not be open initially
         #expect(appState.isAnalyticsWindowOpen == false)
@@ -39,7 +39,7 @@ struct AnalyticsWindowTests {
     func toggleBringsToFront() {
         let appState = AppState()
         let window = AnalyticsWindow.shared
-        window.configure(appState: appState)
+        window.configure(appState: appState, historicalDataService: MockHistoricalDataService())
 
         window.toggle()  // Open
         let firstToggleOpen = appState.isAnalyticsWindowOpen
@@ -58,7 +58,7 @@ struct AnalyticsWindowTests {
     func closeSetsStateFalse() {
         let appState = AppState()
         let window = AnalyticsWindow.shared
-        window.configure(appState: appState)
+        window.configure(appState: appState, historicalDataService: MockHistoricalDataService())
 
         window.toggle()  // Open
         #expect(appState.isAnalyticsWindowOpen == true)
@@ -72,7 +72,7 @@ struct AnalyticsWindowTests {
         // This test verifies window can be configured after fresh reset
         let appState = AppState()
         let window = AnalyticsWindow.shared
-        window.configure(appState: appState)
+        window.configure(appState: appState, historicalDataService: MockHistoricalDataService())
         window.toggle()
         #expect(appState.isAnalyticsWindowOpen == true)
         window.close()
@@ -82,7 +82,7 @@ struct AnalyticsWindowTests {
     func closeWhenAlreadyClosed() {
         let appState = AppState()
         let window = AnalyticsWindow.shared
-        window.configure(appState: appState)
+        window.configure(appState: appState, historicalDataService: MockHistoricalDataService())
 
         // Close without opening - should not crash
         window.close()
@@ -93,7 +93,7 @@ struct AnalyticsWindowTests {
     func multipleToggleCycles() {
         let appState = AppState()
         let window = AnalyticsWindow.shared
-        window.configure(appState: appState)
+        window.configure(appState: appState, historicalDataService: MockHistoricalDataService())
 
         // Cycle 1
         window.toggle()

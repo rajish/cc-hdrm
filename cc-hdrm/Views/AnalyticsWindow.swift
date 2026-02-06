@@ -11,6 +11,7 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
 
     private var panel: NSPanel?
     private weak var appState: AppState?
+    private var historicalDataService: (any HistoricalDataServiceProtocol)?
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -21,15 +22,17 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
         super.init()
     }
 
-    /// Configure with AppState reference. Must be called during app initialization.
-    func configure(appState: AppState) {
+    /// Configure with AppState and HistoricalDataService references.
+    /// Must be called during app initialization.
+    func configure(appState: AppState, historicalDataService: any HistoricalDataServiceProtocol) {
         self.appState = appState
+        self.historicalDataService = historicalDataService
     }
 
     /// Toggles the analytics window: opens if closed, brings to front if open.
     func toggle() {
         guard appState != nil else {
-            assertionFailure("AnalyticsWindow.toggle() called before configure(appState:)")
+            assertionFailure("AnalyticsWindow.toggle() called before configure(appState:historicalDataService:)")
             Self.logger.error("toggle() called before configure() - ignoring")
             return
         }
@@ -60,6 +63,11 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
     }
 
     private func createPanel() {
+        guard let appState, let historicalDataService else {
+            Self.logger.error("createPanel() called before configure() - missing dependencies")
+            return
+        }
+
         let panel = AnalyticsPanel(
             contentRect: NSRect(x: 0, y: 0, width: 600, height: 500),
             styleMask: [.titled, .closable, .resizable, .nonactivatingPanel],
@@ -79,9 +87,13 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
         // Restore previous position if saved
         panel.setFrameAutosaveName("AnalyticsWindow")
 
-        let contentView = AnalyticsView(onClose: { [weak self] in
-            self?.close()
-        })
+        let contentView = AnalyticsView(
+            onClose: { [weak self] in
+                self?.close()
+            },
+            historicalDataService: historicalDataService,
+            appState: appState
+        )
         panel.contentView = NSHostingView(rootView: contentView)
 
         self.panel = panel
@@ -102,6 +114,7 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
         panel?.close()
         panel = nil
         appState = nil
+        historicalDataService = nil
     }
     #endif
 }

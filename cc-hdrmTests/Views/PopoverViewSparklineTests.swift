@@ -324,7 +324,7 @@ struct PopoverViewSparklineTests {
         )
 
         // Configure AnalyticsWindow with appState
-        AnalyticsWindow.shared.configure(appState: appState)
+        AnalyticsWindow.shared.configure(appState: appState, historicalDataService: MockHistoricalDataService())
 
         // Initial state: analytics window closed
         #expect(appState.isAnalyticsWindowOpen == false)

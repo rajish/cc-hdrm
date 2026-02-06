@@ -54,9 +54,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let state = AppState()
         self.appState = state
 
-        // Configure AnalyticsWindow singleton with AppState
+        // Configure AnalyticsWindow singleton — deferred until HistoricalDataService is created below
         analyticsWindow = AnalyticsWindow.shared
-        analyticsWindow?.configure(appState: state)
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
@@ -134,6 +133,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 historicalDataService: historicalDataService,
                 slopeCalculationService: slopeService
             )
+        }
+
+        // Configure AnalyticsWindow with AppState and HistoricalDataService
+        if let histService = historicalDataServiceRef {
+            analyticsWindow?.configure(appState: state, historicalDataService: histService)
         }
 
         // Create FreshnessMonitor if not already injected (test path)
