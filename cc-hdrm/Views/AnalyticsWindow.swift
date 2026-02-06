@@ -60,7 +60,7 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
     }
 
     private func createPanel() {
-        let panel = NSPanel(
+        let panel = AnalyticsPanel(
             contentRect: NSRect(x: 0, y: 0, width: 600, height: 500),
             styleMask: [.titled, .closable, .resizable, .nonactivatingPanel],
             backing: .buffered,
