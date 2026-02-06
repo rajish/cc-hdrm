@@ -24,6 +24,26 @@ enum TimeRange: CaseIterable, Sendable {
     /// All available data - no time limit (actual retention controlled by pruneOldData, typically ~90 days)
     case all
 
+    /// Short label displayed in UI controls (e.g., "24h", "7d").
+    var displayLabel: String {
+        switch self {
+        case .day: return "24h"
+        case .week: return "7d"
+        case .month: return "30d"
+        case .all: return "All"
+        }
+    }
+
+    /// Accessibility description for VoiceOver (e.g., "Last 24 hours").
+    var accessibilityDescription: String {
+        switch self {
+        case .day: return "Last 24 hours"
+        case .week: return "Last 7 days"
+        case .month: return "Last 30 days"
+        case .all: return "All time"
+        }
+    }
+
     /// Returns the start timestamp (Unix ms) for this time range.
     var startTimestamp: Int64 {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
