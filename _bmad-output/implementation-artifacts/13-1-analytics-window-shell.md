@@ -313,7 +313,7 @@ claude-opus-4-6
 ### Debug Log References
 
 - Build succeeded with zero warnings in source files
-- 689 tests passed, 0 failures (up from 613 at Story 12.4)
+- 691 tests passed, 0 failures (up from 613 at Story 12.4)
 - Existing `TimeRangeTests` in `UsageRollupTests.swift` caused name collision; resolved by renaming new suite to `TimeRangeDisplayTests`
 - NSPanel does not auto-close on Escape; added `AnalyticsPanel` subclass with `cancelOperation(_:)` override
 

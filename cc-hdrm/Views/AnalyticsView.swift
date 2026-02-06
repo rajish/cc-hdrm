@@ -96,7 +96,7 @@ struct AnalyticsView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(accessibilityPrefix), \(isActive.wrappedValue ? "enabled" : "disabled")")
-        .accessibilityHint("Double-tap to toggle")
+        .accessibilityHint("Press to toggle")
     }
 
     // MARK: - Chart Placeholder
