@@ -100,7 +100,7 @@ struct HeadroomBreakdownBarTests {
             ResetEvent(id: 1, timestamp: nowMs, fiveHourPeak: 90.0, sevenDayUtil: 35.0, tier: "pro", usedCredits: nil, constrainedCredits: nil, wasteCredits: nil)
         ]
         let bar = makeBar(resetEvents: events)
-        // Should display "Headroom breakdown: 1 reset events in period"
+        // Should display "Headroom breakdown: 1 reset event in period"
         let _ = bar.body
     }
 }

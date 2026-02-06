@@ -248,26 +248,26 @@ From `cc-hdrm/State/AppState.swift`:
 ### Project Structure Notes
 
 **New Files:**
-```
+```text
 cc-hdrm/Views/UsageChart.swift             # Typed stub for chart component
 cc-hdrm/Views/HeadroomBreakdownBar.swift   # Typed stub for breakdown component
 ```
 
 **Modified Files:**
-```
+```text
 cc-hdrm/Views/AnalyticsView.swift          # Wire data loading, replace placeholders with real components
 cc-hdrm/Views/AnalyticsWindow.swift        # Add HistoricalDataService dependency injection
 cc-hdrm/App/AppDelegate.swift              # Pass HistoricalDataService to AnalyticsWindow.configure()
 ```
 
 **New Test Files:**
-```
+```text
 cc-hdrmTests/Views/UsageChartTests.swift
 cc-hdrmTests/Views/HeadroomBreakdownBarTests.swift
 ```
 
 **Modified Test Files:**
-```
+```text
 cc-hdrmTests/Views/AnalyticsViewTests.swift  # Add data loading tests
 ```
 

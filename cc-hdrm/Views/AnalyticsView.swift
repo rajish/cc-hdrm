@@ -28,9 +28,6 @@ struct AnalyticsView: View {
     /// "no data yet" (fresh install) from "no data for this range".
     @State private var hasAnyHistoricalData: Bool = false
 
-    /// Tracks the in-flight data load task so rapid time-range switches cancel previous loads.
-    @State private var loadTask: Task<Void, Never>?
-
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
         category: "analytics"
@@ -55,18 +52,15 @@ struct AnalyticsView: View {
             )
         }
         .padding()
-        .task {
+        .task(id: selectedTimeRange) {
             await loadData()
-        }
-        .onChange(of: selectedTimeRange) { _, _ in
-            loadTask?.cancel()
-            loadTask = Task { await loadData() }
         }
     }
 
     // MARK: - Data Loading
 
     private func loadData() async {
+        let range = selectedTimeRange
         isLoading = true
         defer { isLoading = false }
 
@@ -82,17 +76,17 @@ struct AnalyticsView: View {
         do {
             try Task.checkCancellation()
 
-            switch selectedTimeRange {
+            switch range {
             case .day:
                 chartData = try await historicalDataService.getRecentPolls(hours: 24)
                 rollupData = []
             case .week, .month, .all:
-                rollupData = try await historicalDataService.getRolledUpData(range: selectedTimeRange)
+                rollupData = try await historicalDataService.getRolledUpData(range: range)
                 chartData = []
             }
             try Task.checkCancellation()
 
-            resetEvents = try await historicalDataService.getResetEvents(range: selectedTimeRange)
+            resetEvents = try await historicalDataService.getResetEvents(range: range)
 
             // Track whether any data has ever been loaded (for fresh-install empty state)
             if !hasAnyHistoricalData && (chartData.count + rollupData.count) > 0 {

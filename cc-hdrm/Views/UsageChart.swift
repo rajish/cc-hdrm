@@ -86,7 +86,7 @@ struct UsageChart: View {
             Image(systemName: "chart.line.uptrend.xyaxis")
                 .font(.system(size: 28))
                 .foregroundStyle(.secondary)
-            Text("\(dataPointCount) data points")
+            Text("\(dataPointCount) data \(dataPointCount == 1 ? "point" : "points")")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text(timeRange.displayLabel)

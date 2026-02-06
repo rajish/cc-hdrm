@@ -37,9 +37,9 @@ This project uses a **two-stage release pipeline**:
 
 **To trigger a release**, the `[patch]`/`[minor]`/`[major]` keyword must be in the **PR title** — NOT in the merge commit subject. The pre-merge workflow reads `github.event.pull_request.title`, so the keyword must be present there for the version bump commit to be pushed to the PR branch before merge.
 
-**Correct workflow:**
+**Correct workflow** (keyword goes at the FRONT of the title):
 ```
-gh pr create --title "feat: my feature [patch]" --body "..."
+gh pr create --title "[patch] feat: my feature" --body "..."
 # Wait for Pre-Merge Version Bump workflow to push version commit
 gh pr merge N --squash
 ```
@@ -47,13 +47,13 @@ gh pr merge N --squash
 **Common mistake — does NOT work:**
 ```
 gh pr create --title "feat: my feature" --body "..."
-gh pr merge N --squash --subject "feat: my feature [patch]"
+gh pr merge N --squash --subject "[patch] feat: my feature"
 # ❌ Pre-merge workflow never sees [patch] — no version bump — no release
 ```
 
 **If you forgot the keyword**, edit the PR title before merging:
 ```
-gh pr edit N --title "feat: my feature [patch]"
+gh pr edit N --title "[patch] feat: my feature"
 # Wait for Pre-Merge Version Bump workflow to complete
 gh pr merge N --squash
 ```
