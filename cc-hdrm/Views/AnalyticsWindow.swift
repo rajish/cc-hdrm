@@ -104,6 +104,11 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         Self.logger.info("Analytics window closed via delegate")
         appState?.setAnalyticsWindowOpen(false)
+        // Nil out the panel so a fresh AnalyticsView (with reset @State)
+        // is created on next open. This ensures session-only state
+        // (series visibility, selected time range, chart data) resets
+        // when the window is closed and reopened.
+        panel = nil
     }
 
     // MARK: - Test Support

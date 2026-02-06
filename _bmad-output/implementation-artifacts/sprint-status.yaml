@@ -117,7 +117,7 @@ development_status:
   13-1-analytics-window-shell: done
   13-2-analytics-view-layout: done
   13-3-time-range-selector: done
-  13-4-series-toggle-controls: backlog
+  13-4-series-toggle-controls: done
   13-5-usage-chart-step-area-mode: backlog
   13-6-usage-chart-bar-mode: backlog
   13-7-gap-rendering-in-charts: backlog
