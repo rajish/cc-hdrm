@@ -115,7 +115,7 @@ development_status:
 
   epic-13: in-progress
   13-1-analytics-window-shell: done
-  13-2-analytics-view-layout: backlog
+  13-2-analytics-view-layout: done
   13-3-time-range-selector: backlog
   13-4-series-toggle-controls: backlog
   13-5-usage-chart-step-area-mode: backlog

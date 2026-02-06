@@ -7,11 +7,23 @@ import AppKit
 @MainActor
 struct AnalyticsViewTests {
 
+    private func makeView(
+        onClose: @escaping () -> Void = {},
+        historicalDataService: any HistoricalDataServiceProtocol = MockHistoricalDataService(),
+        appState: AppState = AppState()
+    ) -> AnalyticsView {
+        AnalyticsView(
+            onClose: onClose,
+            historicalDataService: historicalDataService,
+            appState: appState
+        )
+    }
+
     // MARK: - Initialization
 
     @Test("AnalyticsView initializes and renders without crashing")
     func initializesAndRenders() {
-        let view = AnalyticsView(onClose: {})
+        let view = makeView()
         let _ = view.body
     }
 
@@ -20,7 +32,7 @@ struct AnalyticsViewTests {
     @Test("onClose callback is invocable")
     func onCloseCallbackWorks() {
         var closeCalled = false
-        let view = AnalyticsView(onClose: { closeCalled = true })
+        let view = makeView(onClose: { closeCalled = true })
         view.onClose()
         #expect(closeCalled == true)
     }
@@ -51,7 +63,56 @@ struct AnalyticsViewTests {
         //                         @State private var sevenDayVisible: Bool = true
         // Cannot read @State from outside, but we verify the view renders
         // with both series assumed active (no crash = both paths exercised)
-        let view = AnalyticsView(onClose: {})
+        let view = makeView()
+        let _ = view.body
+    }
+
+    // MARK: - Dependency Injection
+
+    @Test("AnalyticsView accepts HistoricalDataServiceProtocol for testability")
+    func acceptsHistoricalDataService() {
+        let mock = MockHistoricalDataService()
+        let view = makeView(historicalDataService: mock)
+        // Verify it compiles and renders with the mock
+        let _ = view.body
+    }
+
+    @Test("AnalyticsView accepts AppState for credit limits access")
+    func acceptsAppState() {
+        let appState = AppState()
+        appState.updateCreditLimits(CreditLimits(fiveHourCredits: 100, sevenDayCredits: 909))
+        let view = makeView(appState: appState)
+        let _ = view.body
+    }
+
+    @Test("AnalyticsView renders with nil credit limits (unknown tier)")
+    func rendersWithNilCreditLimits() {
+        let appState = AppState()
+        // creditLimits defaults to nil
+        let view = makeView(appState: appState)
+        let _ = view.body
+    }
+
+    // MARK: - Data Loading Integration
+
+    @Test("AnalyticsView can be created with mock that has pre-loaded data")
+    func createdWithPreLoadedMock() {
+        let mock = MockHistoricalDataService()
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        mock.recentPollsToReturn = [
+            UsagePoll(id: 1, timestamp: nowMs - 60_000, fiveHourUtil: 30.0, fiveHourResetsAt: nil, sevenDayUtil: 15.0, sevenDayResetsAt: nil),
+            UsagePoll(id: 2, timestamp: nowMs, fiveHourUtil: 35.0, fiveHourResetsAt: nil, sevenDayUtil: 16.0, sevenDayResetsAt: nil)
+        ]
+        let view = makeView(historicalDataService: mock)
+        let _ = view.body
+    }
+
+    @Test("AnalyticsView can be created with mock that throws on data load")
+    func createdWithThrowingMock() {
+        let mock = MockHistoricalDataService()
+        mock.shouldThrowOnEnsureRollupsUpToDate = true
+        let view = makeView(historicalDataService: mock)
+        // Should not crash even with throwing mock — errors are caught in loadData()
         let _ = view.body
     }
 }
