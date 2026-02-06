@@ -19,6 +19,8 @@ final class MockHistoricalDataService: HistoricalDataServiceProtocol, @unchecked
     var ensureRollupsUpToDateCallCount = 0
     var getResetEventsCallCount = 0
     var lastQueriedTimeRange: TimeRange?
+    /// Records method names in call order for ordering verification.
+    var callOrder: [String] = []
 
     func persistPoll(_ response: UsageResponse) async throws {
         try await persistPoll(response, tier: nil)
@@ -35,6 +37,7 @@ final class MockHistoricalDataService: HistoricalDataServiceProtocol, @unchecked
 
     func getRecentPolls(hours: Int) async throws -> [UsagePoll] {
         getRecentPollsCallCount += 1
+        callOrder.append("getRecentPolls")
         if shouldThrowOnGetRecentPolls {
             throw AppError.databaseQueryFailed(underlying: NSError(domain: "test", code: 2))
         }
@@ -47,6 +50,7 @@ final class MockHistoricalDataService: HistoricalDataServiceProtocol, @unchecked
 
     func getResetEvents(fromTimestamp: Int64?, toTimestamp: Int64?) async throws -> [ResetEvent] {
         getResetEventsCallCount += 1
+        callOrder.append("getResetEvents")
         return mockResetEvents.filter { event in
             if let from = fromTimestamp, event.timestamp < from { return false }
             if let to = toTimestamp, event.timestamp > to { return false }
@@ -56,6 +60,7 @@ final class MockHistoricalDataService: HistoricalDataServiceProtocol, @unchecked
 
     func getResetEvents(range: TimeRange) async throws -> [ResetEvent] {
         getResetEventsCallCount += 1
+        callOrder.append("getResetEvents")
         lastQueriedTimeRange = range
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         let fromTimestamp: Int64?
@@ -83,6 +88,7 @@ final class MockHistoricalDataService: HistoricalDataServiceProtocol, @unchecked
 
     func ensureRollupsUpToDate() async throws {
         ensureRollupsUpToDateCallCount += 1
+        callOrder.append("ensureRollupsUpToDate")
         if shouldThrowOnEnsureRollupsUpToDate {
             throw AppError.databaseQueryFailed(underlying: NSError(domain: "test", code: 3))
         }
@@ -90,6 +96,7 @@ final class MockHistoricalDataService: HistoricalDataServiceProtocol, @unchecked
 
     func getRolledUpData(range: TimeRange) async throws -> [UsageRollup] {
         getRolledUpDataCallCount += 1
+        callOrder.append("getRolledUpData")
         lastQueriedTimeRange = range
         if shouldThrowOnGetRolledUpData {
             throw AppError.databaseQueryFailed(underlying: NSError(domain: "test", code: 4))
