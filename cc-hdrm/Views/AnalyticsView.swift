@@ -13,11 +13,46 @@ struct AnalyticsView: View {
     let historicalDataService: any HistoricalDataServiceProtocol
     let appState: AppState
 
+    /// Per-time-range toggle state for series visibility.
+    /// Defaults both series to visible; stored as a simple value type for `@State` compatibility.
+    /// Internal (not private) for `@testable import` in unit tests.
+    internal struct SeriesVisibility: Equatable {
+        var fiveHour: Bool = true
+        var sevenDay: Bool = true
+    }
+
     // Default to .week — shows recent trends without overwhelming detail.
     // 24h is too narrow for first impression; 30d/All require rollup data that may be sparse early on.
     @State private var selectedTimeRange: TimeRange = .week
-    @State private var fiveHourVisible: Bool = true
-    @State private var sevenDayVisible: Bool = true
+    /// Per-time-range series visibility. Unvisited ranges are absent and default to both-visible.
+    /// Session-only — resets when the analytics window is closed and reopened.
+    @State private var seriesVisibility: [TimeRange: SeriesVisibility] = [:]
+
+    /// Whether the 5-hour series is visible for the currently selected time range.
+    private var fiveHourVisible: Bool {
+        seriesVisibility[selectedTimeRange]?.fiveHour ?? true
+    }
+
+    /// Whether the 7-day series is visible for the currently selected time range.
+    private var sevenDayVisible: Bool {
+        seriesVisibility[selectedTimeRange]?.sevenDay ?? true
+    }
+
+    /// Binding that reads/writes 5-hour visibility for the current time range.
+    private var fiveHourBinding: Binding<Bool> {
+        Binding(
+            get: { seriesVisibility[selectedTimeRange]?.fiveHour ?? true },
+            set: { seriesVisibility[selectedTimeRange, default: SeriesVisibility()].fiveHour = $0 }
+        )
+    }
+
+    /// Binding that reads/writes 7-day visibility for the current time range.
+    private var sevenDayBinding: Binding<Bool> {
+        Binding(
+            get: { seriesVisibility[selectedTimeRange]?.sevenDay ?? true },
+            set: { seriesVisibility[selectedTimeRange, default: SeriesVisibility()].sevenDay = $0 }
+        )
+    }
 
     @State private var chartData: [UsagePoll] = []
     @State private var rollupData: [UsageRollup] = []
@@ -177,7 +212,7 @@ struct AnalyticsView: View {
         HStack(spacing: 8) {
             seriesToggleButton(
                 label: "5h",
-                isActive: $fiveHourVisible,
+                isActive: fiveHourBinding,
                 accessibilityPrefix: "5-hour series"
             )
 
@@ -187,7 +222,7 @@ struct AnalyticsView: View {
 
             seriesToggleButton(
                 label: "7d",
-                isActive: $sevenDayVisible,
+                isActive: sevenDayBinding,
                 accessibilityPrefix: "7-day series"
             )
         }
