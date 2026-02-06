@@ -373,6 +373,7 @@ None — clean implementation, no debug issues encountered.
 
 - 2026-02-06: Story 13.2 implementation complete — wired AnalyticsView to HistoricalDataService, replaced placeholders with UsageChart and HeadroomBreakdownBar typed stubs, wired time range selector to data loading, wired series toggles to chart visibility, injected dependencies from AppDelegate through AnalyticsWindow
 - 2026-02-06: Code review fixes (5 issues) — removed force unwraps in AnalyticsWindow.createPanel() (H1), added fresh-install "No data yet" empty state with hasAnyHistoricalData flag (H2), added Task.checkCancellation() to loadData() to prevent stale data overwrites on rapid range switching (M1), fixed singular/plural grammar in HeadroomBreakdownBar (M3), added sprint-status.yaml to File List (M2). 719 tests pass.
+- 2026-02-06: Bugfix — ensureRollupsUpToDate() failure was blocking the entire data fetch in loadData(). Separated rollup update into its own try/catch so data queries proceed even if rollups fail. This was causing the analytics chart to show "No data yet" despite sparkline having data.
 
 ### File List
 

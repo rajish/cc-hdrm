@@ -28,6 +28,8 @@ When creating stories, every reference to an existing project file **must** use 
 
 ## Release Workflow — Version Bump via PR Title
 
+**IMPORTANT:** Do NOT add `[patch]`, `[minor]`, or `[major]` keywords to PR titles or commit messages unless the user explicitly requests a release. These keywords trigger automated version bumps and releases. Only add them when the user specifically asks for a release.
+
 This project uses a **two-stage release pipeline**:
 
 1. **Pre-Merge (`release-prepare.yml`)**: Triggers on `pull_request` events (opened, edited, synchronize). Reads the **PR title** for `[patch]`, `[minor]`, or `[major]` keywords. If found, bumps `cc-hdrm/Info.plist` version and pushes a commit to the PR branch.

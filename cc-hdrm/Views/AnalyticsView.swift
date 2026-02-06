@@ -70,8 +70,16 @@ struct AnalyticsView: View {
         isLoading = true
         defer { isLoading = false }
 
+        // Rollup update is best-effort — failure must not block data display.
+        // The sparkline proves data exists in usage_polls; if rollups fail,
+        // queries still return raw polls for recent ranges.
         do {
             try await historicalDataService.ensureRollupsUpToDate()
+        } catch {
+            Self.logger.warning("Rollup update failed (data query will proceed): \(error.localizedDescription)")
+        }
+
+        do {
             try Task.checkCancellation()
 
             switch selectedTimeRange {
