@@ -60,35 +60,18 @@ struct AnalyticsView: View {
     // MARK: - Data Loading
 
     private func loadData() async {
-        let range = selectedTimeRange
         isLoading = true
         defer { isLoading = false }
 
-        // Rollup update is best-effort — failure must not block data display.
-        // The sparkline proves data exists in usage_polls; if rollups fail,
-        // queries still return raw polls for recent ranges.
         do {
-            try await historicalDataService.ensureRollupsUpToDate()
-        } catch {
-            Self.logger.warning("Rollup update failed (data query will proceed): \(error.localizedDescription)")
-        }
+            let result = try await Self.fetchData(
+                for: selectedTimeRange,
+                using: historicalDataService
+            )
+            chartData = result.chartData
+            rollupData = result.rollupData
+            resetEvents = result.resetEvents
 
-        do {
-            try Task.checkCancellation()
-
-            switch range {
-            case .day:
-                chartData = try await historicalDataService.getRecentPolls(hours: 24)
-                rollupData = []
-            case .week, .month, .all:
-                rollupData = try await historicalDataService.getRolledUpData(range: range)
-                chartData = []
-            }
-            try Task.checkCancellation()
-
-            resetEvents = try await historicalDataService.getResetEvents(range: range)
-
-            // Track whether any data has ever been loaded (for fresh-install empty state)
             if !hasAnyHistoricalData && (chartData.count + rollupData.count) > 0 {
                 hasAnyHistoricalData = true
             }
@@ -98,6 +81,66 @@ struct AnalyticsView: View {
             // Log error, keep previous data visible, do not crash
             Self.logger.error("Analytics data load failed: \(error.localizedDescription)")
         }
+    }
+
+    /// Result of a data fetch for a given time range.
+    ///
+    /// - Important: Internal visibility for `@testable import` only.
+    ///   All three arrays default to empty — callers rely on this to clear
+    ///   stale data from a previous time range (e.g., switching from `.week`
+    ///   to `.day` clears `rollupData` because it stays at `[]`).
+    struct DataLoadResult {
+        var chartData: [UsagePoll] = []
+        var rollupData: [UsageRollup] = []
+        var resetEvents: [ResetEvent] = []
+    }
+
+    /// Fetches analytics data for the given time range.
+    ///
+    /// Extracted from `loadData()` for testability. The view's `loadData()`
+    /// delegates here and applies the results to `@State` properties.
+    ///
+    /// - Parameters:
+    ///   - range: Time range to fetch data for
+    ///   - service: Historical data service to query
+    /// - Returns: Fetched chart data, rollup data, and reset events
+    /// - Throws: `CancellationError` on rapid range switching, or data service errors
+    static func fetchData(
+        for range: TimeRange,
+        using service: any HistoricalDataServiceProtocol
+    ) async throws -> DataLoadResult {
+        // Rollup update is best-effort — failure must not block data display.
+        // The sparkline proves data exists in usage_polls; if rollups fail,
+        // queries still return raw polls for recent ranges.
+        do {
+            try await service.ensureRollupsUpToDate()
+        } catch {
+            logger.warning("Rollup update failed (data query will proceed): \(error.localizedDescription)")
+        }
+
+        try Task.checkCancellation()
+
+        var chartData: [UsagePoll] = []
+        var rollupData: [UsageRollup] = []
+
+        switch range {
+        case .day:
+            chartData = try await service.getRecentPolls(hours: 24)
+            rollupData = []  // Explicitly clear stale rollup data from previous range
+        case .week, .month, .all:
+            rollupData = try await service.getRolledUpData(range: range)
+            chartData = []   // Explicitly clear stale poll data from previous range
+        }
+
+        try Task.checkCancellation()
+
+        let resetEvents = try await service.getResetEvents(range: range)
+
+        return DataLoadResult(
+            chartData: chartData,
+            rollupData: rollupData,
+            resetEvents: resetEvents
+        )
     }
 
     // MARK: - Title Bar
