@@ -350,6 +350,8 @@ private struct ChartWithHoverOverlay: View {
     let sevenDayVisible: Bool
 
     @State private var hoveredIndex: Int?
+    /// The resolved cursor date from ChartProxy — used for gap range detection.
+    @State private var hoveredDate: Date?
 
     var body: some View {
         StaticChartContent(
@@ -370,17 +372,22 @@ private struct ChartWithHoverOverlay: View {
                             case .active(let location):
                                 guard let date: Date = proxy.value(atX: location.x) else {
                                     hoveredIndex = nil
+                                    hoveredDate = nil
                                     return
                                 }
+                                hoveredDate = date
                                 hoveredIndex = findNearestIndex(to: date)
                             case .ended:
                                 hoveredIndex = nil
+                                hoveredDate = nil
                             }
                         }
 
                     HoverOverlayContent(
                         chartPoints: chartPoints,
+                        gapRanges: gapRanges,
                         hoveredIndex: hoveredIndex,
+                        hoveredDate: hoveredDate,
                         fiveHourVisible: fiveHourVisible,
                         sevenDayVisible: sevenDayVisible,
                         proxy: proxy,
@@ -531,14 +538,40 @@ private struct StaticChartContent: View {
 /// This is the only thing that redraws when hoveredIndex changes.
 private struct HoverOverlayContent: View {
     let chartPoints: [StepAreaChartView.ChartPoint]
+    let gapRanges: [StepAreaChartView.GapRange]
     let hoveredIndex: Int?
+    let hoveredDate: Date?
     let fiveHourVisible: Bool
     let sevenDayVisible: Bool
     let proxy: ChartProxy
     let size: CGSize
 
+    /// Check if the actual cursor date falls within a gap range.
+    /// Uses `hoveredDate` (the real cursor position) instead of the nearest chart point's date,
+    /// so the gap tooltip appears correctly even when the cursor is in the second half of a gap
+    /// (where the nearest point is past the gap boundary).
+    private var hoveredGap: StepAreaChartView.GapRange? {
+        guard let date = hoveredDate else { return nil }
+        return gapRanges.first { $0.start <= date && date < $0.end }
+    }
+
     var body: some View {
-        if let index = hoveredIndex, index < chartPoints.count {
+        if let date = hoveredDate, let gap = hoveredGap,
+           let xPos = proxy.position(forX: date) {
+            // Cursor is in a gap region — show vertical line at cursor and gap tooltip
+            Path { path in
+                path.move(to: CGPoint(x: xPos, y: 0))
+                path.addLine(to: CGPoint(x: xPos, y: size.height))
+            }
+            .stroke(Color.white.opacity(0.6), lineWidth: 1)
+
+            gapTooltipView()
+                .fixedSize()
+                .position(
+                    x: tooltipXPosition(chartX: xPos),
+                    y: 45
+                )
+        } else if let index = hoveredIndex, index < chartPoints.count {
             let point = chartPoints[index]
 
             if let xPos = proxy.position(forX: point.date) {
@@ -578,6 +611,22 @@ private struct HoverOverlayContent: View {
                     )
             }
         }
+    }
+
+    @ViewBuilder
+    private func gapTooltipView() -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("No data")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("cc-hdrm not running")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(6)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("No data, cc-hdrm not running")
     }
 
     @ViewBuilder
