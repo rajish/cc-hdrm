@@ -157,7 +157,7 @@ enum SlopeLevel: String, Sendable, Equatable, CaseIterable {
 }
 ```
 
-For slope bands (AC-2), calculate rate of change over a ~5 minute sliding window. The threshold for "steep" is > 1.5% per minute. For the hover tooltip (AC-3), include the computed slope level.
+For slope bands (AC-2), calculate rate of change over a ~5-minute sliding window. The threshold for "steep" is > 1.5% per minute. For the hover tooltip (AC-3), include the computed slope level.
 
 ### Series Colors (from Architecture & UX Spec)
 

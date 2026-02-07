@@ -21,9 +21,6 @@ struct StepAreaChartView: View {
     /// Time ranges where no data exists (gaps between segments).
     let gapRanges: [GapRange]
 
-    @State private var hoveredIndex: Int?
-    @State private var hoverLocation: CGPoint?
-
     /// 7-day series color — distinct blue.
     static let sevenDayColor = Color.blue
 
