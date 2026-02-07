@@ -843,6 +843,254 @@ struct UsageChartTests {
         #expect(barPoints[0].sevenDayPeak == nil)
     }
 
+    // MARK: - Helpers for Gap Detection Tests
+
+    /// Creates hourly rollups with specific hours missing to test gap detection.
+    /// `missingHourOffsets` are the hours (0-based from the start) to omit.
+    private func makeHourlyRollupsWithGaps(
+        totalHours: Int = 24,
+        missingHourOffsets: Set<Int> = []
+    ) -> [UsageRollup] {
+        let calendar = Calendar.current
+        let baseDate = calendar.startOfDay(for: Date())
+        let baseMs = Int64(baseDate.timeIntervalSince1970 * 1000)
+        let hourMs: Int64 = 3_600_000
+        let fiveMinMs: Int64 = 300_000
+
+        var rollups: [UsageRollup] = []
+        var rollupId: Int64 = 0
+        for hour in 0..<totalHours {
+            if missingHourOffsets.contains(hour) { continue }
+            // Create 2 five-min rollups per hour
+            for sub in 0..<2 {
+                let periodStart = baseMs + Int64(hour) * hourMs + Int64(sub) * fiveMinMs
+                rollups.append(UsageRollup(
+                    id: rollupId,
+                    periodStart: periodStart,
+                    periodEnd: periodStart + fiveMinMs,
+                    resolution: .fiveMin,
+                    fiveHourAvg: 30.0,
+                    fiveHourPeak: 45.0,
+                    fiveHourMin: 20.0,
+                    sevenDayAvg: 15.0,
+                    sevenDayPeak: 25.0,
+                    sevenDayMin: 10.0,
+                    resetCount: 0,
+                    wasteCredits: nil
+                ))
+                rollupId += 1
+            }
+        }
+        return rollups
+    }
+
+    /// Creates daily rollups with specific days missing.
+    private func makeDailyRollupsWithGaps(
+        totalDays: Int = 10,
+        missingDayOffsets: Set<Int> = []
+    ) -> [UsageRollup] {
+        let calendar = Calendar.current
+        let baseDate = calendar.startOfDay(for: calendar.date(byAdding: .day, value: -totalDays, to: Date())!)
+        let baseMs = Int64(baseDate.timeIntervalSince1970 * 1000)
+        let dayMs: Int64 = 86_400_000
+        let hourMs: Int64 = 3_600_000
+
+        var rollups: [UsageRollup] = []
+        var rollupId: Int64 = 0
+        for day in 0..<totalDays {
+            if missingDayOffsets.contains(day) { continue }
+            // Create 2 hourly rollups per day
+            for sub in 0..<2 {
+                let periodStart = baseMs + Int64(day) * dayMs + Int64(sub) * hourMs
+                rollups.append(UsageRollup(
+                    id: rollupId,
+                    periodStart: periodStart,
+                    periodEnd: periodStart + hourMs,
+                    resolution: .hourly,
+                    fiveHourAvg: 30.0,
+                    fiveHourPeak: 45.0,
+                    fiveHourMin: 20.0,
+                    sevenDayAvg: 15.0,
+                    sevenDayPeak: 25.0,
+                    sevenDayMin: 10.0,
+                    resetCount: 0,
+                    wasteCredits: nil
+                ))
+                rollupId += 1
+            }
+        }
+        return rollups
+    }
+
+    // MARK: - BarChartView Gap Detection Tests (Story 13.7)
+
+    @Test("BarChartView gap detection -- hourly gaps detected for .week range (4.1)")
+    func barGapDetectionHourlyWeek() {
+        // Missing hours 3 and 7 out of 0..9
+        let rollups = makeHourlyRollupsWithGaps(totalHours: 10, missingHourOffsets: [3, 7])
+        let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .week)
+        let gapRanges = BarChartView.findGapRanges(in: barPoints, timeRange: .week)
+
+        // Should have 2 gap ranges (hour 3 and hour 7 are non-consecutive)
+        #expect(gapRanges.count == 2)
+
+        // Verify gap durations are ~1 hour each
+        for gap in gapRanges {
+            let durationHours = gap.end.timeIntervalSince(gap.start) / 3600
+            #expect(abs(durationHours - 1.0) < 0.01)
+        }
+    }
+
+    @Test("BarChartView gap detection -- daily gaps detected for .month range (4.2)")
+    func barGapDetectionDailyMonth() {
+        // Missing days 2 and 5 out of 0..7
+        let rollups = makeDailyRollupsWithGaps(totalDays: 8, missingDayOffsets: [2, 5])
+        let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .month)
+        let gapRanges = BarChartView.findGapRanges(in: barPoints, timeRange: .month)
+
+        // Should have 2 gap ranges (day 2 and day 5 are non-consecutive)
+        #expect(gapRanges.count == 2)
+
+        // Verify gap durations are ~1 day each
+        for gap in gapRanges {
+            let durationDays = gap.end.timeIntervalSince(gap.start) / 86400
+            #expect(abs(durationDays - 1.0) < 0.01)
+        }
+    }
+
+    @Test("BarChartView gap detection -- consecutive missing periods merged into single gap range (4.3)")
+    func barGapDetectionMergedConsecutive() {
+        // Missing hours 3, 4, 5 (consecutive) out of 0..9
+        let rollups = makeHourlyRollupsWithGaps(totalHours: 10, missingHourOffsets: [3, 4, 5])
+        let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .week)
+        let gapRanges = BarChartView.findGapRanges(in: barPoints, timeRange: .week)
+
+        // Should merge into 1 continuous gap range (AC 3)
+        #expect(gapRanges.count == 1)
+
+        // Gap should span 3 hours
+        let durationHours = gapRanges[0].end.timeIntervalSince(gapRanges[0].start) / 3600
+        #expect(abs(durationHours - 3.0) < 0.01)
+    }
+
+    @Test("BarChartView gap detection -- no gaps when all periods have data (4.4)")
+    func barGapDetectionNoGaps() {
+        let rollups = makeHourlyRollupsWithGaps(totalHours: 10, missingHourOffsets: [])
+        let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .week)
+        let gapRanges = BarChartView.findGapRanges(in: barPoints, timeRange: .week)
+
+        #expect(gapRanges.isEmpty)
+    }
+
+    @Test("BarChartView gap detection -- gaps at start/end of data range not detected (4.5)")
+    func barGapDetectionStartEnd() {
+        // Missing hours 0 and 9 (start and end) out of 0..9
+        // Gaps should NOT be detected outside data range
+        let rollups = makeHourlyRollupsWithGaps(totalHours: 10, missingHourOffsets: [0, 9])
+        let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .week)
+        let gapRanges = BarChartView.findGapRanges(in: barPoints, timeRange: .week)
+
+        // The first bar starts at hour 1, last at hour 8 — no gaps between them
+        // since hours 1..8 are all present
+        #expect(gapRanges.isEmpty)
+    }
+
+    @Test("BarChartView with gap data renders without crash (4.6)")
+    func barChartWithGapsRenders() {
+        let rollups = makeHourlyRollupsWithGaps(totalHours: 10, missingHourOffsets: [3, 4, 7])
+        let view = BarChartView(
+            rollups: rollups,
+            timeRange: .week,
+            fiveHourVisible: true,
+            sevenDayVisible: true
+        )
+        #expect(!view.gapRanges.isEmpty)
+        let _ = view.body
+    }
+
+    @Test("StepAreaChartView gap ranges passed to overlay -- gapRanges computed from poll data with gaps (4.7)")
+    func stepAreaGapRangesComputed() {
+        let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
+        let gapMs: Int64 = 10 * 60 * 1000  // 10-minute gap exceeding 5-min threshold
+        let polls = [
+            UsagePoll(id: 1, timestamp: nowMs - gapMs - 60_000, fiveHourUtil: 30.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
+            UsagePoll(id: 2, timestamp: nowMs - gapMs, fiveHourUtil: 35.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
+            // 10-minute gap
+            UsagePoll(id: 3, timestamp: nowMs - 60_000, fiveHourUtil: 10.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
+            UsagePoll(id: 4, timestamp: nowMs, fiveHourUtil: 15.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
+        ]
+
+        let view = StepAreaChartView(polls: polls, fiveHourVisible: true, sevenDayVisible: false)
+        // Should detect the gap between segments
+        #expect(view.gapRanges.count == 1)
+        // Gap should span from the last point of segment 0 to first point of segment 1
+        #expect(view.gapRanges[0].start < view.gapRanges[0].end)
+    }
+
+    @Test("BarChartView gap range boundaries align with period boundaries (4.8)")
+    func barGapBoundariesAlignWithPeriods() {
+        let calendar = Calendar.current
+        // Missing hour 5 out of 0..9
+        let rollups = makeHourlyRollupsWithGaps(totalHours: 10, missingHourOffsets: [5])
+        let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .week)
+        let gapRanges = BarChartView.findGapRanges(in: barPoints, timeRange: .week)
+
+        #expect(gapRanges.count == 1)
+        let gap = gapRanges[0]
+
+        // Gap start should be an exact hour boundary
+        let startComponents = calendar.dateComponents([.minute, .second], from: gap.start)
+        #expect(startComponents.minute == 0)
+        #expect(startComponents.second == 0)
+
+        // Gap end should be an exact hour boundary (start of next period)
+        let endComponents = calendar.dateComponents([.minute, .second], from: gap.end)
+        #expect(endComponents.minute == 0)
+        #expect(endComponents.second == 0)
+
+        // Duration should be exactly 1 hour
+        let durationHours = gap.end.timeIntervalSince(gap.start) / 3600
+        #expect(abs(durationHours - 1.0) < 0.01)
+    }
+
+    @Test("StepAreaChartView gap hover uses cursor date not nearest point date (review fix)")
+    func stepAreaGapHoverUsesCursorDate() {
+        let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
+        let gapMs: Int64 = 10 * 60 * 1000  // 10-minute gap exceeding 5-min threshold
+        // Segment 0: two polls, then 10-min gap, then Segment 1: two polls
+        let polls = [
+            UsagePoll(id: 1, timestamp: nowMs - gapMs - 60_000, fiveHourUtil: 30.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
+            UsagePoll(id: 2, timestamp: nowMs - gapMs, fiveHourUtil: 35.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
+            // 10-minute gap here
+            UsagePoll(id: 3, timestamp: nowMs - 60_000, fiveHourUtil: 10.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
+            UsagePoll(id: 4, timestamp: nowMs, fiveHourUtil: 15.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
+        ]
+
+        let view = StepAreaChartView(polls: polls, fiveHourVisible: true, sevenDayVisible: false)
+        #expect(view.gapRanges.count == 1)
+        let gap = view.gapRanges[0]
+
+        // Simulate cursor in the SECOND half of the gap (closer to segment 1 start)
+        // This is the exact scenario where using nearest-point date fails:
+        // nearest point would be segment 1 start (at gap.end), and gap.end is NOT < gap.end
+        let cursorInSecondHalf = Date(
+            timeIntervalSince1970: (gap.start.timeIntervalSince1970 + gap.end.timeIntervalSince1970) / 2.0
+            + (gap.end.timeIntervalSince1970 - gap.start.timeIntervalSince1970) * 0.3
+        )
+
+        // Verify cursor IS inside the gap range (the condition HoverOverlayContent.hoveredGap checks)
+        let isInGap = gap.start <= cursorInSecondHalf && cursorInSecondHalf < gap.end
+        #expect(isInGap, "Cursor in second half of gap must be detected as inside gap range")
+
+        // Verify that the nearest chart point's date is NOT inside the gap (the old bug)
+        // Find nearest point by date (same binary-search logic the chart uses)
+        let nearestPoint = view.chartPoints.min(by: {
+            abs($0.date.timeIntervalSince(cursorInSecondHalf)) < abs($1.date.timeIntervalSince(cursorInSecondHalf))
+        })!
+        let nearestInGap = gap.start <= nearestPoint.date && nearestPoint.date < gap.end
+        #expect(!nearestInGap, "Nearest point date should NOT be in gap — this is why cursor date must be used")
+    }
+
     @Test("Single rollup produces single bar point")
     func barPointSingleRollup() {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
