@@ -192,6 +192,7 @@ struct AnalyticsView: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
+            .focusEffectDisabled()
             .accessibilityLabel("Close analytics window")
         }
     }
@@ -247,8 +248,10 @@ struct AnalyticsView: View {
                     .font(.caption)
                     .foregroundStyle(isActive.wrappedValue ? .primary : .secondary)
             }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .focusEffectDisabled()
         .accessibilityLabel("\(accessibilityPrefix), \(isActive.wrappedValue ? "enabled" : "disabled")")
         .accessibilityHint("Press to toggle")
     }

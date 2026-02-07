@@ -209,6 +209,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else if let button = statusItem?.button {
             Self.popoverLogger.info("Popover opening")
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            // Make the popover's window key so that cursor rects (e.g., hand cursor
+            // on the sparkline) and first-click interactions work immediately,
+            // without requiring the user to click inside the popover first.
+            popover.contentViewController?.view.window?.makeKey()
             installEventMonitor()
         } else {
             Self.popoverLogger.warning("togglePopover called but statusItem button is nil")

@@ -1,11 +1,15 @@
 import AppKit
 
-/// NSPanel subclass that closes on Escape key press.
+/// NSPanel subclass for the analytics window.
 ///
-/// Standard NSPanel does not automatically close on Escape.
-/// This subclass overrides `cancelOperation(_:)` to close the panel
-/// when the user presses Escape, matching expected utility-panel behavior.
+/// Overrides:
+/// - `cancelOperation(_:)`: closes on Escape key press (standard utility-panel behavior).
+/// - `canBecomeKey`: returns `true` so the panel accepts keyboard focus and processes
+///   button clicks on the first click. Without this, `.nonactivatingPanel` style requires
+///   two clicks — one to focus the panel, one to trigger the button action.
 final class AnalyticsPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+
     override func cancelOperation(_ sender: Any?) {
         close()
     }
