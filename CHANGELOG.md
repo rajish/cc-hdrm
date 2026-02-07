@@ -20,6 +20,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-02-07
+
+### What's New in v1.2
+
+**Full Analytics Window** — click the popover sparkline to open a floating analytics panel with:
+- Time range selector (24h / 7d / 30d / All) at appropriate data resolution
+- Step-area chart for 24h with sawtooth pattern, reset markers, and slope-based background tints
+- Bar chart for longer ranges showing peak utilization per hour or day
+- Independent 5h/7d series toggles with per-range persistence
+- Honest gap rendering for periods when cc-hdrm wasn't running
+
+### Changed
+
+- feat: gap rendering in charts with hover tooltips (Story 13.7) (#36)
+- feat: bar chart for 7d/30d/All analytics time ranges (Story 13.6) (#35)
+- feat: step-area chart for 24h analytics view (Story 13.5)
+- feat: per-time-range series toggle persistence (Story 13.4) (#33)
+- feat: verify time range selector and add data loading tests (Story 13.3) (#32)
+- feat: analytics view layout with data wiring, UsageChart and HeadroomBreakdownBar stubs (Story 13.2) (#31)
+- feat: Story 13.1 — Analytics Window Shell (NSPanel) (#30)
+
 ## [1.1.4] - 2026-02-05
 
 ### Changed
@@ -104,7 +125,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Launch at login via SMAppService
 - Xcode project with XcodeGen configuration
 
-[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.1.4...HEAD
+[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/rajish/cc-hdrm/compare/v1.1.4...v1.2.0
 [1.1.4]: https://github.com/rajish/cc-hdrm/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/rajish/cc-hdrm/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/rajish/cc-hdrm/compare/v1.0.2...v1.1.2
