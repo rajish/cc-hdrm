@@ -673,7 +673,6 @@ struct UsageChartTests {
     @Test("Bar point creation from rollup data -- peak values, dates, reset count (7.4)")
     func barPointCreation() {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-        let hourMs: Int64 = 3_600_000
         let fiveMinMs: Int64 = 300_000
         let calendar = Calendar.current
 
@@ -768,6 +767,10 @@ struct UsageChartTests {
     func barChartResetFlags() {
         let rollups = makeRollupsWithResets()
         let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .week)
+
+        // 12 five-minute rollups span 60 minutes — may land in 1 or 2 hourly bars
+        // depending on where the current hour boundary falls
+        #expect(barPoints.count >= 1 && barPoints.count <= 2)
 
         // Verify some bar points have resetCount > 0
         let resetBars = barPoints.filter { $0.resetCount > 0 }

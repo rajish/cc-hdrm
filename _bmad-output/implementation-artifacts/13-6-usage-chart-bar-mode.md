@@ -210,7 +210,7 @@ Add the bar chart as the new `else` branch replacing `dataSummary`:
 
 Unlike the step-area tooltip (single point: timestamp + utilization + slope), bar tooltips show period aggregates:
 
-```
+```text
 Mon 2:00 PM - 3:00 PM          <-- period range
   5h: Peak 67.2% | Avg 42.1%   <-- if 5h visible
   7d: Peak 31.5% | Avg 28.0%   <-- if 7d visible
@@ -220,7 +220,7 @@ Mon 2:00 PM - 3:00 PM          <-- period range
 
 Date formatting for period range:
 - `.week` (hourly bars): "Mon 2 PM - 3 PM"
-- `.month` / `.all` (daily bars): "Jan 15" or "Mon, Jan 15"
+- `.month` / `.all` (daily bars): "Thu, Jan 15"
 
 ### Gap Rendering is Story 13.7
 

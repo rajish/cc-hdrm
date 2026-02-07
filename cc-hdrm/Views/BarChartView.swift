@@ -104,7 +104,7 @@ struct BarChartView: View {
                 timeIntervalSince1970: (periodStart.timeIntervalSince1970 + periodEnd.timeIntervalSince1970) / 2.0
             )
 
-            // Aggregate: max for peak, min for min, weighted average for avg, sum for resets
+            // Aggregate: max for peak, min for min, simple average for avg, sum for resets
             let fiveHourPeaks = rollups.compactMap(\.fiveHourPeak)
             let sevenDayPeaks = rollups.compactMap(\.sevenDayPeak)
             let fiveHourAvgs = rollups.compactMap(\.fiveHourAvg)
@@ -330,13 +330,7 @@ private struct StaticBarChartContent: View {
                         .foregroundStyle(.secondary.opacity(0.3))
                     AxisValueLabel(format: .dateTime.weekday(.abbreviated).hour())
                 }
-            case .month:
-                AxisMarks(values: .automatic(desiredCount: 7)) { _ in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
-                        .foregroundStyle(.secondary.opacity(0.3))
-                    AxisValueLabel(format: .dateTime.month(.abbreviated).day())
-                }
-            case .all:
+            case .month, .all:
                 AxisMarks(values: .automatic(desiredCount: 7)) { _ in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                         .foregroundStyle(.secondary.opacity(0.3))
