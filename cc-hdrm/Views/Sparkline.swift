@@ -383,24 +383,7 @@ struct Sparkline: View {
             }
         }
         .background(isHovered ? Color(nsColor: .quaternarySystemFill).opacity(0.3) : Color.clear)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            onTap?()
-        }
-        .onHover { hovering in
-            isHovered = hovering
-            if hovering {
-                NSCursor.pointingHand.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
-        .onDisappear {
-            // Ensure cursor is restored if view disappears while hovering
-            if isHovered {
-                NSCursor.pop()
-            }
-        }
+        .overlay(SparklineInteractionOverlay(onTap: { onTap?() }, onHoverChange: { isHovered = $0 }))
     }
 
     // MARK: - Drawing Helpers
@@ -463,6 +446,94 @@ struct Sparkline: View {
         )
         let path = Path(ellipseIn: dotRect)
         context.fill(path, with: .color(Color.accentColor))
+    }
+}
+
+// MARK: - Sparkline Interaction Overlay
+
+/// AppKit overlay that provides reliable hand cursor and click handling for the sparkline.
+///
+/// Uses `addCursorRect(_:cursor:)` for cursor management — the only mechanism that reliably
+/// persists across window activation changes. `addCursorRect` requires winning `hitTest`,
+/// so this view sits as an `.overlay()` and handles both cursor and clicks in one place.
+///
+/// This replaces a SwiftUI `Button` which had two problems in `NSPopover` context:
+/// 1. `.onHover` + `NSCursor.push()`/`pop()` — cursor stack corrupted on window changes
+/// 2. `.onHover` + `NSCursor.set()` — immediately overridden by AppKit's cursor rect system
+private struct SparklineInteractionOverlay: NSViewRepresentable {
+    var onTap: (() -> Void)?
+    var onHoverChange: ((Bool) -> Void)?
+
+    func makeNSView(context: Context) -> SparklineInteractionNSView {
+        let view = SparklineInteractionNSView()
+        view.onTap = onTap
+        view.onHoverChange = onHoverChange
+        return view
+    }
+
+    func updateNSView(_ nsView: SparklineInteractionNSView, context: Context) {
+        nsView.onTap = onTap
+        nsView.onHoverChange = onHoverChange
+    }
+
+    final class SparklineInteractionNSView: NSView {
+        var onTap: (() -> Void)?
+        var onHoverChange: ((Bool) -> Void)?
+
+        // --- Cursor ---
+        // Two mechanisms cover all window-key states:
+        // 1. addCursorRect: works when this window IS key (managed by window server)
+        // 2. NSTrackingArea + NSCursor.set(): works when this window is NOT key
+        //    (no cursor rect system active to override it)
+
+        override func resetCursorRects() {
+            addCursorRect(bounds, cursor: .pointingHand)
+        }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            for area in trackingAreas {
+                removeTrackingArea(area)
+            }
+            let area = NSTrackingArea(
+                rect: .zero,
+                options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                owner: self,
+                userInfo: nil
+            )
+            addTrackingArea(area)
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            // Make the popover window key so addCursorRect works immediately
+            // (without requiring the user to click the popover first).
+            window?.makeKey()
+            window?.invalidateCursorRects(for: self)
+        }
+
+        override func mouseEntered(with event: NSEvent) {
+            // Fallback cursor set for when the window is not key
+            // (addCursorRect only works for the key window)
+            NSCursor.pointingHand.set()
+            onHoverChange?(true)
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            NSCursor.arrow.set()
+            onHoverChange?(false)
+        }
+
+        // --- Click ---
+
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+        override func mouseUp(with event: NSEvent) {
+            let location = convert(event.locationInWindow, from: nil)
+            if bounds.contains(location) {
+                onTap?()
+            }
+        }
     }
 }
 
