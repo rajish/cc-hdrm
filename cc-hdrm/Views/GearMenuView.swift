@@ -27,6 +27,7 @@ struct GearMenuView: View {
                 .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
+        .focusEffectDisabled()
         .menuIndicator(.hidden)
         .fixedSize()
         .accessibilityLabel("Settings")

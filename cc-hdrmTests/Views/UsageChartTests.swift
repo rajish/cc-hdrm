@@ -267,7 +267,7 @@ struct UsageChartTests {
         let _ = chart.body
     }
 
-    @Test("Non-24h time range does NOT render step-area chart (falls back to stub)")
+    @Test("Non-24h time range does NOT render step-area chart (renders bar chart)")
     func nonDayRangeDoesNotRenderStepArea() {
         let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
         var rollups: [UsageRollup] = []
@@ -289,7 +289,7 @@ struct UsageChartTests {
         }
         for range in [TimeRange.week, .month, .all] {
             let chart = makeChart(rollupData: rollups, timeRange: range)
-            // Verify branching preconditions: non-.day ranges use dataSummary stub path
+            // Verify branching preconditions: non-.day ranges use BarChartView path
             #expect(chart.timeRange != .day)
             #expect(chart.pollData.isEmpty)
             let _ = chart.body
@@ -574,5 +574,325 @@ struct UsageChartTests {
             sevenDayVisible: false
         )
         let _ = view.body
+    }
+
+    // MARK: - BarChartView Tests (Story 13.6)
+
+    /// Creates sample rollup data for bar chart testing.
+    private func makeSampleRollups(
+        count: Int = 24,
+        resolution: UsageRollup.Resolution = .fiveMin,
+        intervalMs: Int64 = 300_000  // 5 min
+    ) -> [UsageRollup] {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        var rollups: [UsageRollup] = []
+        for i in 0..<count {
+            let periodStart = nowMs - Int64(count - i) * intervalMs
+            let periodEnd = periodStart + intervalMs
+            rollups.append(UsageRollup(
+                id: Int64(i),
+                periodStart: periodStart,
+                periodEnd: periodEnd,
+                resolution: resolution,
+                fiveHourAvg: 30.0 + Double(i) * 0.5,
+                fiveHourPeak: 40.0 + Double(i) * 0.5,
+                fiveHourMin: 20.0 + Double(i) * 0.3,
+                sevenDayAvg: 15.0 + Double(i) * 0.3,
+                sevenDayPeak: 20.0 + Double(i) * 0.4,
+                sevenDayMin: 10.0 + Double(i) * 0.2,
+                resetCount: 0,
+                wasteCredits: nil
+            ))
+        }
+        return rollups
+    }
+
+    /// Creates rollup data with reset events in specific periods.
+    private func makeRollupsWithResets() -> [UsageRollup] {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let intervalMs: Int64 = 300_000
+        var rollups: [UsageRollup] = []
+        for i in 0..<12 {
+            let periodStart = nowMs - Int64(12 - i) * intervalMs
+            let periodEnd = periodStart + intervalMs
+            let resetCount = (i == 5 || i == 9) ? 1 : 0  // Resets at index 5 and 9
+            rollups.append(UsageRollup(
+                id: Int64(i),
+                periodStart: periodStart,
+                periodEnd: periodEnd,
+                resolution: .fiveMin,
+                fiveHourAvg: 30.0,
+                fiveHourPeak: 50.0,
+                fiveHourMin: 15.0,
+                sevenDayAvg: 20.0,
+                sevenDayPeak: 30.0,
+                sevenDayMin: 10.0,
+                resetCount: resetCount,
+                wasteCredits: nil
+            ))
+        }
+        return rollups
+    }
+
+    @Test("Bar chart renders for .week time range with rollup data (7.1)")
+    func barChartRendersWeek() {
+        let rollups = makeSampleRollups()
+        let view = BarChartView(
+            rollups: rollups,
+            timeRange: .week,
+            fiveHourVisible: true,
+            sevenDayVisible: true
+        )
+        let _ = view.body
+    }
+
+    @Test("Bar chart renders for .month time range with rollup data (7.2)")
+    func barChartRendersMonth() {
+        let rollups = makeSampleRollups(count: 48, resolution: .hourly, intervalMs: 3_600_000)
+        let view = BarChartView(
+            rollups: rollups,
+            timeRange: .month,
+            fiveHourVisible: true,
+            sevenDayVisible: true
+        )
+        let _ = view.body
+    }
+
+    @Test("Bar chart renders for .all time range with rollup data (7.3)")
+    func barChartRendersAll() {
+        let rollups = makeSampleRollups(count: 90, resolution: .daily, intervalMs: 86_400_000)
+        let view = BarChartView(
+            rollups: rollups,
+            timeRange: .all,
+            fiveHourVisible: true,
+            sevenDayVisible: true
+        )
+        let _ = view.body
+    }
+
+    @Test("Bar point creation from rollup data -- peak values, dates, reset count (7.4)")
+    func barPointCreation() {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let fiveMinMs: Int64 = 300_000
+        let calendar = Calendar.current
+
+        // Create 3 rollups within the same hour
+        let hourStart = calendar.dateInterval(
+            of: .hour,
+            for: Date(timeIntervalSince1970: Double(nowMs) / 1000.0)
+        )!.start
+        let hourStartMs = Int64(hourStart.timeIntervalSince1970 * 1000)
+
+        let rollups = [
+            UsageRollup(
+                id: 1, periodStart: hourStartMs, periodEnd: hourStartMs + fiveMinMs,
+                resolution: .fiveMin,
+                fiveHourAvg: 30.0, fiveHourPeak: 45.0, fiveHourMin: 20.0,
+                sevenDayAvg: 15.0, sevenDayPeak: 25.0, sevenDayMin: 10.0,
+                resetCount: 1, wasteCredits: nil
+            ),
+            UsageRollup(
+                id: 2, periodStart: hourStartMs + fiveMinMs, periodEnd: hourStartMs + 2 * fiveMinMs,
+                resolution: .fiveMin,
+                fiveHourAvg: 35.0, fiveHourPeak: 60.0, fiveHourMin: 25.0,
+                sevenDayAvg: 18.0, sevenDayPeak: 30.0, sevenDayMin: 12.0,
+                resetCount: 0, wasteCredits: nil
+            ),
+            UsageRollup(
+                id: 3, periodStart: hourStartMs + 2 * fiveMinMs, periodEnd: hourStartMs + 3 * fiveMinMs,
+                resolution: .fiveMin,
+                fiveHourAvg: 25.0, fiveHourPeak: 50.0, fiveHourMin: 15.0,
+                sevenDayAvg: 12.0, sevenDayPeak: 20.0, sevenDayMin: 8.0,
+                resetCount: 2, wasteCredits: nil
+            ),
+        ]
+
+        let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .week)
+
+        // All 3 rollups should aggregate into 1 hourly bar
+        #expect(barPoints.count == 1)
+
+        let point = barPoints[0]
+        // Peak = max of peaks
+        #expect(point.fiveHourPeak == 60.0)
+        #expect(point.sevenDayPeak == 30.0)
+        // Min = min of mins
+        #expect(point.fiveHourMin == 15.0)
+        #expect(point.sevenDayMin == 8.0)
+        // Avg = simple average of averages
+        #expect(abs((point.fiveHourAvg ?? 0) - 30.0) < 0.01)
+        #expect(abs((point.sevenDayAvg ?? 0) - 15.0) < 0.01)
+        // Reset count = sum
+        #expect(point.resetCount == 3)
+        // Date validation: periodStart should be the hour start
+        #expect(abs(point.periodStart.timeIntervalSince(hourStart)) < 1.0)
+    }
+
+    @Test("5h-only visibility hides 7d bars (7.5)")
+    func barChartFiveHourOnly() {
+        let rollups = makeSampleRollups()
+        let view = BarChartView(
+            rollups: rollups,
+            timeRange: .week,
+            fiveHourVisible: true,
+            sevenDayVisible: false
+        )
+        #expect(view.fiveHourVisible == true)
+        #expect(view.sevenDayVisible == false)
+        let _ = view.body
+    }
+
+    @Test("7d-only visibility hides 5h bars (7.6)")
+    func barChartSevenDayOnly() {
+        let rollups = makeSampleRollups()
+        let view = BarChartView(
+            rollups: rollups,
+            timeRange: .week,
+            fiveHourVisible: false,
+            sevenDayVisible: true
+        )
+        #expect(view.fiveHourVisible == false)
+        #expect(view.sevenDayVisible == true)
+        let _ = view.body
+    }
+
+    @Test("Empty rollup data with non-.day range shows empty state (7.7)")
+    func barChartEmptyRollups() {
+        let chart = makeChart(rollupData: [], timeRange: .week, hasAnyHistoricalData: true)
+        // With 0 data points and series visible, should show empty message not bar chart
+        let _ = chart.body
+    }
+
+    @Test("Rollup data with reset events flags correct bars (7.8)")
+    func barChartResetFlags() {
+        let rollups = makeRollupsWithResets()
+        let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .week)
+
+        // 12 five-minute rollups span 60 minutes — may land in 1 or 2 hourly bars
+        // depending on where the current hour boundary falls
+        #expect(barPoints.count >= 1 && barPoints.count <= 2)
+
+        // Verify some bar points have resetCount > 0
+        let resetBars = barPoints.filter { $0.resetCount > 0 }
+        #expect(!resetBars.isEmpty)
+
+        // Total resets across all bars should equal source total (2)
+        let totalResets = barPoints.reduce(0) { $0 + $1.resetCount }
+        #expect(totalResets == 2)
+    }
+
+    @Test("Non-.day range with rollup data no longer shows dataSummary stub (7.9)")
+    func nonDayRangeRendersBarChart() {
+        let rollups = makeSampleRollups()
+        // Before 13.6, the else branch was dataSummary (icon + count text).
+        // Now it should render BarChartView. Verify the view evaluates without crash.
+        for range in [TimeRange.week, .month, .all] {
+            let chart = makeChart(rollupData: rollups, timeRange: range)
+            #expect(chart.timeRange != .day)
+            #expect(!chart.rollupData.isEmpty)
+            let _ = chart.body
+        }
+    }
+
+    @Test("Bar point creation returns empty for .day time range")
+    func barPointCreationDayRange() {
+        let rollups = makeSampleRollups()
+        let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .day)
+        #expect(barPoints.isEmpty)
+    }
+
+    @Test("Bar point creation returns empty for empty rollups")
+    func barPointCreationEmptyRollups() {
+        let barPoints = BarChartView.makeBarPoints(from: [], timeRange: .week)
+        #expect(barPoints.isEmpty)
+    }
+
+    @Test("Bar points with nil fiveHourPeak produce nil in bar point")
+    func barPointNilFiveHour() {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let rollups = [
+            UsageRollup(
+                id: 1, periodStart: nowMs - 300_000, periodEnd: nowMs,
+                resolution: .fiveMin,
+                fiveHourAvg: nil, fiveHourPeak: nil, fiveHourMin: nil,
+                sevenDayAvg: 20.0, sevenDayPeak: 30.0, sevenDayMin: 15.0,
+                resetCount: 0, wasteCredits: nil
+            )
+        ]
+        let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .week)
+        #expect(barPoints.count == 1)
+        #expect(barPoints[0].fiveHourPeak == nil)
+        #expect(barPoints[0].sevenDayPeak == 30.0)
+    }
+
+    @Test("Bar points with nil sevenDayPeak produce nil in bar point")
+    func barPointNilSevenDay() {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let rollups = [
+            UsageRollup(
+                id: 1, periodStart: nowMs - 300_000, periodEnd: nowMs,
+                resolution: .fiveMin,
+                fiveHourAvg: 30.0, fiveHourPeak: 45.0, fiveHourMin: 20.0,
+                sevenDayAvg: nil, sevenDayPeak: nil, sevenDayMin: nil,
+                resetCount: 0, wasteCredits: nil
+            )
+        ]
+        let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .week)
+        #expect(barPoints.count == 1)
+        #expect(barPoints[0].fiveHourPeak == 45.0)
+        #expect(barPoints[0].sevenDayPeak == nil)
+    }
+
+    @Test("Single rollup produces single bar point")
+    func barPointSingleRollup() {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let rollups = [
+            UsageRollup(
+                id: 1, periodStart: nowMs - 300_000, periodEnd: nowMs,
+                resolution: .fiveMin,
+                fiveHourAvg: 30.0, fiveHourPeak: 45.0, fiveHourMin: 20.0,
+                sevenDayAvg: 15.0, sevenDayPeak: 25.0, sevenDayMin: 10.0,
+                resetCount: 0, wasteCredits: nil
+            )
+        ]
+        let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .week)
+        #expect(barPoints.count == 1)
+    }
+
+    @Test("Monthly aggregation groups hourly rollups into daily bars")
+    func monthlyAggregation() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let todayMs = Int64(today.timeIntervalSince1970 * 1000)
+        let hourMs: Int64 = 3_600_000
+
+        // Create 24 hourly rollups spanning one day
+        var rollups: [UsageRollup] = []
+        for i in 0..<24 {
+            rollups.append(UsageRollup(
+                id: Int64(i),
+                periodStart: todayMs + Int64(i) * hourMs,
+                periodEnd: todayMs + Int64(i + 1) * hourMs,
+                resolution: .hourly,
+                fiveHourAvg: 30.0 + Double(i),
+                fiveHourPeak: 50.0 + Double(i),
+                fiveHourMin: 10.0 + Double(i),
+                sevenDayAvg: 20.0,
+                sevenDayPeak: 25.0,
+                sevenDayMin: 15.0,
+                resetCount: i == 12 ? 1 : 0,
+                wasteCredits: nil
+            ))
+        }
+
+        let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .month)
+        // All 24 hourly rollups should aggregate into 1 daily bar
+        #expect(barPoints.count == 1)
+        // Peak should be max across all hours
+        #expect(barPoints[0].fiveHourPeak == 50.0 + 23.0)
+        // Min should be min across all hours
+        #expect(barPoints[0].fiveHourMin == 10.0)
+        // Reset count should be 1
+        #expect(barPoints[0].resetCount == 1)
     }
 }

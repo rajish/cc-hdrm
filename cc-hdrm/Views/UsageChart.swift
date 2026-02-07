@@ -4,7 +4,7 @@ import os
 /// Usage chart component for the analytics window.
 ///
 /// For `.day` time range, renders a step-area chart (Story 13.5) via `StepAreaChartView`.
-/// For other time ranges, displays a stub summary (Story 13.6 replaces with bar mode).
+/// For `.week`, `.month`, and `.all` time ranges, renders a bar chart (Story 13.6) via `BarChartView`.
 struct UsageChart: View {
     let pollData: [UsagePoll]
     let rollupData: [UsageRollup]
@@ -53,7 +53,12 @@ struct UsageChart: View {
                 sevenDayVisible: sevenDayVisible
             )
         } else {
-            dataSummary
+            BarChartView(
+                rollups: rollupData,
+                timeRange: timeRange,
+                fiveHourVisible: fiveHourVisible,
+                sevenDayVisible: sevenDayVisible
+            )
         }
     }
 
@@ -84,20 +89,6 @@ struct UsageChart: View {
             return "No data for this time range"
         } else {
             return "No data yet \u{2014} usage history builds over time"
-        }
-    }
-
-    private var dataSummary: some View {
-        VStack(spacing: 6) {
-            Image(systemName: "chart.line.uptrend.xyaxis")
-                .font(.system(size: 28))
-                .foregroundStyle(.secondary)
-            Text("\(dataPointCount) data \(dataPointCount == 1 ? "point" : "points")")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(timeRange.displayLabel)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
         }
     }
 }
