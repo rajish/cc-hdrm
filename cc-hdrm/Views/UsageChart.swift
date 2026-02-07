@@ -1,10 +1,10 @@
 import SwiftUI
 import os
 
-/// Typed stub for the usage chart component.
+/// Usage chart component for the analytics window.
 ///
-/// Accepts real data types and interface that Stories 13.5-13.7 will flesh out.
-/// Currently renders summary info (data point count, time range, series visibility state).
+/// For `.day` time range, renders a step-area chart (Story 13.5) via `StepAreaChartView`.
+/// For other time ranges, displays a stub summary (Story 13.6 replaces with bar mode).
 struct UsageChart: View {
     let pollData: [UsagePoll]
     let rollupData: [UsageRollup]
@@ -46,6 +46,12 @@ struct UsageChart: View {
             noSeriesMessage
         } else if dataPointCount == 0 {
             emptyDataMessage
+        } else if timeRange == .day {
+            StepAreaChartView(
+                polls: pollData,
+                fiveHourVisible: fiveHourVisible,
+                sevenDayVisible: sevenDayVisible
+            )
         } else {
             dataSummary
         }
