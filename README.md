@@ -4,23 +4,63 @@ A macOS menu bar utility that shows how much Claude capacity you have left. Buil
 
 ## What It Does
 
-cc-hdrm sits in your menu bar and shows your remaining headroom — the percentage of your token quota still available in the current window, plus a burn rate indicator so you know how fast you're consuming it. Click to see ring gauges for both 5-hour and 7-day windows, a 24-hour usage sparkline, reset countdowns, and your subscription tier.
+cc-hdrm sits in your menu bar and shows your remaining headroom — the percentage of your token quota still available in the current window, plus a burn rate indicator so you know how fast you're consuming it. Click to see ring gauges for both 5-hour and 7-day windows, a 24-hour usage sparkline, reset countdowns, and your subscription tier. Open the analytics window for historical charts across all retention periods.
 
 <p align="center">
-  <img src="headroom_green.png" alt="cc-hdrm popover showing 5-hour and 7-day ring gauges with slope indicators, 24-hour usage sparkline, and reset countdowns" width="336">
+  <img src="docs/images/headroom_green.png" alt="cc-hdrm popover showing 5-hour and 7-day ring gauges with slope indicators, 24-hour usage sparkline, and reset countdowns" width="336">
 </p>
 
-### Key Features
+<p align="center">
+  <img src="docs/images/analytics.png" alt="cc-hdrm analytics window showing step-area chart for 24h view with time range selector and series toggles" width="560">
+</p>
+
+## Features
+
+### Zero Overhead
 
 - **Zero configuration** — reads OAuth credentials directly from macOS Keychain (from your existing Claude Code login)
 - **Zero dependencies** — pure Swift/SwiftUI, no third-party libraries
 - **Zero tokens spent** — polls the API for quota data, not the chat API
-- **Background polling** every 30 seconds with automatic token refresh
-- **Color-coded thresholds** — green, yellow, orange, red as headroom drops
+
+### Menu Bar
+
+- **Headroom percentage** — always-visible remaining capacity for your active rate-limit window
+- **Color-coded severity** — green, yellow, orange, red as headroom drops, with escalating font weight
 - **Burn rate indicator** — slope arrows (→ ↗ ⬆) show whether usage is flat, rising, or steep
-- **24-hour sparkline** — see your usage sawtooth pattern at a glance
-- **Threshold notifications** — get warned at 20% and 5% headroom before you hit the wall
-- **Data freshness tracking** — clear indicator when data is stale or API is unreachable
+- **Smart window promotion** — when your 7-day budget can't sustain another full 5-hour cycle, the 7d value promotes to the menu bar with a "7d" label
+- **Exhausted countdown** — when headroom hits 0%, switches to a reset countdown (↻ Xm)
+
+### Popover
+
+- **Ring gauges** — 5-hour (primary) and 7-day (secondary) headroom with animated fill, percentage, and slope indicators
+- **Reset countdowns** — relative ("resets in 2h 13m") and absolute ("at 4:52 PM") for both windows
+- **7d quotas remaining** — shows how many full 5-hour cycles your weekly budget can still sustain
+- **24-hour sparkline** — step-area chart of recent usage with visible reset drops and gap rendering; click to open analytics
+- **Data freshness** — "updated Xs ago" indicator; amber warning when stale, full status message when very stale
+- **Subscription tier** — your Claude plan displayed in the footer
+- **Gear menu** — settings (notification thresholds, poll interval, launch at login) and quit
+
+### Analytics Window
+
+- **Floating utility panel** — stays visible without stealing focus or adding a dock icon
+- **Time range selector** — 24h, 7d, 30d, and All views at appropriate data resolution
+- **Step-area chart (24h)** — sawtooth pattern with reset boundary markers, slope-based background tints, and hover tooltips
+- **Bar chart (7d/30d/All)** — peak utilization per hour or per day with period-level hover detail
+- **Series toggles** — show/hide 5-hour and 7-day series independently, with per-range toggle persistence
+- **Gap rendering** — missing data shown as hatched regions, never interpolated; hover explains "cc-hdrm not running"
+
+### Notifications
+
+- **Warning at 20% headroom** — fires once per crossing for both 5-hour and 7-day windows independently
+- **Critical at 5% headroom** — persistent notification with sound
+- **Smart re-arming** — thresholds reset when headroom recovers, so you get warned again next time
+- **Configurable thresholds** — adjust warning and critical levels in settings
+
+### Data Persistence
+
+- **Local SQLite storage** — every poll snapshot persisted automatically
+- **Tiered rollups** — raw data for 24h, 5-minute rollups for 7d, hourly for 30d, daily beyond that
+- **Reset event detection** — 5-hour window resets tracked with utilization snapshots
 
 ## Requirements
 
@@ -72,20 +112,25 @@ sequenceDiagram
     participant K as macOS Keychain
     participant A as cc-hdrm
     participant API as Anthropic API
+    participant DB as SQLite
 
     A->>K: Read OAuth credentials
     K-->>A: Access token + refresh token
     loop Every 30 seconds
         A->>API: GET /api/oauth/usage
         API-->>A: Quota data (5h, 7d)
-        A->>A: Compute remaining headroom, update display
+        A->>A: Compute headroom, slope, update display
+        A->>DB: Persist poll snapshot
     end
     Note over A,API: Token expired?
     A->>API: POST /v1/oauth/token (refresh)
     API-->>A: New access token
+    Note over A,DB: Analytics opened?
+    A->>DB: Query with tiered rollups
+    DB-->>A: Historical data at appropriate resolution
 ```
 
-cc-hdrm reads the OAuth credentials that Claude Code stores in macOS Keychain. It never stores tokens on disk, never caches them between poll cycles, and never prompts you to log in. If you're logged into Claude Code, cc-hdrm works automatically.
+cc-hdrm reads the OAuth credentials that Claude Code stores in macOS Keychain. It never stores tokens on disk, never caches them between poll cycles, and never prompts you to log in. If you're logged into Claude Code, cc-hdrm works automatically. Poll snapshots are persisted locally to SQLite for historical analytics.
 
 ## Versioning
 
@@ -138,9 +183,9 @@ The [`release-publish.yml`](.github/workflows/release-publish.yml) GitHub Action
 
 ## Status
 
-Core functionality is complete: menu bar headroom display with burn rate, background polling, token refresh, popover with ring gauges and sparkline, and threshold notifications.
+Menu bar display, popover with ring gauges and sparkline, threshold notifications, burn rate indicators, data persistence with tiered rollups, and the full analytics window with multi-resolution charts are all shipped.
 
-**Coming soon:** Full analytics window with zoomable historical charts and a three-band headroom breakdown that separates *what you used*, *what the weekly limit blocked*, and *what you actually left on the table*. Stop blaming yourself for "wasted" capacity that was never yours to use.
+**Coming soon:** Three-band headroom breakdown that separates *what you used*, *what the weekly limit blocked*, and *what you actually left on the table*. Configurable data retention and custom credit limit overrides for unknown subscription tiers.
 
 ## Contributing
 
