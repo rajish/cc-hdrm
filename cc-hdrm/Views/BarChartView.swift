@@ -13,10 +13,20 @@ struct BarChartView: View {
     /// Pre-computed bar points — built in init, never recomputed on hover.
     let barPoints: [BarPoint]
 
+    /// Pre-computed gap ranges — periods with no rollup data between first and last data point.
+    let gapRanges: [BarGapRange]
+
     /// 7-day series color — reuses StepAreaChartView constant.
     static let sevenDayColor = StepAreaChartView.sevenDayColor
 
     // MARK: - Data Types
+
+    /// A time range where no rollup data exists between the first and last data points.
+    struct BarGapRange: Identifiable {
+        let id: Int
+        let start: Date   // Period start of first missing period
+        let end: Date      // Period end of last missing period in this gap
+    }
 
     struct BarPoint: Identifiable {
         /// Stable identity derived from periodStart — survives data reloads for the same period.
@@ -39,7 +49,9 @@ struct BarChartView: View {
         self.timeRange = timeRange
         self.fiveHourVisible = fiveHourVisible
         self.sevenDayVisible = sevenDayVisible
-        self.barPoints = Self.makeBarPoints(from: rollups, timeRange: timeRange)
+        let points = Self.makeBarPoints(from: rollups, timeRange: timeRange)
+        self.barPoints = points
+        self.gapRanges = Self.findGapRanges(in: points, timeRange: timeRange)
     }
 
     // MARK: - Body
@@ -47,6 +59,7 @@ struct BarChartView: View {
     var body: some View {
         BarChartWithHoverOverlay(
             barPoints: barPoints,
+            gapRanges: gapRanges,
             timeRange: timeRange,
             fiveHourVisible: fiveHourVisible,
             sevenDayVisible: sevenDayVisible
@@ -128,6 +141,61 @@ struct BarChartView: View {
             )
         }
     }
+
+    // MARK: - Gap Detection
+
+    /// Detects missing periods in the bar point sequence and returns merged gap ranges.
+    ///
+    /// For `.week`: each expected period is one hour.
+    /// For `.month` / `.all`: each expected period is one day.
+    /// Gaps are only detected WITHIN the data range (between first and last bar point).
+    /// Consecutive missing periods are merged into a single `BarGapRange` (AC 3).
+    static func findGapRanges(in barPoints: [BarPoint], timeRange: TimeRange) -> [BarGapRange] {
+        guard barPoints.count >= 2 else { return [] }
+
+        let calendar = Calendar.current
+        let periodComponent: Calendar.Component = timeRange == .week ? .hour : .day
+
+        // Build set of actual period start dates
+        let actualPeriods = Set(barPoints.map { $0.periodStart })
+
+        // Walk expected periods from first to last bar point
+        guard let firstStart = barPoints.first?.periodStart,
+              let lastStart = barPoints.last?.periodStart else { return [] }
+
+        var gaps: [BarGapRange] = []
+        var currentDate = firstStart
+        var gapStart: Date?
+
+        while currentDate <= lastStart {
+            let nextDate = calendar.date(byAdding: periodComponent, value: 1, to: currentDate) ?? currentDate
+
+            if !actualPeriods.contains(currentDate) {
+                // Missing period — start or extend gap
+                if gapStart == nil {
+                    gapStart = currentDate
+                }
+            } else {
+                // Data exists — close any open gap
+                if let start = gapStart {
+                    gaps.append(BarGapRange(id: gaps.count, start: start, end: currentDate))
+                    gapStart = nil
+                }
+            }
+
+            currentDate = nextDate
+        }
+
+        // Close trailing gap (gap runs up to but not including last data point's period)
+        // Note: gaps within data range only — if last period has data, gap already closed above.
+        // If last period is missing, the gap extends to the end of the last missing period.
+        if let start = gapStart {
+            // The gap extends to the next period after the last missing one we saw
+            gaps.append(BarGapRange(id: gaps.count, start: start, end: currentDate))
+        }
+
+        return gaps
+    }
 }
 
 // MARK: - Chart With Hover Overlay (manages hover state separately from chart content)
@@ -136,15 +204,19 @@ struct BarChartView: View {
 /// Hover state changes only affect the overlay, not the chart marks.
 private struct BarChartWithHoverOverlay: View {
     let barPoints: [BarChartView.BarPoint]
+    let gapRanges: [BarChartView.BarGapRange]
     let timeRange: TimeRange
     let fiveHourVisible: Bool
     let sevenDayVisible: Bool
 
     @State private var hoveredIndex: Int?
+    /// The resolved cursor date from ChartProxy — used for gap range detection.
+    @State private var hoveredDate: Date?
 
     var body: some View {
         StaticBarChartContent(
             barPoints: barPoints,
+            gapRanges: gapRanges,
             timeRange: timeRange,
             fiveHourVisible: fiveHourVisible,
             sevenDayVisible: sevenDayVisible
@@ -159,17 +231,22 @@ private struct BarChartWithHoverOverlay: View {
                             case .active(let location):
                                 guard let date: Date = proxy.value(atX: location.x) else {
                                     hoveredIndex = nil
+                                    hoveredDate = nil
                                     return
                                 }
+                                hoveredDate = date
                                 hoveredIndex = findNearestIndex(to: date)
                             case .ended:
                                 hoveredIndex = nil
+                                hoveredDate = nil
                             }
                         }
 
                     BarHoverOverlayContent(
                         barPoints: barPoints,
+                        gapRanges: gapRanges,
                         hoveredIndex: hoveredIndex,
+                        hoveredDate: hoveredDate,
                         timeRange: timeRange,
                         fiveHourVisible: fiveHourVisible,
                         sevenDayVisible: sevenDayVisible,
@@ -221,6 +298,7 @@ private struct BarChartWithHoverOverlay: View {
 /// NOT on hover state. When hoveredIndex changes, this view is not invalidated.
 private struct StaticBarChartContent: View {
     let barPoints: [BarChartView.BarPoint]
+    let gapRanges: [BarChartView.BarGapRange]
     let timeRange: TimeRange
     let fiveHourVisible: Bool
     let sevenDayVisible: Bool
@@ -264,6 +342,17 @@ private struct StaticBarChartContent: View {
 
     var body: some View {
         Chart {
+            // Layer 0: No-data gap regions (grey background) — rendered before bars so bars draw on top
+            ForEach(gapRanges) { gap in
+                RectangleMark(
+                    xStart: .value("GapStart", gap.start),
+                    xEnd: .value("GapEnd", gap.end),
+                    yStart: .value("Bottom", 0),
+                    yEnd: .value("Top", 100)
+                )
+                .foregroundStyle(Color.secondary.opacity(0.08))
+            }
+
             // 5h series bars (green) — uses RectangleMark for explicit temporal boundaries
             if fiveHourVisible {
                 ForEach(barPoints) { point in
@@ -354,15 +443,38 @@ private struct StaticBarChartContent: View {
 /// This is the only thing that redraws when hoveredIndex changes.
 private struct BarHoverOverlayContent: View {
     let barPoints: [BarChartView.BarPoint]
+    let gapRanges: [BarChartView.BarGapRange]
     let hoveredIndex: Int?
+    let hoveredDate: Date?
     let timeRange: TimeRange
     let fiveHourVisible: Bool
     let sevenDayVisible: Bool
     let proxy: ChartProxy
     let size: CGSize
 
+    /// Check if the hovered date falls within a gap range (gap check comes FIRST).
+    private var hoveredGap: BarChartView.BarGapRange? {
+        guard let date = hoveredDate else { return nil }
+        return gapRanges.first { $0.start <= date && date < $0.end }
+    }
+
     var body: some View {
-        if let index = hoveredIndex, index < barPoints.count {
+        if let date = hoveredDate, let gap = hoveredGap,
+           let xPos = proxy.position(forX: date) {
+            // Cursor is in a gap region — show gap tooltip with vertical line
+            Path { path in
+                path.move(to: CGPoint(x: xPos, y: 0))
+                path.addLine(to: CGPoint(x: xPos, y: size.height))
+            }
+            .stroke(Color.white.opacity(0.6), lineWidth: 1)
+
+            gapTooltipView()
+                .fixedSize()
+                .position(
+                    x: tooltipXPosition(chartX: xPos),
+                    y: 55
+                )
+        } else if let index = hoveredIndex, index < barPoints.count {
             let point = barPoints[index]
 
             if let xPos = proxy.position(forX: point.midpoint) {
@@ -382,6 +494,22 @@ private struct BarHoverOverlayContent: View {
                     )
             }
         }
+    }
+
+    @ViewBuilder
+    private func gapTooltipView() -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("No data")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("cc-hdrm not running")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(6)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("No data, cc-hdrm not running")
     }
 
     @ViewBuilder
