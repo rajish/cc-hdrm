@@ -212,6 +212,7 @@ struct AnalyticsView: View {
         HStack(spacing: 8) {
             seriesToggleButton(
                 label: "5h",
+                color: .headroomNormal,
                 isActive: fiveHourBinding,
                 accessibilityPrefix: "5-hour series"
             )
@@ -222,6 +223,7 @@ struct AnalyticsView: View {
 
             seriesToggleButton(
                 label: "7d",
+                color: StepAreaChartView.sevenDayColor,
                 isActive: sevenDayBinding,
                 accessibilityPrefix: "7-day series"
             )
@@ -230,6 +232,7 @@ struct AnalyticsView: View {
 
     private func seriesToggleButton(
         label: String,
+        color: Color,
         isActive: Binding<Bool>,
         accessibilityPrefix: String
     ) -> some View {
@@ -237,9 +240,9 @@ struct AnalyticsView: View {
             isActive.wrappedValue.toggle()
         }) {
             HStack(spacing: 4) {
-                Image(systemName: isActive.wrappedValue ? "circle.fill" : "circle")
-                    .font(.system(size: 8))
-                    .foregroundStyle(isActive.wrappedValue ? Color.accentColor : .secondary)
+                Circle()
+                    .fill(isActive.wrappedValue ? color : .secondary.opacity(0.3))
+                    .frame(width: 8, height: 8)
                 Text(label)
                     .font(.caption)
                     .foregroundStyle(isActive.wrappedValue ? .primary : .secondary)
