@@ -370,13 +370,13 @@ Multiple interrelated issues with the sparkline in an NSPopover:
 **Final solution:** Replaced the SwiftUI `Button` entirely with a single AppKit `NSView` overlay (`SparklineInteractionOverlay`) that handles cursor, click, and hover in one unified place:
 
 1. **Cursor (key window):** `addCursorRect(bounds, cursor: .pointingHand)` in `resetCursorRects()` — managed by the window server, works when popover is key.
-2. **Cursor (non-key window):** `NSTrackingArea` with `.mouseEnteredAndExited` + `.activeAlways` calls `NSCursor.pointingHand.set()` in `mouseEntered` — works when popover is NOT key because there's no cursor rect system active to override `set()`.
-3. **Window activation:** `window?.makeKey()` in `viewDidMoveToWindow()` — makes the popover window key immediately when it opens, so `addCursorRect` works from the first hover.
+2. **Cursor (non-key fallback):** `cursorUpdate(with:)` override (without calling `super`) via `.cursorUpdate` tracking area option — bypasses the cursor rect system entirely for edge cases where the window loses key status.
+3. **Window activation:** `popover.contentViewController?.view.window?.makeKey()` in `AppDelegate.togglePopover(_:)` — makes the popover window key immediately after `popover.show(...)`, so `addCursorRect` works from the first hover without requiring a click.
 4. **Click:** `mouseUp(with:)` calls the `onTap` closure directly — no SwiftUI Button, no focus ring, no first-responder issues.
 5. **First mouse:** `acceptsFirstMouse(for:)` returns `true` — delivers the click immediately instead of consuming it for window activation.
 6. **Hover highlight:** `mouseEntered`/`mouseExited` from the tracking area calls `onHoverChange` for the background color effect.
 
-Key insight: `addCursorRect` and `NSCursor.set()` are complementary — `addCursorRect` works only in key windows, `set()` works only in non-key windows (because the cursor rect system isn't active to override it). Using both together covers all window states.
+Key insight: the root cause of cursor issues in NSPopover is that `.transient` popovers don't activate the app or make the popover window key. `addCursorRect` only works for the key window, and `NSCursor.set()` gets overridden by the active app's cursor management. The fix is to call `makeKey()` on the popover's window immediately after showing it. Previous attempts to call `makeKey()` from `viewDidMoveToWindow()` inside the NSView failed because the timing was unreliable — the popover window wasn't fully configured yet.
 
 ### Senior Developer Review (AI)
 
@@ -399,10 +399,14 @@ Key insight: `addCursorRect` and `NSCursor.set()` are complementary — `addCurs
 
 **Pre-existing bug fixes (out of scope but well-documented):** 4 fixes to AnalyticsPanel, AnalyticsView, GearMenuView, Sparkline. All appropriately documented in Dev Agent Record with root cause analysis. No concerns — quality improvements.
 
+**Post-review fix (user-reported regression):**
+- Hand cursor over sparkline required clicking the popover first. Root cause: NSPopover with `.transient` behavior doesn't make its window key, so `addCursorRect` and `NSCursor.set()` were both ineffective until a manual click activated the window. Fix: added `popover.contentViewController?.view.window?.makeKey()` in `AppDelegate.togglePopover(_:)` right after `popover.show(...)`. Also replaced the `NSCursor.set()` fallback in SparklineInteractionNSView with `cursorUpdate(with:)` override (via `.cursorUpdate` tracking area option) which bypasses the cursor rect system entirely.
+
 **Build:** Passes. **Tests:** 779/779 pass (71 suites).
 
 ### Change Log
 
+- 2026-02-07: Fixed sparkline hand cursor requiring click — makeKey() in AppDelegate after popover.show(), cursorUpdate override in SparklineInteractionNSView
 - 2026-02-07: Code review passed — 7 fixes applied (DateFormatter caching, stable BarPoint.id, stale comments/docs, File List)
 - 2026-02-07: Story 13.6 implementation complete — bar chart for 7d/30d/All time ranges
 - 2026-02-07: Fixed invisible BarMark — replaced with RectangleMark for explicit temporal boundaries
@@ -422,5 +426,6 @@ Key insight: `addCursorRect` and `NSCursor.set()` are complementary — `addCurs
 - cc-hdrm/Views/AnalyticsView.swift — contentShape on toggle buttons, focusEffectDisabled on close button and toggles
 - cc-hdrm/Views/Sparkline.swift — SparklineInteractionOverlay replacing SwiftUI Button for reliable cursor and click
 - cc-hdrm/Views/GearMenuView.swift — focusEffectDisabled on gear menu
+- cc-hdrm/App/AppDelegate.swift — makeKey() after popover.show() for immediate cursor rect activation
 - cc-hdrmTests/Views/UsageChartTests.swift — 15 new bar chart tests
 - _bmad-output/implementation-artifacts/sprint-status.yaml — story status updated to review

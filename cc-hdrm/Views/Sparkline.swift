@@ -453,13 +453,15 @@ struct Sparkline: View {
 
 /// AppKit overlay that provides reliable hand cursor and click handling for the sparkline.
 ///
-/// Uses `addCursorRect(_:cursor:)` for cursor management — the only mechanism that reliably
-/// persists across window activation changes. `addCursorRect` requires winning `hitTest`,
-/// so this view sits as an `.overlay()` and handles both cursor and clicks in one place.
+/// Uses `cursorUpdate(with:)` via `.cursorUpdate` tracking area option. This fires
+/// continuously while the cursor is inside the tracking area, regardless of key-window
+/// status. Overriding without calling `super` bypasses the cursor rect system entirely,
+/// which is critical because NSPopover windows are not key by default.
 ///
-/// This replaces a SwiftUI `Button` which had two problems in `NSPopover` context:
+/// Previous approaches that failed in NSPopover context:
 /// 1. `.onHover` + `NSCursor.push()`/`pop()` — cursor stack corrupted on window changes
-/// 2. `.onHover` + `NSCursor.set()` — immediately overridden by AppKit's cursor rect system
+/// 2. `.onHover` + `NSCursor.set()` — overridden by cursor rect system of key window
+/// 3. `addCursorRect` + `window?.makeKey()` — makeKey doesn't stick for popover windows
 private struct SparklineInteractionOverlay: NSViewRepresentable {
     var onTap: (() -> Void)?
     var onHoverChange: ((Bool) -> Void)?
@@ -481,10 +483,11 @@ private struct SparklineInteractionOverlay: NSViewRepresentable {
         var onHoverChange: ((Bool) -> Void)?
 
         // --- Cursor ---
-        // Two mechanisms cover all window-key states:
-        // 1. addCursorRect: works when this window IS key (managed by window server)
-        // 2. NSTrackingArea + NSCursor.set(): works when this window is NOT key
-        //    (no cursor rect system active to override it)
+        // Two complementary mechanisms:
+        // 1. addCursorRect: works when this window IS key (AppDelegate.togglePopover
+        //    calls makeKey() after showing the popover).
+        // 2. cursorUpdate(with:) without calling super: bypasses the cursor rect
+        //    system for edge cases where the window loses key status.
 
         override func resetCursorRects() {
             addCursorRect(bounds, cursor: .pointingHand)
@@ -497,30 +500,24 @@ private struct SparklineInteractionOverlay: NSViewRepresentable {
             }
             let area = NSTrackingArea(
                 rect: .zero,
-                options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                options: [.mouseEnteredAndExited, .cursorUpdate, .activeAlways, .inVisibleRect],
                 owner: self,
                 userInfo: nil
             )
             addTrackingArea(area)
         }
 
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            // Make the popover window key so addCursorRect works immediately
-            // (without requiring the user to click the popover first).
-            window?.makeKey()
-            window?.invalidateCursorRects(for: self)
+        override func cursorUpdate(with event: NSEvent) {
+            // Do NOT call super — that would invoke the cursor rect system,
+            // which resets to arrow for non-key windows (i.e., NSPopover).
+            NSCursor.pointingHand.set()
         }
 
         override func mouseEntered(with event: NSEvent) {
-            // Fallback cursor set for when the window is not key
-            // (addCursorRect only works for the key window)
-            NSCursor.pointingHand.set()
             onHoverChange?(true)
         }
 
         override func mouseExited(with event: NSEvent) {
-            NSCursor.arrow.set()
             onHoverChange?(false)
         }
 
