@@ -692,6 +692,128 @@ struct HistoricalDataServiceTests {
         #expect(events[0].fiveHourPeak == 75.0)
     }
 
+    // MARK: - Story 14.2: Credit Field Population Tests
+
+    @Test("Reset event populates credit fields when tier is known (AC 1)")
+    func creditFieldsPopulatedWhenTierKnown() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let analysisService = HeadroomAnalysisService()
+        let service = HistoricalDataService(
+            databaseManager: dbManager,
+            headroomAnalysisService: analysisService,
+            preferencesManager: nil
+        )
+
+        // First poll: 72% peak, 85% 7d util (Pro tier example from story dev notes)
+        let response1 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 72.0, resetsAt: "2026-02-03T10:00:00Z"),
+            sevenDay: WindowUsage(utilization: 85.0, resetsAt: "2026-02-10T00:00:00Z"),
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response1, tier: "default_claude_pro")
+
+        try await Task.sleep(for: .milliseconds(10))
+
+        // Second poll: triggers reset (different resets_at)
+        let response2 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 5.0, resetsAt: "2026-02-03T15:00:00Z"),
+            sevenDay: WindowUsage(utilization: 85.0, resetsAt: "2026-02-10T00:00:00Z"),
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response2, tier: "default_claude_pro")
+
+        let events = try await service.getResetEvents(fromTimestamp: nil, toTimestamp: nil)
+        #expect(events.count == 1)
+        #expect(events[0].usedCredits != nil, "usedCredits should be populated for known tier")
+        #expect(events[0].constrainedCredits != nil, "constrainedCredits should be populated for known tier")
+        #expect(events[0].wasteCredits != nil, "wasteCredits should be populated for known tier")
+
+        // Pro tier: 5h_limit = 550,000. Peak 72% -> used = 396,000
+        if let used = events[0].usedCredits {
+            #expect(abs(used - 396_000) < 1.0, "Expected usedCredits ~396,000, got \(used)")
+        }
+    }
+
+    @Test("Reset event credit fields NULL when tier unknown and no analysis service (AC 2)")
+    func creditFieldsNullWhenNoAnalysisService() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        // No headroomAnalysisService injected
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        let response1 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 72.0, resetsAt: "2026-02-03T10:00:00Z"),
+            sevenDay: WindowUsage(utilization: 85.0, resetsAt: "2026-02-10T00:00:00Z"),
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response1, tier: "default_claude_pro")
+
+        try await Task.sleep(for: .milliseconds(10))
+
+        let response2 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 5.0, resetsAt: "2026-02-03T15:00:00Z"),
+            sevenDay: WindowUsage(utilization: 85.0, resetsAt: "2026-02-10T00:00:00Z"),
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response2, tier: "default_claude_pro")
+
+        let events = try await service.getResetEvents(fromTimestamp: nil, toTimestamp: nil)
+        #expect(events.count == 1)
+        #expect(events[0].usedCredits == nil, "usedCredits should be NULL without analysis service")
+        #expect(events[0].constrainedCredits == nil, "constrainedCredits should be NULL without analysis service")
+        #expect(events[0].wasteCredits == nil, "wasteCredits should be NULL without analysis service")
+    }
+
+    @Test("Reset event credit fields NULL when tier is unrecognized (AC 2)")
+    func creditFieldsNullWhenTierUnrecognized() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let analysisService = HeadroomAnalysisService()
+        let service = HistoricalDataService(
+            databaseManager: dbManager,
+            headroomAnalysisService: analysisService,
+            preferencesManager: nil
+        )
+
+        let response1 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 72.0, resetsAt: "2026-02-03T10:00:00Z"),
+            sevenDay: WindowUsage(utilization: 85.0, resetsAt: "2026-02-10T00:00:00Z"),
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response1, tier: "unknown_tier_xyz")
+
+        try await Task.sleep(for: .milliseconds(10))
+
+        let response2 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 5.0, resetsAt: "2026-02-03T15:00:00Z"),
+            sevenDay: WindowUsage(utilization: 85.0, resetsAt: "2026-02-10T00:00:00Z"),
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response2, tier: "unknown_tier_xyz")
+
+        let events = try await service.getResetEvents(fromTimestamp: nil, toTimestamp: nil)
+        #expect(events.count == 1)
+        #expect(events[0].usedCredits == nil, "usedCredits should be NULL for unknown tier")
+        #expect(events[0].constrainedCredits == nil, "constrainedCredits should be NULL for unknown tier")
+        #expect(events[0].wasteCredits == nil, "wasteCredits should be NULL for unknown tier")
+    }
+
     // MARK: - Story 10.4: Tiered Rollup Engine Tests
 
     @Test("ensureRollupsUpToDate skips when database unavailable")

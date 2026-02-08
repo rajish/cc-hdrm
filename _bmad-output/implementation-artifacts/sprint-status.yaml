@@ -113,7 +113,7 @@ development_status:
   12-4-popover-view-integration: done
   epic-12-retrospective: optional
 
-  epic-13: in-progress
+  epic-13: done
   13-1-analytics-window-shell: done
   13-2-analytics-view-layout: done
   13-3-time-range-selector: done
@@ -122,3 +122,11 @@ development_status:
   13-6-usage-chart-bar-mode: done
   13-7-gap-rendering-in-charts: done
   epic-13-retrospective: optional
+
+  epic-14: in-progress
+  14-1-rate-limit-tier-credit-limits: done  # Absorbed into Story 3.3
+  14-2-headroom-analysis-service: done
+  14-3-headroom-breakdown-bar-component: backlog
+  14-4-breakdown-summary-statistics: backlog
+  14-5-analytics-view-integration: backlog
+  epic-14-retrospective: optional
