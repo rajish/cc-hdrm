@@ -113,9 +113,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Create PollingEngine with production services if not already injected (test path)
         if pollingEngine == nil {
+            // Create HeadroomAnalysisService for credit breakdown calculations
+            let headroomAnalysisService = HeadroomAnalysisService(preferencesManager: preferences)
+
             // Create HistoricalDataService for poll persistence
             let historicalDataService = HistoricalDataService(
-                databaseManager: DatabaseManager.shared
+                databaseManager: DatabaseManager.shared,
+                headroomAnalysisService: headroomAnalysisService,
+                preferencesManager: preferences
             )
             self.historicalDataServiceRef = historicalDataService
 

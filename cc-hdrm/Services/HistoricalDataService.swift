@@ -6,6 +6,8 @@ import SQLite3
 /// Implements graceful degradation: if database is unavailable, operations are skipped silently.
 final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sendable {
     private let databaseManager: any DatabaseManagerProtocol
+    private let headroomAnalysisService: (any HeadroomAnalysisServiceProtocol)?
+    private let preferencesManager: (any PreferencesManagerProtocol)?
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -16,9 +18,18 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
     private let utilizationDropThreshold: Double = 50.0
 
     /// Creates a HistoricalDataService with the specified database manager.
-    /// - Parameter databaseManager: The database manager for persistence operations
-    init(databaseManager: any DatabaseManagerProtocol) {
+    /// - Parameters:
+    ///   - databaseManager: The database manager for persistence operations
+    ///   - headroomAnalysisService: Optional service for credit breakdown analysis (graceful degradation if nil)
+    ///   - preferencesManager: Optional preferences for custom credit limit resolution (graceful degradation if nil)
+    init(
+        databaseManager: any DatabaseManagerProtocol,
+        headroomAnalysisService: (any HeadroomAnalysisServiceProtocol)? = nil,
+        preferencesManager: (any PreferencesManagerProtocol)? = nil
+    ) {
         self.databaseManager = databaseManager
+        self.headroomAnalysisService = headroomAnalysisService
+        self.preferencesManager = preferencesManager
     }
 
     // MARK: - HistoricalDataServiceProtocol
@@ -514,10 +525,24 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             sqlite3_bind_null(statement, 4)
         }
 
-        // Credit fields are NULL until Epic 14
-        sqlite3_bind_null(statement, 5)  // used_credits
-        sqlite3_bind_null(statement, 6)  // constrained_credits
-        sqlite3_bind_null(statement, 7)  // waste_credits
+        // Calculate credit breakdown if tier and utilization data are available
+        if let peak = fiveHourPeak,
+           let util7d = sevenDayUtil,
+           let analysisService = headroomAnalysisService,
+           let limits = RateLimitTier.resolve(tierString: tier, preferencesManager: preferencesManager) {
+            let breakdown = analysisService.analyzeResetEvent(
+                fiveHourPeak: peak,
+                sevenDayUtil: util7d,
+                creditLimits: limits
+            )
+            sqlite3_bind_double(statement, 5, breakdown.usedCredits)
+            sqlite3_bind_double(statement, 6, breakdown.constrainedCredits)
+            sqlite3_bind_double(statement, 7, breakdown.wasteCredits)
+        } else {
+            sqlite3_bind_null(statement, 5)  // used_credits
+            sqlite3_bind_null(statement, 6)  // constrained_credits
+            sqlite3_bind_null(statement, 7)  // waste_credits
+        }
 
         let stepResult = sqlite3_step(statement)
         guard stepResult == SQLITE_DONE else {
