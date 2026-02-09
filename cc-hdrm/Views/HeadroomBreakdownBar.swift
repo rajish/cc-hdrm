@@ -1,12 +1,15 @@
 import SwiftUI
 
-/// Typed stub for the headroom breakdown bar component.
+/// Two-band horizontal bar showing how much subscription money was used vs wasted.
 ///
-/// Accepts real data types and interface that Stories 14.3-14.5 will implement
-/// as a three-band visualization. Currently renders summary info about reset events.
+/// Segments (left-to-right):
+/// - **Used**: Solid fill, color derived from aggregate peak utilization via HeadroomState
+/// - **Wasted**: Light/empty fill — money paid but not used
 struct HeadroomBreakdownBar: View {
     let resetEvents: [ResetEvent]
     let creditLimits: CreditLimits?
+    let headroomAnalysisService: any HeadroomAnalysisServiceProtocol
+    let selectedTimeRange: TimeRange
 
     var body: some View {
         ZStack {
@@ -17,34 +20,262 @@ struct HeadroomBreakdownBar: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 80)
-        .accessibilityLabel("Headroom breakdown")
     }
 
     @ViewBuilder
     private var content: some View {
         if creditLimits == nil {
-            Text("Headroom breakdown unavailable -- unknown subscription tier")
+            Text("Subscription breakdown unavailable -- unknown subscription tier")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .accessibilityLabel("Subscription breakdown unavailable -- unknown subscription tier")
         } else if resetEvents.isEmpty {
             Text("No reset events in this period")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .accessibilityLabel("No reset events in this period")
         } else {
-            Text("Headroom breakdown: \(resetEvents.count) reset \(resetEvents.count == 1 ? "event" : "events") in period")
+            breakdownContent
+        }
+    }
+
+    @ViewBuilder
+    private var breakdownContent: some View {
+        let limits = creditLimits!
+        let subscriptionValue = SubscriptionValueCalculator.calculate(
+            resetEvents: resetEvents,
+            creditLimits: limits,
+            timeRange: selectedTimeRange,
+            headroomAnalysisService: headroomAnalysisService
+        )
+
+        if let value = subscriptionValue {
+            dollarBreakdown(value: value)
+        } else {
+            // Custom limits without monthlyPrice — show percentage-only mode
+            percentageOnlyBreakdown(limits: limits)
+        }
+    }
+
+    // MARK: - Dollar Breakdown (known tier with price)
+
+    @ViewBuilder
+    private func dollarBreakdown(value: SubscriptionValue) -> some View {
+        let usedFraction = value.utilizationPercent / 100.0
+        let wastedFraction = 1.0 - usedFraction
+        let usedColor = HeadroomState(from: value.utilizationPercent).swiftUIColor
+
+        VStack(spacing: 6) {
+            // Dollar annotation
+            HStack {
+                Text("\(SubscriptionValueCalculator.formatDollars(value.usedDollars)) used")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+                Spacer()
+                Text("of \(SubscriptionValueCalculator.formatDollars(value.periodPrice))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            // Stacked bar
+            GeometryReader { geometry in
+                HStack(spacing: 0) {
+                    // Used segment — solid fill
+                    if usedFraction > 0 {
+                        Rectangle()
+                            .fill(usedColor)
+                            .frame(width: max(0, geometry.size.width * usedFraction))
+                    }
+
+                    // Wasted segment — light fill
+                    if wastedFraction > 0 {
+                        ZStack {
+                            Rectangle()
+                                .fill(Color.secondary.opacity(0.08))
+                            Rectangle()
+                                .strokeBorder(Color.secondary.opacity(0.15), lineWidth: 0.5)
+                        }
+                        .frame(width: max(0, geometry.size.width * wastedFraction))
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .frame(height: 24)
+
+            // Legend
+            dollarLegend(value: value, usedColor: usedColor)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Subscription usage: \(SubscriptionValueCalculator.formatDollars(value.usedDollars)) used of \(SubscriptionValueCalculator.formatDollars(value.periodPrice)), \(Int(value.utilizationPercent.rounded()))% utilization")
+    }
+
+    // MARK: - Percentage-Only Breakdown (custom limits, no price)
+
+    @ViewBuilder
+    private func percentageOnlyBreakdown(limits: CreditLimits) -> some View {
+        let summary = headroomAnalysisService.aggregateBreakdown(events: resetEvents)
+        let periodDays = SubscriptionValueCalculator.periodDays(for: selectedTimeRange, events: resetEvents)
+        let totalAvailable = Double(limits.sevenDayCredits) * (periodDays / 7.0)
+        let utilizationPercent = totalAvailable > 0 ? min(100.0, (summary.usedCredits / totalAvailable) * 100.0) : 0
+        let usedFraction = utilizationPercent / 100.0
+        let wastedFraction = 1.0 - usedFraction
+        let usedColor = HeadroomState(from: utilizationPercent).swiftUIColor
+
+        VStack(spacing: 6) {
+            // Stacked bar
+            GeometryReader { geometry in
+                HStack(spacing: 0) {
+                    if usedFraction > 0 {
+                        Rectangle()
+                            .fill(usedColor)
+                            .frame(width: max(0, geometry.size.width * usedFraction))
+                    }
+                    if wastedFraction > 0 {
+                        ZStack {
+                            Rectangle()
+                                .fill(Color.secondary.opacity(0.08))
+                            Rectangle()
+                                .strokeBorder(Color.secondary.opacity(0.15), lineWidth: 0.5)
+                        }
+                        .frame(width: max(0, geometry.size.width * wastedFraction))
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .frame(height: 24)
+
+            // Legend
+            percentageLegend(utilizationPercent: utilizationPercent, usedColor: usedColor)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Subscription usage: \(Int(utilizationPercent.rounded()))% utilization")
+    }
+
+    // MARK: - Legends
+
+    @ViewBuilder
+    private func dollarLegend(value: SubscriptionValue, usedColor: Color) -> some View {
+        VStack(spacing: 2) {
+            HStack(spacing: 0) {
+                legendSwatch(color: usedColor, style: .solid)
+                Text("Used: \(SubscriptionValueCalculator.formatDollars(value.usedDollars)) (\(Int(value.utilizationPercent.rounded()))%)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                legendSwatch(color: Color.secondary.opacity(0.15), style: .outlined)
+                Text("Wasted: \(SubscriptionValueCalculator.formatDollars(value.wastedDollars)) (\(Int((100.0 - value.utilizationPercent).rounded()))%)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text("of \(SubscriptionValueCalculator.formatDollars(value.periodPrice)) (prorated from \(SubscriptionValueCalculator.formatDollars(value.monthlyPrice))/mo)")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func percentageLegend(utilizationPercent: Double, usedColor: Color) -> some View {
+        HStack(spacing: 0) {
+            legendSwatch(color: usedColor, style: .solid)
+            Text("Used: \(Int(utilizationPercent.rounded()))%")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            legendSwatch(color: Color.secondary.opacity(0.15), style: .outlined)
+            Text("Wasted: \(Int((100.0 - utilizationPercent).rounded()))%")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }
+
+    private enum SwatchStyle {
+        case solid
+        case outlined
+    }
+
+    @ViewBuilder
+    private func legendSwatch(color: Color, style: SwatchStyle) -> some View {
+        Group {
+            switch style {
+            case .solid:
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(color)
+            case .outlined:
+                RoundedRectangle(cornerRadius: 2)
+                    .strokeBorder(Color.secondary.opacity(0.3), lineWidth: 0.5)
+            }
+        }
+        .frame(width: 10, height: 10)
+        .padding(.trailing, 4)
+    }
 }
 
 #if DEBUG
+private let previewEvents: [ResetEvent] = {
+    let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+    return (0..<5).map { i in
+        ResetEvent(
+            id: Int64(i + 1),
+            timestamp: nowMs - Int64(i) * 3_600_000,
+            fiveHourPeak: 60.0 + Double(i) * 5,
+            sevenDayUtil: 30.0 + Double(i) * 3,
+            tier: "default_claude_pro",
+            usedCredits: nil,
+            constrainedCredits: nil,
+            wasteCredits: nil
+        )
+    }
+}()
+
 #Preview {
     VStack(spacing: 12) {
-        HeadroomBreakdownBar(resetEvents: [], creditLimits: CreditLimits(fiveHourCredits: 100, sevenDayCredits: 909))
-        HeadroomBreakdownBar(resetEvents: [], creditLimits: nil)
+        // Dollar bar (known tier with events)
+        HeadroomBreakdownBar(
+            resetEvents: previewEvents,
+            creditLimits: RateLimitTier.pro.creditLimits,
+            headroomAnalysisService: PreviewHeadroomAnalysisService(),
+            selectedTimeRange: .week
+        )
+        // Empty events fallback
+        HeadroomBreakdownBar(
+            resetEvents: [],
+            creditLimits: RateLimitTier.pro.creditLimits,
+            headroomAnalysisService: PreviewHeadroomAnalysisService(),
+            selectedTimeRange: .week
+        )
+        // Nil creditLimits fallback
+        HeadroomBreakdownBar(
+            resetEvents: previewEvents,
+            creditLimits: nil,
+            headroomAnalysisService: PreviewHeadroomAnalysisService(),
+            selectedTimeRange: .week
+        )
     }
     .padding()
     .frame(width: 600)
+}
+
+/// Minimal preview-only stub for HeadroomAnalysisServiceProtocol.
+private struct PreviewHeadroomAnalysisService: HeadroomAnalysisServiceProtocol {
+    func analyzeResetEvent(fiveHourPeak: Double, sevenDayUtil: Double, creditLimits: CreditLimits) -> HeadroomBreakdown {
+        HeadroomBreakdown(usedPercent: 52, constrainedPercent: 12, wastePercent: 36,
+                          usedCredits: 286_000, constrainedCredits: 66_000, wasteCredits: 198_000)
+    }
+
+    func aggregateBreakdown(events: [ResetEvent]) -> PeriodSummary {
+        PeriodSummary(usedCredits: 2_860_000, constrainedCredits: 660_000, wasteCredits: 1_980_000,
+                      resetCount: events.count, avgPeakUtilization: 52.0,
+                      usedPercent: 52, constrainedPercent: 12, wastePercent: 36)
+    }
 }
 #endif

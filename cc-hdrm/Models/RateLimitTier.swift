@@ -26,9 +26,18 @@ enum RateLimitTier: String, CaseIterable, Sendable {
         }
     }
 
+    /// Monthly subscription price in USD.
+    var monthlyPrice: Double {
+        switch self {
+        case .pro: return 20.0
+        case .max5x: return 100.0
+        case .max20x: return 200.0
+        }
+    }
+
     /// Convenience to produce a `CreditLimits` value from this tier.
     var creditLimits: CreditLimits {
-        CreditLimits(fiveHourCredits: fiveHourCredits, sevenDayCredits: sevenDayCredits)
+        CreditLimits(fiveHourCredits: fiveHourCredits, sevenDayCredits: sevenDayCredits, monthlyPrice: monthlyPrice)
     }
 
     // MARK: - Resolution
@@ -53,7 +62,7 @@ enum RateLimitTier: String, CaseIterable, Sendable {
         if let prefs = preferencesManager,
            let custom5h = prefs.customFiveHourCredits,
            let custom7d = prefs.customSevenDayCredits {
-            let limits = CreditLimits(fiveHourCredits: custom5h, sevenDayCredits: custom7d)
+            let limits = CreditLimits(fiveHourCredits: custom5h, sevenDayCredits: custom7d, monthlyPrice: prefs.customMonthlyPrice)
             validateCustomLimits(limits)
             return limits
         }
@@ -78,6 +87,14 @@ enum RateLimitTier: String, CaseIterable, Sendable {
 struct CreditLimits: Sendable, Equatable {
     let fiveHourCredits: Int
     let sevenDayCredits: Int
+    /// Monthly subscription price in USD. Nil for custom limits where price is unknown.
+    let monthlyPrice: Double?
+
+    init(fiveHourCredits: Int, sevenDayCredits: Int, monthlyPrice: Double? = nil) {
+        self.fiveHourCredits = fiveHourCredits
+        self.sevenDayCredits = sevenDayCredits
+        self.monthlyPrice = monthlyPrice
+    }
 
     /// 7d_limit / 5h_limit — used for slope normalization.
     /// ~9.09 for Pro, ~12.63 for Max 5x, ~7.58 for Max 20x.

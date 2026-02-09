@@ -12,6 +12,7 @@ struct AnalyticsView: View {
     var onClose: () -> Void
     let historicalDataService: any HistoricalDataServiceProtocol
     let appState: AppState
+    let headroomAnalysisService: any HeadroomAnalysisServiceProtocol
 
     /// Per-time-range toggle state for series visibility.
     /// Defaults both series to visible; stored as a simple value type for `@State` compatibility.
@@ -83,7 +84,9 @@ struct AnalyticsView: View {
             )
             HeadroomBreakdownBar(
                 resetEvents: resetEvents,
-                creditLimits: appState.creditLimits
+                creditLimits: appState.creditLimits,
+                headroomAnalysisService: headroomAnalysisService,
+                selectedTimeRange: selectedTimeRange
             )
         }
         .padding()
@@ -262,9 +265,24 @@ struct AnalyticsView: View {
     AnalyticsView(
         onClose: {},
         historicalDataService: PreviewHistoricalDataService(),
-        appState: AppState()
+        appState: AppState(),
+        headroomAnalysisService: PreviewAnalyticsHeadroomService()
     )
     .frame(width: 600, height: 500)
+}
+
+/// Minimal stub for HeadroomAnalysisServiceProtocol in previews only.
+private struct PreviewAnalyticsHeadroomService: HeadroomAnalysisServiceProtocol {
+    func analyzeResetEvent(fiveHourPeak: Double, sevenDayUtil: Double, creditLimits: CreditLimits) -> HeadroomBreakdown {
+        HeadroomBreakdown(usedPercent: 52, constrainedPercent: 12, wastePercent: 36,
+                          usedCredits: 286_000, constrainedCredits: 66_000, wasteCredits: 198_000)
+    }
+
+    func aggregateBreakdown(events: [ResetEvent]) -> PeriodSummary {
+        PeriodSummary(usedCredits: 2_860_000, constrainedCredits: 660_000, wasteCredits: 1_980_000,
+                      resetCount: events.count, avgPeakUtilization: 52.0,
+                      usedPercent: 52, constrainedPercent: 12, wastePercent: 36)
+    }
 }
 
 /// Minimal stub for SwiftUI previews only.

@@ -12,6 +12,7 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
     private var panel: NSPanel?
     private weak var appState: AppState?
     private var historicalDataService: (any HistoricalDataServiceProtocol)?
+    private var headroomAnalysisService: (any HeadroomAnalysisServiceProtocol)?
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -24,15 +25,16 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
 
     /// Configure with AppState and HistoricalDataService references.
     /// Must be called during app initialization.
-    func configure(appState: AppState, historicalDataService: any HistoricalDataServiceProtocol) {
+    func configure(appState: AppState, historicalDataService: any HistoricalDataServiceProtocol, headroomAnalysisService: any HeadroomAnalysisServiceProtocol) {
         self.appState = appState
         self.historicalDataService = historicalDataService
+        self.headroomAnalysisService = headroomAnalysisService
     }
 
     /// Toggles the analytics window: opens if closed, brings to front if open.
     func toggle() {
         guard appState != nil else {
-            assertionFailure("AnalyticsWindow.toggle() called before configure(appState:historicalDataService:)")
+            assertionFailure("AnalyticsWindow.toggle() called before configure(appState:historicalDataService:headroomAnalysisService:)")
             Self.logger.error("toggle() called before configure() - ignoring")
             return
         }
@@ -63,7 +65,7 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
     }
 
     private func createPanel() {
-        guard let appState, let historicalDataService else {
+        guard let appState, let historicalDataService, let headroomAnalysisService else {
             Self.logger.error("createPanel() called before configure() - missing dependencies")
             return
         }
@@ -92,7 +94,8 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
                 self?.close()
             },
             historicalDataService: historicalDataService,
-            appState: appState
+            appState: appState,
+            headroomAnalysisService: headroomAnalysisService
         )
         panel.contentView = NSHostingView(rootView: contentView)
 
@@ -120,6 +123,7 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
         panel = nil
         appState = nil
         historicalDataService = nil
+        headroomAnalysisService = nil
     }
     #endif
 }

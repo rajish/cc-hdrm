@@ -51,15 +51,15 @@ struct DatabaseManagerTests {
         #expect(manager.indexExists("idx_reset_events_timestamp"))
     }
 
-    @Test("Schema creation sets schema version to 1")
-    func schemaVersionSetTo1() throws {
+    @Test("Schema creation sets schema version to current (2)")
+    func schemaCreationSetsVersion() throws {
         let (manager, path) = makeManager()
         defer { cleanup(manager: manager, path: path) }
 
         try manager.ensureSchema()
 
         let version = try manager.getSchemaVersion()
-        #expect(version == 1)
+        #expect(version == 2)
     }
 
     @Test("Database path is correct")
@@ -202,46 +202,94 @@ struct DatabaseManagerTests {
         let version2 = try manager2.getSchemaVersion()
 
         #expect(version1 == version2)
-        #expect(version1 == 1)
+        #expect(version1 == 2)
     }
 
-    @Test("Migration branch is triggered when version is behind current")
-    func migrationBranchTriggered() throws {
+    @Test("Migration v1->v2 creates rollup_metadata table")
+    func migrationV1ToV2CreatesRollupMetadata() throws {
         let tempDir = FileManager.default.temporaryDirectory
         let testPath = tempDir.appendingPathComponent("test_\(UUID().uuidString).db")
 
-        // Create initial schema at version 1
+        // Create a v1 database manually (without rollup_metadata)
         let manager1 = DatabaseManager(databasePath: testPath)
-        try manager1.ensureSchema()
-        #expect(try manager1.getSchemaVersion() == 1)
-        
-        // Manually downgrade version to simulate older schema (version 0 would trigger create, not migrate)
-        // We'll use a raw connection to set user_version to a hypothetical older version
-        // Since currentSchemaVersion is 1, we need to test that migration path works
-        // For this test, we verify that re-running ensureSchema on an existing schema doesn't recreate tables
-        
-        // Insert data to verify tables aren't recreated
         let connection = try manager1.getConnection()
-        var errorMessage: UnsafeMutablePointer<CChar>?
-        sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util) VALUES (999, 0.99)", nil, nil, &errorMessage)
-        
+
+        // Create only the v1 tables (no rollup_metadata)
+        sqlite3_exec(connection, """
+            CREATE TABLE IF NOT EXISTS usage_polls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp INTEGER NOT NULL,
+                five_hour_util REAL,
+                five_hour_resets_at INTEGER,
+                seven_day_util REAL,
+                seven_day_resets_at INTEGER
+            )
+            """, nil, nil, nil)
+        sqlite3_exec(connection, """
+            CREATE TABLE IF NOT EXISTS usage_rollups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                period_start INTEGER NOT NULL,
+                period_end INTEGER NOT NULL,
+                resolution TEXT NOT NULL,
+                five_hour_avg REAL,
+                five_hour_peak REAL,
+                five_hour_min REAL,
+                seven_day_avg REAL,
+                seven_day_peak REAL,
+                seven_day_min REAL,
+                reset_count INTEGER DEFAULT 0,
+                waste_credits REAL
+            )
+            """, nil, nil, nil)
+        sqlite3_exec(connection, """
+            CREATE TABLE IF NOT EXISTS reset_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp INTEGER NOT NULL,
+                five_hour_peak REAL,
+                seven_day_util REAL,
+                tier TEXT,
+                used_credits REAL,
+                constrained_credits REAL,
+                waste_credits REAL
+            )
+            """, nil, nil, nil)
+        sqlite3_exec(connection, "PRAGMA user_version = 1", nil, nil, nil)
+
+        // Insert data to verify tables aren't dropped
+        sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util) VALUES (999, 0.99)", nil, nil, nil)
+
+        // Verify rollup_metadata does NOT exist yet
+        var checkStmt: OpaquePointer?
+        sqlite3_prepare_v2(connection, "SELECT name FROM sqlite_master WHERE type='table' AND name='rollup_metadata'", -1, &checkStmt, nil)
+        let beforeExists = sqlite3_step(checkStmt) == SQLITE_ROW
+        sqlite3_finalize(checkStmt)
+        #expect(!beforeExists, "rollup_metadata should NOT exist before migration")
+
         manager1.closeConnection()
 
-        // New manager should see existing schema and not recreate
+        // New manager triggers migration
         let manager2 = DatabaseManager(databasePath: testPath)
         defer { cleanup(manager: manager2, path: testPath) }
         try manager2.ensureSchema()
-        
-        // Verify data persists (proving tables weren't dropped/recreated)
+
+        // Verify migration ran: rollup_metadata exists
         let connection2 = try manager2.getConnection()
-        var statement: OpaquePointer?
-        sqlite3_prepare_v2(connection2, "SELECT five_hour_util FROM usage_polls WHERE timestamp = 999", -1, &statement, nil)
-        #expect(sqlite3_step(statement) == SQLITE_ROW)
-        let util = sqlite3_column_double(statement, 0)
-        sqlite3_finalize(statement)
-        
+        var checkStmt2: OpaquePointer?
+        sqlite3_prepare_v2(connection2, "SELECT name FROM sqlite_master WHERE type='table' AND name='rollup_metadata'", -1, &checkStmt2, nil)
+        let afterExists = sqlite3_step(checkStmt2) == SQLITE_ROW
+        sqlite3_finalize(checkStmt2)
+        #expect(afterExists, "rollup_metadata should exist after migration")
+
+        // Verify data persists (tables weren't dropped/recreated)
+        var dataStmt: OpaquePointer?
+        sqlite3_prepare_v2(connection2, "SELECT five_hour_util FROM usage_polls WHERE timestamp = 999", -1, &dataStmt, nil)
+        #expect(sqlite3_step(dataStmt) == SQLITE_ROW)
+        let util = sqlite3_column_double(dataStmt, 0)
+        sqlite3_finalize(dataStmt)
         #expect(util == 0.99)
-        #expect(try manager2.getSchemaVersion() == 1)
+
+        // Verify version bumped to 2
+        #expect(try manager2.getSchemaVersion() == 2)
     }
 
     // MARK: - Table Schema Verification (AC #1)

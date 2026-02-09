@@ -59,8 +59,6 @@ final class HeadroomAnalysisService: HeadroomAnalysisServiceProtocol, @unchecked
             wasteCredits: trueWasteCredits
         )
 
-        Self.logger.debug("Analysis: used=\(usedPercent, privacy: .public)% constrained=\(constrainedPercent, privacy: .public)% waste=\(wastePercent, privacy: .public)%")
-
         return breakdown
     }
 

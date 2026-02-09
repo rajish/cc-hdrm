@@ -21,6 +21,8 @@ protocol PreferencesManagerProtocol: AnyObject {
     var customFiveHourCredits: Int? { get set }
     /// User-configured custom 7-day credit limit for unknown tiers. Nil if unset.
     var customSevenDayCredits: Int? { get set }
+    /// User-configured monthly subscription price for custom credit limits. Nil if unset.
+    var customMonthlyPrice: Double? { get set }
 
     func resetToDefaults()
 }
