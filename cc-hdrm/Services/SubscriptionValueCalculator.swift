@@ -68,19 +68,23 @@ enum SubscriptionValueCalculator {
     }
 
     /// Returns the number of days for a time range.
+    /// For fixed ranges (.day, .week, .month), caps at actual data span so the
+    /// denominator never exceeds the time the user has real data for.
     /// For `.all`, uses the actual span from the first to last event.
     static func periodDays(for timeRange: TimeRange, events: [ResetEvent]) -> Double {
+        let nominalDays: Double
         switch timeRange {
-        case .day: return 1.0
-        case .week: return 7.0
-        case .month: return 30.0
-        case .all:
-            guard let first = events.first, let last = events.last else { return 0 }
-            let spanMs = last.timestamp - first.timestamp
-            let days = Double(spanMs) / (24.0 * 60.0 * 60.0 * 1000.0)
-            // Minimum 1 day to avoid near-zero denominators
-            return max(1.0, days)
+        case .day: nominalDays = 1.0
+        case .week: nominalDays = 7.0
+        case .month: nominalDays = 30.0
+        case .all: nominalDays = .greatestFiniteMagnitude
         }
+
+        guard let first = events.first, let last = events.last else { return 0 }
+        let spanMs = last.timestamp - first.timestamp
+        let actualDays = max(1.0, Double(spanMs) / (24.0 * 60.0 * 60.0 * 1000.0))
+
+        return min(nominalDays, actualDays)
     }
 
     /// Formats a dollar amount for display.

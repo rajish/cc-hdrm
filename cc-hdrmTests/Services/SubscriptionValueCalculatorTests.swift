@@ -24,12 +24,16 @@ struct SubscriptionValueCalculatorTests {
         return mock
     }
 
-    private func sampleEvents(count: Int = 3) -> [ResetEvent] {
+    /// Creates sample events spanning the given number of days (default 30).
+    /// Events are evenly spaced from `spanDays` ago to now.
+    private func sampleEvents(count: Int = 3, spanDays: Int = 30) -> [ResetEvent] {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let totalSpanMs = Int64(spanDays) * 24 * 3_600_000
+        let stepMs = count > 1 ? totalSpanMs / Int64(count - 1) : 0
         return (0..<count).map { i in
             ResetEvent(
                 id: Int64(i + 1),
-                timestamp: nowMs - Int64(i) * 3_600_000,
+                timestamp: nowMs - totalSpanMs + Int64(i) * stepMs,
                 fiveHourPeak: 85.0 + Double(i),
                 sevenDayUtil: 40.0 + Double(i),
                 tier: "default_claude_pro",
@@ -124,10 +128,12 @@ struct SubscriptionValueCalculatorTests {
         #expect(abs(days - 90.0) < 1.0, "Should be approximately 90 days")
     }
 
-    @Test(".all range with empty events returns 0 days")
-    func allRangeEmptyEvents() {
-        let days = SubscriptionValueCalculator.periodDays(for: .all, events: [])
-        #expect(days == 0)
+    @Test("Empty events returns 0 days for all ranges")
+    func emptyEventsReturnsZero() {
+        #expect(SubscriptionValueCalculator.periodDays(for: .all, events: []) == 0)
+        #expect(SubscriptionValueCalculator.periodDays(for: .day, events: []) == 0)
+        #expect(SubscriptionValueCalculator.periodDays(for: .week, events: []) == 0)
+        #expect(SubscriptionValueCalculator.periodDays(for: .month, events: []) == 0)
     }
 
     // MARK: - 9.7: nil creditLimits returns nil
@@ -259,12 +265,25 @@ struct SubscriptionValueCalculatorTests {
         #expect(SubscriptionValueCalculator.averageDaysPerMonth == 30.44)
     }
 
-    @Test("periodDays returns correct values for fixed ranges")
+    @Test("periodDays returns correct values for fixed ranges when data span is sufficient")
     func periodDaysFixedRanges() {
-        let events = sampleEvents()
+        let events = sampleEvents(spanDays: 30)
         #expect(SubscriptionValueCalculator.periodDays(for: .day, events: events) == 1.0)
         #expect(SubscriptionValueCalculator.periodDays(for: .week, events: events) == 7.0)
         #expect(SubscriptionValueCalculator.periodDays(for: .month, events: events) == 30.0)
+    }
+
+    @Test("periodDays caps at actual data span when data is shorter than selected range")
+    func periodDaysCapsAtActualSpan() {
+        let events = sampleEvents(count: 3, spanDays: 5)
+        // .day: min(1, 5) = 1
+        #expect(SubscriptionValueCalculator.periodDays(for: .day, events: events) == 1.0)
+        // .week: min(7, 5) = 5
+        #expect(SubscriptionValueCalculator.periodDays(for: .week, events: events) == 5.0)
+        // .month: min(30, 5) = 5
+        #expect(SubscriptionValueCalculator.periodDays(for: .month, events: events) == 5.0)
+        // .all: min(inf, 5) = 5
+        #expect(SubscriptionValueCalculator.periodDays(for: .all, events: events) == 5.0)
     }
 
     @Test(".all with single event returns minimum 1 day")

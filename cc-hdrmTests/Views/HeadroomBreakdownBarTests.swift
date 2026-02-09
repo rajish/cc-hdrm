@@ -44,12 +44,16 @@ struct HeadroomBreakdownBarTests {
         )
     }
 
-    private func sampleEvents(count: Int = 3) -> [ResetEvent] {
+    /// Creates sample events spanning the given number of days (default 30).
+    /// Events are evenly spaced from `spanDays` ago to now.
+    private func sampleEvents(count: Int = 3, spanDays: Int = 30) -> [ResetEvent] {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let totalSpanMs = Int64(spanDays) * 24 * 3_600_000
+        let stepMs = count > 1 ? totalSpanMs / Int64(count - 1) : 0
         return (0..<count).map { i in
             ResetEvent(
                 id: Int64(i + 1),
-                timestamp: nowMs - Int64(i) * 3_600_000,
+                timestamp: nowMs - totalSpanMs + Int64(i) * stepMs,
                 fiveHourPeak: 85.0 + Double(i),
                 sevenDayUtil: 40.0 + Double(i),
                 tier: "default_claude_pro",
