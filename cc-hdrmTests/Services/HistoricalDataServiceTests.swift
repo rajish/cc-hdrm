@@ -1068,6 +1068,86 @@ struct HistoricalDataServiceTests {
         #expect(rollups.isEmpty)
     }
 
+    // MARK: - Extra Usage Persistence Tests
+
+    @Test("persistPoll stores extra usage data")
+    func persistPollStoresExtraUsageData() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        let response = UsageResponse(
+            fiveHour: WindowUsage(utilization: 45.0, resetsAt: "2026-02-03T15:00:00Z"),
+            sevenDay: nil,
+            sevenDaySonnet: nil,
+            extraUsage: ExtraUsage(isEnabled: true, monthlyLimit: 500.0, usedCredits: 123.45, utilization: 0.247)
+        )
+
+        try await service.persistPoll(response)
+
+        let polls = try await service.getRecentPolls(hours: 1)
+        #expect(polls.count == 1)
+        #expect(polls[0].extraUsageEnabled == true)
+        #expect(polls[0].extraUsageMonthlyLimit == 500.0)
+        #expect(polls[0].extraUsageUsedCredits == 123.45)
+        #expect(polls[0].extraUsageUtilization == 0.247)
+    }
+
+    @Test("persistPoll stores nil extra usage fields when not reported")
+    func persistPollStoresNilExtraUsage() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        let response = UsageResponse(
+            fiveHour: WindowUsage(utilization: 45.0, resetsAt: "2026-02-03T15:00:00Z"),
+            sevenDay: nil,
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+
+        try await service.persistPoll(response)
+
+        let polls = try await service.getRecentPolls(hours: 1)
+        #expect(polls.count == 1)
+        #expect(polls[0].extraUsageEnabled == nil)
+        #expect(polls[0].extraUsageMonthlyLimit == nil)
+        #expect(polls[0].extraUsageUsedCredits == nil)
+        #expect(polls[0].extraUsageUtilization == nil)
+    }
+
+    @Test("getLastPoll returns extra usage data")
+    func getLastPollReturnsExtraUsageData() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        let response = UsageResponse(
+            fiveHour: WindowUsage(utilization: 20.0, resetsAt: nil),
+            sevenDay: nil,
+            sevenDaySonnet: nil,
+            extraUsage: ExtraUsage(isEnabled: false, monthlyLimit: 1000.0, usedCredits: 0.0, utilization: 0.0)
+        )
+
+        try await service.persistPoll(response)
+
+        let lastPoll = try await service.getLastPoll()
+        #expect(lastPoll != nil)
+        #expect(lastPoll?.extraUsageEnabled == false)
+        #expect(lastPoll?.extraUsageMonthlyLimit == 1000.0)
+        #expect(lastPoll?.extraUsageUsedCredits == 0.0)
+        #expect(lastPoll?.extraUsageUtilization == 0.0)
+    }
+
     // MARK: - Story 10.5: Data Query APIs - getResetEvents(range:) Tests
 
     @Test("getResetEvents with day range returns events in last 24h (AC 4)")
