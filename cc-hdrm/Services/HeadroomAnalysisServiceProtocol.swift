@@ -7,7 +7,7 @@ protocol HeadroomAnalysisServiceProtocol: Sendable {
     ///   - fiveHourPeak: Peak 5h utilization before reset (percentage 0-100)
     ///   - sevenDayUtil: 7d utilization at reset time (percentage 0-100)
     ///   - creditLimits: Credit limits for the user's tier
-    /// - Returns: Breakdown of used, constrained, and wasted credits
+    /// - Returns: Breakdown of used, constrained, and unused credits
     func analyzeResetEvent(
         fiveHourPeak: Double,
         sevenDayUtil: Double,

@@ -15,7 +15,7 @@ struct ResetEventTests {
             tier: "default_claude_max_5x",
             usedCredits: 1000.0,
             constrainedCredits: 200.0,
-            wasteCredits: 50.0
+            unusedCredits: 50.0
         )
 
         #expect(event.id == 1)
@@ -25,7 +25,7 @@ struct ResetEventTests {
         #expect(event.tier == "default_claude_max_5x")
         #expect(event.usedCredits == 1000.0)
         #expect(event.constrainedCredits == 200.0)
-        #expect(event.wasteCredits == 50.0)
+        #expect(event.unusedCredits == 50.0)
     }
 
     @Test("ResetEvent handles nil values correctly")
@@ -38,7 +38,7 @@ struct ResetEventTests {
             tier: nil,
             usedCredits: nil,
             constrainedCredits: nil,
-            wasteCredits: nil
+            unusedCredits: nil
         )
 
         #expect(event.id == 2)
@@ -48,7 +48,7 @@ struct ResetEventTests {
         #expect(event.tier == nil)
         #expect(event.usedCredits == nil)
         #expect(event.constrainedCredits == nil)
-        #expect(event.wasteCredits == nil)
+        #expect(event.unusedCredits == nil)
     }
 
     @Test("ResetEvent equality works correctly")
@@ -61,7 +61,7 @@ struct ResetEventTests {
             tier: "default",
             usedCredits: nil,
             constrainedCredits: nil,
-            wasteCredits: nil
+            unusedCredits: nil
         )
 
         let event2 = ResetEvent(
@@ -72,7 +72,7 @@ struct ResetEventTests {
             tier: "default",
             usedCredits: nil,
             constrainedCredits: nil,
-            wasteCredits: nil
+            unusedCredits: nil
         )
 
         let event3 = ResetEvent(
@@ -83,7 +83,7 @@ struct ResetEventTests {
             tier: "default",
             usedCredits: nil,
             constrainedCredits: nil,
-            wasteCredits: nil
+            unusedCredits: nil
         )
 
         #expect(event1 == event2)
@@ -100,7 +100,7 @@ struct ResetEventTests {
             tier: nil,
             usedCredits: nil,
             constrainedCredits: nil,
-            wasteCredits: nil
+            unusedCredits: nil
         )
 
         // If this compiles, ResetEvent is Sendable

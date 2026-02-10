@@ -11,7 +11,7 @@ struct HeadroomBreakdownBarTests {
     private func makeMockService(
         usedPercent: Double = 52,
         constrainedPercent: Double = 12,
-        wastePercent: Double = 36,
+        unusedPercent: Double = 36,
         avgPeakUtilization: Double = 52.0,
         usedCredits: Double = 2_860_000
     ) -> MockHeadroomAnalysisService {
@@ -19,12 +19,12 @@ struct HeadroomBreakdownBarTests {
         mock.mockPeriodSummary = PeriodSummary(
             usedCredits: usedCredits,
             constrainedCredits: 660_000,
-            wasteCredits: 1_980_000,
+            unusedCredits: 1_980_000,
             resetCount: 3,
             avgPeakUtilization: avgPeakUtilization,
             usedPercent: usedPercent,
             constrainedPercent: constrainedPercent,
-            wastePercent: wastePercent
+            unusedPercent: unusedPercent
         )
         return mock
     }
@@ -59,14 +59,14 @@ struct HeadroomBreakdownBarTests {
                 tier: "default_claude_pro",
                 usedCredits: nil,
                 constrainedCredits: nil,
-                wasteCredits: nil
+                unusedCredits: nil
             )
         }
     }
 
     // MARK: - Two-band bar renders (AC 1)
 
-    @Test("Bar renders two segments (used + wasted) without crashing")
+    @Test("Bar renders two segments (used + unused) without crashing")
     func rendersTwoSegments() {
         let mock = makeMockService()
         let bar = makeBar(resetEvents: sampleEvents(), headroomAnalysisService: mock)
@@ -113,7 +113,7 @@ struct HeadroomBreakdownBarTests {
         #expect(value!.monthlyPrice == 100.0)
     }
 
-    @Test("usedDollars + wastedDollars = periodPrice")
+    @Test("usedDollars + unusedDollars = periodPrice")
     func dollarsSumToPeriodPrice() {
         let value = SubscriptionValueCalculator.calculate(
             resetEvents: sampleEvents(),
@@ -122,8 +122,8 @@ struct HeadroomBreakdownBarTests {
             headroomAnalysisService: makeMockService()
         )
         #expect(value != nil)
-        let total = value!.usedDollars + value!.wastedDollars
-        #expect(abs(total - value!.periodPrice) < 0.01, "Used + wasted must equal period price")
+        let total = value!.usedDollars + value!.unusedDollars
+        #expect(abs(total - value!.periodPrice) < 0.01, "Used + unused must equal period price")
     }
 
     // MARK: - Nil creditLimits (AC 4)
@@ -188,8 +188,8 @@ struct HeadroomBreakdownBarTests {
     func allRangeUsesEventSpan() {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         let events = [
-            ResetEvent(id: 1, timestamp: nowMs - 90 * 24 * 3_600_000, fiveHourPeak: 50, sevenDayUtil: 30, tier: "default_claude_pro", usedCredits: nil, constrainedCredits: nil, wasteCredits: nil),
-            ResetEvent(id: 2, timestamp: nowMs, fiveHourPeak: 60, sevenDayUtil: 40, tier: "default_claude_pro", usedCredits: nil, constrainedCredits: nil, wasteCredits: nil)
+            ResetEvent(id: 1, timestamp: nowMs - 90 * 24 * 3_600_000, fiveHourPeak: 50, sevenDayUtil: 30, tier: "default_claude_pro", usedCredits: nil, constrainedCredits: nil, unusedCredits: nil),
+            ResetEvent(id: 2, timestamp: nowMs, fiveHourPeak: 60, sevenDayUtil: 40, tier: "default_claude_pro", usedCredits: nil, constrainedCredits: nil, unusedCredits: nil)
         ]
         let days = SubscriptionValueCalculator.periodDays(for: .all, events: events)
         #expect(abs(days - 90.0) < 1.0, "Should be approximately 90 days")
@@ -236,8 +236,8 @@ struct HeadroomBreakdownBarTests {
         #expect(mock.lastEvents?.count == 1)
     }
 
-    @Test("100% utilization produces zero wasted dollars")
-    func fullUtilizationZeroWaste() {
+    @Test("100% utilization produces zero unused dollars")
+    func fullUtilizationZeroUnused() {
         // usedCredits = sevenDayCredits * (7/7) = 5_000_000 (100% of weekly capacity)
         let mock = makeMockService(usedCredits: 5_000_000)
         let value = SubscriptionValueCalculator.calculate(
@@ -248,11 +248,11 @@ struct HeadroomBreakdownBarTests {
         )
         #expect(value != nil)
         #expect(value!.utilizationPercent == 100.0)
-        #expect(abs(value!.wastedDollars) < 0.01)
+        #expect(abs(value!.unusedDollars) < 0.01)
     }
 
-    @Test("0% utilization means all money wasted")
-    func zeroUtilizationAllWaste() {
+    @Test("0% utilization means all money unused")
+    func zeroUtilizationAllUnused() {
         let mock = makeMockService(usedCredits: 0)
         let value = SubscriptionValueCalculator.calculate(
             resetEvents: sampleEvents(),
@@ -263,7 +263,7 @@ struct HeadroomBreakdownBarTests {
         #expect(value != nil)
         #expect(value!.utilizationPercent == 0.0)
         #expect(value!.usedDollars == 0.0)
-        #expect(abs(value!.wastedDollars - value!.periodPrice) < 0.01)
+        #expect(abs(value!.unusedDollars - value!.periodPrice) < 0.01)
     }
 
     // MARK: - RateLimitTier monthlyPrice

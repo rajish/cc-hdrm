@@ -21,7 +21,7 @@ struct UsageRollupTests {
             sevenDayPeak: 35.0,
             sevenDayMin: 25.0,
             resetCount: 2,
-            wasteCredits: nil
+            unusedCredits: nil
         )
         let _: any Sendable = rollup
     }
@@ -40,7 +40,7 @@ struct UsageRollupTests {
             sevenDayPeak: 35.0,
             sevenDayMin: 25.0,
             resetCount: 2,
-            wasteCredits: nil
+            unusedCredits: nil
         )
         let rollup2 = UsageRollup(
             id: 1,
@@ -54,7 +54,7 @@ struct UsageRollupTests {
             sevenDayPeak: 35.0,
             sevenDayMin: 25.0,
             resetCount: 2,
-            wasteCredits: nil
+            unusedCredits: nil
         )
         #expect(rollup1 == rollup2)
     }
@@ -73,7 +73,7 @@ struct UsageRollupTests {
             sevenDayPeak: 65.0,
             sevenDayMin: 20.0,
             resetCount: 5,
-            wasteCredits: 123.45
+            unusedCredits: 123.45
         )
 
         #expect(rollup.id == 42)
@@ -87,7 +87,7 @@ struct UsageRollupTests {
         #expect(rollup.sevenDayPeak == 65.0)
         #expect(rollup.sevenDayMin == 20.0)
         #expect(rollup.resetCount == 5)
-        #expect(rollup.wasteCredits == 123.45)
+        #expect(rollup.unusedCredits == 123.45)
     }
 
     @Test("UsageRollup handles nil optional fields")
@@ -104,7 +104,7 @@ struct UsageRollupTests {
             sevenDayPeak: nil,
             sevenDayMin: nil,
             resetCount: 0,
-            wasteCredits: nil
+            unusedCredits: nil
         )
 
         #expect(rollup.fiveHourAvg == nil)
@@ -113,7 +113,7 @@ struct UsageRollupTests {
         #expect(rollup.sevenDayAvg == nil)
         #expect(rollup.sevenDayPeak == nil)
         #expect(rollup.sevenDayMin == nil)
-        #expect(rollup.wasteCredits == nil)
+        #expect(rollup.unusedCredits == nil)
     }
 
     // MARK: - Resolution Enum Tests

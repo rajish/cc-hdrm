@@ -28,13 +28,13 @@ struct HeadroomAnalysisServiceTests {
             tier: tier,
             usedCredits: nil,
             constrainedCredits: nil,
-            wasteCredits: nil
+            unusedCredits: nil
         )
     }
 
     // MARK: - 8.2: 5h_remaining <= 7d_remaining (AC-1 case 1)
 
-    @Test("analyzeResetEvent: 5h_remaining <= 7d_remaining — true_waste = 5h_remaining, constrained = 0")
+    @Test("analyzeResetEvent: 5h_remaining <= 7d_remaining — true_unused = 5h_remaining, constrained = 0")
     func analyzeWithFiveHourNotConstrained() {
         // 72% peak, 85% 7d util
         // 5h_remaining = (1-0.72) * 550,000 = 154,000
@@ -47,16 +47,16 @@ struct HeadroomAnalysisServiceTests {
         )
 
         #expect(isClose(breakdown.usedPercent, 72.0))
-        #expect(isClose(breakdown.wastePercent, 28.0))
+        #expect(isClose(breakdown.unusedPercent, 28.0))
         #expect(isClose(breakdown.constrainedPercent, 0.0))
         #expect(isClose(breakdown.usedCredits, 396_000))
-        #expect(isClose(breakdown.wasteCredits, 154_000))
+        #expect(isClose(breakdown.unusedCredits, 154_000))
         #expect(isClose(breakdown.constrainedCredits, 0))
     }
 
     // MARK: - 8.3: 5h_remaining > 7d_remaining (AC-1 case 2)
 
-    @Test("analyzeResetEvent: 5h_remaining > 7d_remaining — true_waste = 7d_remaining, constrained = difference")
+    @Test("analyzeResetEvent: 5h_remaining > 7d_remaining — true_unused = 7d_remaining, constrained = difference")
     func analyzeWithSevenDayConstrained() {
         // 50% peak, 98% 7d util
         // 5h_remaining = (1-0.50) * 550,000 = 275,000
@@ -71,16 +71,16 @@ struct HeadroomAnalysisServiceTests {
         #expect(isClose(breakdown.usedPercent, 50.0))
         #expect(isClose(breakdown.usedCredits, 275_000))
 
-        // true_waste = 7d_remaining = 100,000
-        #expect(isClose(breakdown.wasteCredits, 100_000))
+        // true_unused = 7d_remaining = 100,000
+        #expect(isClose(breakdown.unusedCredits, 100_000))
 
         // constrained = 5h_remaining - 7d_remaining = 175,000
         #expect(isClose(breakdown.constrainedCredits, 175_000))
 
         // Percentages relative to 5h limit (550,000)
-        let expectedWastePercent = (100_000.0 / 550_000.0) * 100.0
+        let expectedUnusedPercent = (100_000.0 / 550_000.0) * 100.0
         let expectedConstrainedPercent = (175_000.0 / 550_000.0) * 100.0
-        #expect(isClose(breakdown.wastePercent, expectedWastePercent))
+        #expect(isClose(breakdown.unusedPercent, expectedUnusedPercent))
         #expect(isClose(breakdown.constrainedPercent, expectedConstrainedPercent))
     }
 
@@ -106,14 +106,14 @@ struct HeadroomAnalysisServiceTests {
                 creditLimits: proLimits
             )
 
-            let sum = breakdown.usedPercent + breakdown.constrainedPercent + breakdown.wastePercent
+            let sum = breakdown.usedPercent + breakdown.constrainedPercent + breakdown.unusedPercent
             #expect(isClose(sum, 100.0), "Percentages should sum to 100%, got \(sum) for peak=\(scenario.peak), 7d=\(scenario.util7d)")
         }
     }
 
-    // MARK: - 8.5: 0% peak (no usage = 100% waste)
+    // MARK: - 8.5: 0% peak (no usage = 100% unused)
 
-    @Test("analyzeResetEvent: 0% peak — all waste, no usage, no constrained")
+    @Test("analyzeResetEvent: 0% peak — all unused, no usage, no constrained")
     func analyzeWithZeroPeak() {
         let breakdown = service.analyzeResetEvent(
             fiveHourPeak: 0.0,
@@ -126,14 +126,14 @@ struct HeadroomAnalysisServiceTests {
         #expect(isClose(breakdown.constrainedPercent, 0.0))
         #expect(isClose(breakdown.constrainedCredits, 0.0))
 
-        // All 550,000 credits wasted
-        #expect(isClose(breakdown.wastePercent, 100.0))
-        #expect(isClose(breakdown.wasteCredits, 550_000))
+        // All 550,000 credits unused
+        #expect(isClose(breakdown.unusedPercent, 100.0))
+        #expect(isClose(breakdown.unusedCredits, 550_000))
     }
 
-    // MARK: - 8.6: 100% peak (all used, 0 waste, 0 constrained)
+    // MARK: - 8.6: 100% peak (all used, 0 unused, 0 constrained)
 
-    @Test("analyzeResetEvent: 100% peak — all used, no waste, no constrained")
+    @Test("analyzeResetEvent: 100% peak — all used, no unused, no constrained")
     func analyzeWithFullPeak() {
         let breakdown = service.analyzeResetEvent(
             fiveHourPeak: 100.0,
@@ -143,8 +143,8 @@ struct HeadroomAnalysisServiceTests {
 
         #expect(isClose(breakdown.usedPercent, 100.0))
         #expect(isClose(breakdown.usedCredits, 550_000))
-        #expect(isClose(breakdown.wastePercent, 0.0))
-        #expect(isClose(breakdown.wasteCredits, 0.0))
+        #expect(isClose(breakdown.unusedPercent, 0.0))
+        #expect(isClose(breakdown.unusedCredits, 0.0))
         #expect(isClose(breakdown.constrainedPercent, 0.0))
         #expect(isClose(breakdown.constrainedCredits, 0.0))
     }
@@ -160,16 +160,16 @@ struct HeadroomAnalysisServiceTests {
 
         let summary = service.aggregateBreakdown(events: events)
 
-        // Event 1: used=396,000 constrained=0 waste=154,000
-        // Event 2: used=275,000 constrained=175,000 waste=100,000
+        // Event 1: used=396,000 constrained=0 unused=154,000
+        // Event 2: used=275,000 constrained=175,000 unused=100,000
         #expect(isClose(summary.usedCredits, 396_000 + 275_000))
         #expect(isClose(summary.constrainedCredits, 0 + 175_000))
-        #expect(isClose(summary.wasteCredits, 154_000 + 100_000))
+        #expect(isClose(summary.unusedCredits, 154_000 + 100_000))
         #expect(summary.resetCount == 2)
         #expect(isClose(summary.avgPeakUtilization, (72.0 + 50.0) / 2.0))
 
         // Percentages should sum to 100%
-        let sum = summary.usedPercent + summary.constrainedPercent + summary.wastePercent
+        let sum = summary.usedPercent + summary.constrainedPercent + summary.unusedPercent
         #expect(isClose(sum, 100.0))
     }
 
@@ -181,12 +181,12 @@ struct HeadroomAnalysisServiceTests {
 
         #expect(summary.usedCredits == 0)
         #expect(summary.constrainedCredits == 0)
-        #expect(summary.wasteCredits == 0)
+        #expect(summary.unusedCredits == 0)
         #expect(summary.resetCount == 0)
         #expect(summary.avgPeakUtilization == 0)
         #expect(summary.usedPercent == 0)
         #expect(summary.constrainedPercent == 0)
-        #expect(summary.wastePercent == 0)
+        #expect(summary.unusedPercent == 0)
     }
 
     // MARK: - 8.9: aggregateBreakdown skips events with nil peak/util
@@ -206,7 +206,7 @@ struct HeadroomAnalysisServiceTests {
         #expect(summary.resetCount == 1)
         #expect(isClose(summary.usedCredits, 396_000))
         #expect(isClose(summary.constrainedCredits, 0))
-        #expect(isClose(summary.wasteCredits, 154_000))
+        #expect(isClose(summary.unusedCredits, 154_000))
         #expect(isClose(summary.avgPeakUtilization, 72.0))
     }
 

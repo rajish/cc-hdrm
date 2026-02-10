@@ -123,10 +123,19 @@ development_status:
   13-7-gap-rendering-in-charts: done
   epic-13-retrospective: optional
 
-  epic-14: in-progress
+  epic-14: in-progress  # Renamed: Subscription Value & Usage Insights
   14-1-rate-limit-tier-credit-limits: done  # Absorbed into Story 3.3
   14-2-headroom-analysis-service: done
   14-3-headroom-breakdown-bar-component: done
-  14-4-breakdown-summary-statistics: backlog
-  14-5-analytics-view-integration: backlog
+  14-4-context-aware-value-summary-terminology-refactor: done  # Rewritten per sprint change proposal 2026-02-10
+  14-5-analytics-view-integration-conditional-display: backlog  # Rewritten per sprint change proposal 2026-02-10
   epic-14-retrospective: optional
+
+  epic-16: backlog  # Subscription Intelligence (Phase 4)
+  16-1-slow-burn-pattern-detection-service: backlog
+  16-2-pattern-notification-analytics-display: backlog
+  16-3-tier-recommendation-service: backlog
+  16-4-tier-recommendation-display-billing-cycle: backlog
+  16-5-context-aware-insight-engine: backlog  # Future iteration
+  16-6-self-benchmarking-visual-trends: backlog  # Future iteration
+  epic-16-retrospective: optional

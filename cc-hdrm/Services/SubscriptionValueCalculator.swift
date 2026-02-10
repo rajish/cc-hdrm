@@ -12,8 +12,8 @@ struct SubscriptionValue: Sendable, Equatable {
     let periodPrice: Double
     /// Dollar value of credits consumed
     let usedDollars: Double
-    /// Dollar value of credits wasted (not consumed)
-    let wastedDollars: Double
+    /// Dollar value of credits unused (not consumed)
+    let unusedDollars: Double
     /// Full monthly subscription price
     let monthlyPrice: Double
 }
@@ -54,7 +54,7 @@ enum SubscriptionValueCalculator {
         let utilizationPercent = min(100.0, (usedCredits / totalAvailableCredits) * 100.0)
         let periodPrice = monthlyPrice * (periodDays / averageDaysPerMonth)
         let usedDollars = (utilizationPercent / 100.0) * periodPrice
-        let wastedDollars = periodPrice - usedDollars
+        let unusedDollars = periodPrice - usedDollars
 
         return SubscriptionValue(
             usedCredits: usedCredits,
@@ -62,7 +62,7 @@ enum SubscriptionValueCalculator {
             utilizationPercent: utilizationPercent,
             periodPrice: periodPrice,
             usedDollars: usedDollars,
-            wastedDollars: wastedDollars,
+            unusedDollars: unusedDollars,
             monthlyPrice: monthlyPrice
         )
     }

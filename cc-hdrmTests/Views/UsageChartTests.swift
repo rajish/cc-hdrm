@@ -163,7 +163,7 @@ struct UsageChartTests {
                 sevenDayPeak: 20.0,
                 sevenDayMin: 10.0,
                 resetCount: 0,
-                wasteCredits: nil
+                unusedCredits: nil
             ))
         }
         let chart = makeChart(rollupData: rollups, timeRange: .week)
@@ -284,7 +284,7 @@ struct UsageChartTests {
                 sevenDayPeak: 20.0,
                 sevenDayMin: 10.0,
                 resetCount: 0,
-                wasteCredits: nil
+                unusedCredits: nil
             ))
         }
         for range in [TimeRange.week, .month, .all] {
@@ -601,7 +601,7 @@ struct UsageChartTests {
                 sevenDayPeak: 20.0 + Double(i) * 0.4,
                 sevenDayMin: 10.0 + Double(i) * 0.2,
                 resetCount: 0,
-                wasteCredits: nil
+                unusedCredits: nil
             ))
         }
         return rollups
@@ -628,7 +628,7 @@ struct UsageChartTests {
                 sevenDayPeak: 30.0,
                 sevenDayMin: 10.0,
                 resetCount: resetCount,
-                wasteCredits: nil
+                unusedCredits: nil
             ))
         }
         return rollups
@@ -689,21 +689,21 @@ struct UsageChartTests {
                 resolution: .fiveMin,
                 fiveHourAvg: 30.0, fiveHourPeak: 45.0, fiveHourMin: 20.0,
                 sevenDayAvg: 15.0, sevenDayPeak: 25.0, sevenDayMin: 10.0,
-                resetCount: 1, wasteCredits: nil
+                resetCount: 1, unusedCredits: nil
             ),
             UsageRollup(
                 id: 2, periodStart: hourStartMs + fiveMinMs, periodEnd: hourStartMs + 2 * fiveMinMs,
                 resolution: .fiveMin,
                 fiveHourAvg: 35.0, fiveHourPeak: 60.0, fiveHourMin: 25.0,
                 sevenDayAvg: 18.0, sevenDayPeak: 30.0, sevenDayMin: 12.0,
-                resetCount: 0, wasteCredits: nil
+                resetCount: 0, unusedCredits: nil
             ),
             UsageRollup(
                 id: 3, periodStart: hourStartMs + 2 * fiveMinMs, periodEnd: hourStartMs + 3 * fiveMinMs,
                 resolution: .fiveMin,
                 fiveHourAvg: 25.0, fiveHourPeak: 50.0, fiveHourMin: 15.0,
                 sevenDayAvg: 12.0, sevenDayPeak: 20.0, sevenDayMin: 8.0,
-                resetCount: 2, wasteCredits: nil
+                resetCount: 2, unusedCredits: nil
             ),
         ]
 
@@ -816,7 +816,7 @@ struct UsageChartTests {
                 resolution: .fiveMin,
                 fiveHourAvg: nil, fiveHourPeak: nil, fiveHourMin: nil,
                 sevenDayAvg: 20.0, sevenDayPeak: 30.0, sevenDayMin: 15.0,
-                resetCount: 0, wasteCredits: nil
+                resetCount: 0, unusedCredits: nil
             )
         ]
         let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .week)
@@ -834,7 +834,7 @@ struct UsageChartTests {
                 resolution: .fiveMin,
                 fiveHourAvg: 30.0, fiveHourPeak: 45.0, fiveHourMin: 20.0,
                 sevenDayAvg: nil, sevenDayPeak: nil, sevenDayMin: nil,
-                resetCount: 0, wasteCredits: nil
+                resetCount: 0, unusedCredits: nil
             )
         ]
         let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .week)
@@ -876,7 +876,7 @@ struct UsageChartTests {
                     sevenDayPeak: 25.0,
                     sevenDayMin: 10.0,
                     resetCount: 0,
-                    wasteCredits: nil
+                    unusedCredits: nil
                 ))
                 rollupId += 1
             }
@@ -914,7 +914,7 @@ struct UsageChartTests {
                     sevenDayPeak: 25.0,
                     sevenDayMin: 10.0,
                     resetCount: 0,
-                    wasteCredits: nil
+                    unusedCredits: nil
                 ))
                 rollupId += 1
             }
@@ -1100,7 +1100,7 @@ struct UsageChartTests {
                 resolution: .fiveMin,
                 fiveHourAvg: 30.0, fiveHourPeak: 45.0, fiveHourMin: 20.0,
                 sevenDayAvg: 15.0, sevenDayPeak: 25.0, sevenDayMin: 10.0,
-                resetCount: 0, wasteCredits: nil
+                resetCount: 0, unusedCredits: nil
             )
         ]
         let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .week)
@@ -1129,7 +1129,7 @@ struct UsageChartTests {
                 sevenDayPeak: 25.0,
                 sevenDayMin: 15.0,
                 resetCount: i == 12 ? 1 : 0,
-                wasteCredits: nil
+                unusedCredits: nil
             ))
         }
 

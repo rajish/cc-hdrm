@@ -562,11 +562,11 @@ struct DatabaseManagerTests {
         #expect(sqlite3_step(statement) == SQLITE_ROW)
 
         let tier = String(cString: sqlite3_column_text(statement, 0))
-        let wasteCredits = sqlite3_column_double(statement, 1)
+        let unusedCredits = sqlite3_column_double(statement, 1)
         sqlite3_finalize(statement)
 
         #expect(tier == "pro")
-        #expect(wasteCredits == 50.0)
+        #expect(unusedCredits == 50.0)
     }
 
     // MARK: - Protocol Conformance

@@ -344,7 +344,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 ? nil : sqlite3_column_double(statement, 5)
             let constrainedCredits: Double? = sqlite3_column_type(statement, 6) == SQLITE_NULL
                 ? nil : sqlite3_column_double(statement, 6)
-            let wasteCredits: Double? = sqlite3_column_type(statement, 7) == SQLITE_NULL
+            let unusedCredits: Double? = sqlite3_column_type(statement, 7) == SQLITE_NULL
                 ? nil : sqlite3_column_double(statement, 7)
 
             events.append(ResetEvent(
@@ -355,7 +355,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 tier: tier,
                 usedCredits: usedCredits,
                 constrainedCredits: constrainedCredits,
-                wasteCredits: wasteCredits
+                unusedCredits: unusedCredits
             ))
         }
 
@@ -592,11 +592,11 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             )
             sqlite3_bind_double(statement, 5, breakdown.usedCredits)
             sqlite3_bind_double(statement, 6, breakdown.constrainedCredits)
-            sqlite3_bind_double(statement, 7, breakdown.wasteCredits)
+            sqlite3_bind_double(statement, 7, breakdown.unusedCredits)
         } else {
             sqlite3_bind_null(statement, 5)  // used_credits
             sqlite3_bind_null(statement, 6)  // constrained_credits
-            sqlite3_bind_null(statement, 7)  // waste_credits
+            sqlite3_bind_null(statement, 7)  // waste_credits (SQL column name, maps to unusedCredits)
         }
 
         let stepResult = sqlite3_step(statement)
@@ -826,7 +826,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 sevenDayPeak: sevenDayPeak,
                 sevenDayMin: sevenDayMin,
                 resetCount: resetCount,
-                wasteCredits: nil,
+                unusedCredits: nil,
                 connection: connection
             )
         }
@@ -933,7 +933,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         sevenDayPeak: Double?,
         sevenDayMin: Double?,
         resetCount: Int,
-        wasteCredits: Double?,
+        unusedCredits: Double?,
         connection: OpaquePointer
     ) throws {
         let sql = """
@@ -984,7 +984,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
 
         sqlite3_bind_int(statement, 10, Int32(resetCount))
 
-        if let waste = wasteCredits { sqlite3_bind_double(statement, 11, waste) }
+        if let unused = unusedCredits { sqlite3_bind_double(statement, 11, unused) }
         else { sqlite3_bind_null(statement, 11) }
 
         let stepResult = sqlite3_step(statement)
@@ -1082,7 +1082,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 sevenDayPeak: sevenDayPeak,
                 sevenDayMin: sevenDayMin,
                 resetCount: resetCount,
-                wasteCredits: nil,
+                unusedCredits: nil,
                 connection: connection
             )
         }
@@ -1140,18 +1140,18 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             let sevenDayPeak = sevenDayPeaks.max()
             let sevenDayMin = sevenDayMins.min()
 
-            // Sum reset counts and waste credits
+            // Sum reset counts and unused credits
             let resetCount = bucketRollups.reduce(0) { $0 + $1.resetCount }
-            let wasteCreditsValues = bucketRollups.compactMap { $0.wasteCredits }
-            let wasteCredits = wasteCreditsValues.isEmpty ? nil : wasteCreditsValues.reduce(0, +)
+            let unusedCreditsValues = bucketRollups.compactMap { $0.unusedCredits }
+            let unusedCredits = unusedCreditsValues.isEmpty ? nil : unusedCreditsValues.reduce(0, +)
 
-            // Also sum waste_credits from reset_events in this day
-            let dailyWasteCredits = try sumWasteCredits(from: bucketStart, to: bucketEnd, connection: connection)
-            let totalWasteCredits: Double?
-            if wasteCredits != nil || dailyWasteCredits != nil {
-                totalWasteCredits = (wasteCredits ?? 0) + (dailyWasteCredits ?? 0)
+            // Also sum unused credits from reset_events in this day
+            let dailyUnusedCredits = try sumUnusedCredits(from: bucketStart, to: bucketEnd, connection: connection)
+            let totalUnusedCredits: Double?
+            if unusedCredits != nil || dailyUnusedCredits != nil {
+                totalUnusedCredits = (unusedCredits ?? 0) + (dailyUnusedCredits ?? 0)
             } else {
-                totalWasteCredits = nil
+                totalUnusedCredits = nil
             }
 
             try insertRollup(
@@ -1165,7 +1165,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 sevenDayPeak: sevenDayPeak,
                 sevenDayMin: sevenDayMin,
                 resetCount: resetCount,
-                wasteCredits: totalWasteCredits,
+                unusedCredits: totalUnusedCredits,
                 connection: connection
             )
         }
@@ -1232,7 +1232,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             let sevenDayMin: Double? = sqlite3_column_type(statement, 9) == SQLITE_NULL
                 ? nil : sqlite3_column_double(statement, 9)
             let resetCount = Int(sqlite3_column_int(statement, 10))
-            let wasteCredits: Double? = sqlite3_column_type(statement, 11) == SQLITE_NULL
+            let unusedCredits: Double? = sqlite3_column_type(statement, 11) == SQLITE_NULL
                 ? nil : sqlite3_column_double(statement, 11)
 
             rollups.append(UsageRollup(
@@ -1247,7 +1247,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 sevenDayPeak: sevenDayPeak,
                 sevenDayMin: sevenDayMin,
                 resetCount: resetCount,
-                wasteCredits: wasteCredits
+                unusedCredits: unusedCredits
             ))
         }
 
@@ -1288,8 +1288,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         }
     }
 
-    /// Sums waste_credits from reset_events in a time range.
-    private func sumWasteCredits(from: Int64, to: Int64, connection: OpaquePointer) throws -> Double? {
+    /// Sums unused credits (waste_credits column) from reset_events in a time range.
+    private func sumUnusedCredits(from: Int64, to: Int64, connection: OpaquePointer) throws -> Double? {
         let sql = "SELECT SUM(waste_credits) FROM reset_events WHERE timestamp >= ? AND timestamp < ?"
 
         var statement: OpaquePointer?
@@ -1339,7 +1339,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             sevenDayPeak: poll.sevenDayUtil,
             sevenDayMin: poll.sevenDayUtil,
             resetCount: 0,
-            wasteCredits: nil
+            unusedCredits: nil
         )
     }
 
@@ -1377,7 +1377,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                     sevenDayPeak: rollup.sevenDayPeak,
                     sevenDayMin: rollup.sevenDayMin,
                     resetCount: count,
-                    wasteCredits: rollup.wasteCredits
+                    unusedCredits: rollup.unusedCredits
                 )
             }
             return rollup
