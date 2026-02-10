@@ -10,12 +10,22 @@ struct AnalyticsViewTests {
     private func makeView(
         onClose: @escaping () -> Void = {},
         historicalDataService: any HistoricalDataServiceProtocol = MockHistoricalDataService(),
-        appState: AppState = AppState()
+        appState: AppState = AppState(),
+        headroomAnalysisService: any HeadroomAnalysisServiceProtocol = {
+            let mock = MockHeadroomAnalysisService()
+            mock.mockPeriodSummary = PeriodSummary(
+                usedCredits: 52, constrainedCredits: 12, wasteCredits: 36,
+                resetCount: 1, avgPeakUtilization: 52.0,
+                usedPercent: 52, constrainedPercent: 12, wastePercent: 36
+            )
+            return mock
+        }()
     ) -> AnalyticsView {
         AnalyticsView(
             onClose: onClose,
             historicalDataService: historicalDataService,
-            appState: appState
+            appState: appState,
+            headroomAnalysisService: headroomAnalysisService
         )
     }
 

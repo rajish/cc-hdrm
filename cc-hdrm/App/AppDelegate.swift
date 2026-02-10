@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var updateCheckService: (any UpdateCheckServiceProtocol)?
     private var slopeCalculationService: SlopeCalculationService?
     private var historicalDataServiceRef: HistoricalDataService?
+    private var headroomAnalysisServiceRef: (any HeadroomAnalysisServiceProtocol)?
     private var analyticsWindow: AnalyticsWindow?
     private var observationTask: Task<Void, Never>?
     private var eventMonitor: Any?
@@ -115,6 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if pollingEngine == nil {
             // Create HeadroomAnalysisService for credit breakdown calculations
             let headroomAnalysisService = HeadroomAnalysisService(preferencesManager: preferences)
+            self.headroomAnalysisServiceRef = headroomAnalysisService
 
             // Create HistoricalDataService for poll persistence
             let historicalDataService = HistoricalDataService(
@@ -140,9 +142,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
 
-        // Configure AnalyticsWindow with AppState and HistoricalDataService
-        if let histService = historicalDataServiceRef {
-            analyticsWindow?.configure(appState: state, historicalDataService: histService)
+        // Configure AnalyticsWindow with AppState, HistoricalDataService, and HeadroomAnalysisService
+        if let histService = historicalDataServiceRef, let headroomService = headroomAnalysisServiceRef {
+            analyticsWindow?.configure(appState: state, historicalDataService: histService, headroomAnalysisService: headroomService)
         }
 
         // Create FreshnessMonitor if not already injected (test path)

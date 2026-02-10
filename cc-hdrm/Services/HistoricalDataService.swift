@@ -16,6 +16,15 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
 
     /// Threshold for fallback reset detection: 50% absolute drop
     private let utilizationDropThreshold: Double = 50.0
+    /// Tolerance in milliseconds for fiveHourResetsAt jitter.
+    /// The API returns timestamps that jitter by up to ~1 second between polls.
+    /// Two timestamps within this tolerance are considered the same reset window.
+    private let resetsAtToleranceMs: Int64 = 60_000
+    /// Minimum cooldown between accepted 5h resets (4 hours in ms).
+    /// A 5-hour window cannot reset more than once every ~5 hours.
+    /// Using 4h as a conservative floor to avoid rejecting legitimate resets
+    /// that occur slightly before the 5h mark.
+    private let resetCooldownMs: Int64 = 4 * 60 * 60 * 1000
 
     /// Creates a HistoricalDataService with the specified database manager.
     /// - Parameters:
@@ -386,10 +395,10 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         let resetDetected: Bool
         let detectionMethod: String
 
-        // Primary detection: resets_at timestamp shift
+        // Primary detection: resets_at timestamp shift (with jitter tolerance)
         if let currentResetsAt = currentPoll.fiveHourResetsAt,
            let previousResetsAt = previousPoll.fiveHourResetsAt,
-           currentResetsAt != previousResetsAt {
+           abs(currentResetsAt - previousResetsAt) > resetsAtToleranceMs {
             resetDetected = true
             detectionMethod = "resets_at shifted from \(previousResetsAt) to \(currentResetsAt)"
         }
@@ -411,6 +420,14 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         }
 
         guard resetDetected else { return }
+
+        // Cooldown: reject if a reset was recorded within the last 4 hours
+        let lastResetTimestamp = try getLastResetEventTimestamp(connection: connection)
+        if let last = lastResetTimestamp,
+           currentPoll.timestamp - last < resetCooldownMs {
+            Self.logger.debug("Reset suppressed by cooldown: \(currentPoll.timestamp - last)ms since last reset (< \(self.resetCooldownMs)ms)")
+            return
+        }
 
         // Calculate peak utilization from recent polls (last 5 hours)
         let peakUtil = try await getRecentPeakUtilization(beforeTimestamp: currentPoll.timestamp, connection: connection)
@@ -831,6 +848,30 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         }
 
         return polls
+    }
+
+    /// Returns the timestamp of the most recent reset event, or nil if none exist.
+    private func getLastResetEventTimestamp(connection: OpaquePointer) throws -> Int64? {
+        let sql = "SELECT MAX(timestamp) FROM reset_events"
+
+        var statement: OpaquePointer?
+        defer {
+            if let statement = statement {
+                sqlite3_finalize(statement)
+            }
+        }
+
+        let prepareResult = sqlite3_prepare_v2(connection, sql, -1, &statement, nil)
+        guard prepareResult == SQLITE_OK else {
+            throw AppError.databaseQueryFailed(underlying: SQLiteError.prepareFailed(code: prepareResult))
+        }
+
+        guard sqlite3_step(statement) == SQLITE_ROW,
+              sqlite3_column_type(statement, 0) != SQLITE_NULL else {
+            return nil
+        }
+
+        return sqlite3_column_int64(statement, 0)
     }
 
     /// Counts reset events in a time range.
@@ -1281,6 +1322,73 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         )
     }
 
+    /// Converts raw polls to rollups and enriches them with reset event counts
+    /// from the reset_events table, so the bar chart can display reset markers
+    /// for the last 24h of data (which isn't yet rolled up).
+    private func pollsToRollupsWithResets(_ polls: [UsagePoll], connection: OpaquePointer) throws -> [UsageRollup] {
+        guard !polls.isEmpty else { return [] }
+
+        // Query reset event timestamps in this poll range
+        let fromTs = polls.first!.timestamp
+        let toTs = polls.last!.timestamp + Self.estimatedPollIntervalMs
+        let resetTimestamps = try queryResetEventTimestamps(from: fromTs, to: toTs, connection: connection)
+
+        guard !resetTimestamps.isEmpty else {
+            return polls.map { pollToRollup($0) }
+        }
+
+        // For each poll, check if a reset event falls within its period
+        return polls.map { poll in
+            var rollup = pollToRollup(poll)
+            let count = resetTimestamps.filter { ts in
+                ts >= poll.timestamp && ts < poll.timestamp + Self.estimatedPollIntervalMs
+            }.count
+            if count > 0 {
+                rollup = UsageRollup(
+                    id: rollup.id,
+                    periodStart: rollup.periodStart,
+                    periodEnd: rollup.periodEnd,
+                    resolution: rollup.resolution,
+                    fiveHourAvg: rollup.fiveHourAvg,
+                    fiveHourPeak: rollup.fiveHourPeak,
+                    fiveHourMin: rollup.fiveHourMin,
+                    sevenDayAvg: rollup.sevenDayAvg,
+                    sevenDayPeak: rollup.sevenDayPeak,
+                    sevenDayMin: rollup.sevenDayMin,
+                    resetCount: count,
+                    wasteCredits: rollup.wasteCredits
+                )
+            }
+            return rollup
+        }
+    }
+
+    /// Queries reset event timestamps in a given range.
+    private func queryResetEventTimestamps(from: Int64, to: Int64, connection: OpaquePointer) throws -> [Int64] {
+        let sql = "SELECT timestamp FROM reset_events WHERE timestamp >= ? AND timestamp < ? ORDER BY timestamp"
+
+        var statement: OpaquePointer?
+        defer {
+            if let statement = statement {
+                sqlite3_finalize(statement)
+            }
+        }
+
+        let prepareResult = sqlite3_prepare_v2(connection, sql, -1, &statement, nil)
+        guard prepareResult == SQLITE_OK else {
+            throw AppError.databaseQueryFailed(underlying: SQLiteError.prepareFailed(code: prepareResult))
+        }
+
+        sqlite3_bind_int64(statement, 1, from)
+        sqlite3_bind_int64(statement, 2, to)
+
+        var timestamps: [Int64] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            timestamps.append(sqlite3_column_int64(statement, 0))
+        }
+        return timestamps
+    }
+
     /// Queries historical data at appropriate resolution for the time range.
     private func queryRolledUpData(range: TimeRange, connection: OpaquePointer) async throws -> [UsageRollup] {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
@@ -1292,14 +1400,14 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
 
         switch range {
         case .day:
-            // Raw polls only from last 24h - convert to rollup format for consistency
+            // Raw polls only from last 24h - convert to rollup format with reset counts
             let polls = try queryRawPollsForRollup(from: twentyFourHoursAgo, to: nowMs, connection: connection)
-            allRollups.append(contentsOf: polls.map { pollToRollup($0) })
+            allRollups.append(contentsOf: try pollsToRollupsWithResets(polls, connection: connection))
 
         case .week:
             // Raw <24h + 5min rollups 1-7d
             let recentPolls = try queryRawPollsForRollup(from: twentyFourHoursAgo, to: nowMs, connection: connection)
-            allRollups.append(contentsOf: recentPolls.map { pollToRollup($0) })
+            allRollups.append(contentsOf: try pollsToRollupsWithResets(recentPolls, connection: connection))
             let fiveMinRollups = try queryRollupsForRollup(
                 resolution: .fiveMin,
                 from: sevenDaysAgo,
@@ -1311,7 +1419,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         case .month:
             // Raw + 5min + hourly
             let recentPolls = try queryRawPollsForRollup(from: twentyFourHoursAgo, to: nowMs, connection: connection)
-            allRollups.append(contentsOf: recentPolls.map { pollToRollup($0) })
+            allRollups.append(contentsOf: try pollsToRollupsWithResets(recentPolls, connection: connection))
             let fiveMinRollups = try queryRollupsForRollup(
                 resolution: .fiveMin,
                 from: sevenDaysAgo,
@@ -1330,7 +1438,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         case .all:
             // Raw + 5min + hourly + daily
             let recentPolls = try queryRawPollsForRollup(from: twentyFourHoursAgo, to: nowMs, connection: connection)
-            allRollups.append(contentsOf: recentPolls.map { pollToRollup($0) })
+            allRollups.append(contentsOf: try pollsToRollupsWithResets(recentPolls, connection: connection))
             let fiveMinRollups = try queryRollupsForRollup(
                 resolution: .fiveMin,
                 from: sevenDaysAgo,

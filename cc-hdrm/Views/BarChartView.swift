@@ -417,7 +417,7 @@ private struct StaticBarChartContent: View {
                 AxisMarks(values: .automatic(desiredCount: 7)) { _ in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
                         .foregroundStyle(.secondary.opacity(0.3))
-                    AxisValueLabel(format: .dateTime.weekday(.abbreviated).hour())
+                    AxisValueLabel(format: .dateTime.weekday(.abbreviated).day().month(.abbreviated))
                 }
             case .month, .all:
                 AxisMarks(values: .automatic(desiredCount: 7)) { _ in

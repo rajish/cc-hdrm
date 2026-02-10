@@ -8,99 +8,283 @@ struct HeadroomBreakdownBarTests {
 
     // MARK: - Helpers
 
+    private func makeMockService(
+        usedPercent: Double = 52,
+        constrainedPercent: Double = 12,
+        wastePercent: Double = 36,
+        avgPeakUtilization: Double = 52.0,
+        usedCredits: Double = 2_860_000
+    ) -> MockHeadroomAnalysisService {
+        let mock = MockHeadroomAnalysisService()
+        mock.mockPeriodSummary = PeriodSummary(
+            usedCredits: usedCredits,
+            constrainedCredits: 660_000,
+            wasteCredits: 1_980_000,
+            resetCount: 3,
+            avgPeakUtilization: avgPeakUtilization,
+            usedPercent: usedPercent,
+            constrainedPercent: constrainedPercent,
+            wastePercent: wastePercent
+        )
+        return mock
+    }
+
     private func makeBar(
         resetEvents: [ResetEvent] = [],
-        creditLimits: CreditLimits? = CreditLimits(fiveHourCredits: 100, sevenDayCredits: 909)
+        creditLimits: CreditLimits? = RateLimitTier.pro.creditLimits,
+        headroomAnalysisService: (any HeadroomAnalysisServiceProtocol)? = nil,
+        selectedTimeRange: TimeRange = .week
     ) -> HeadroomBreakdownBar {
-        HeadroomBreakdownBar(
+        let service = headroomAnalysisService ?? makeMockService()
+        return HeadroomBreakdownBar(
             resetEvents: resetEvents,
-            creditLimits: creditLimits
+            creditLimits: creditLimits,
+            headroomAnalysisService: service,
+            selectedTimeRange: selectedTimeRange
         )
     }
 
-    // MARK: - Initialization
-
-    @Test("HeadroomBreakdownBar renders without crashing")
-    func rendersWithoutCrash() {
-        let bar = makeBar()
-        let _ = bar.body
+    /// Creates sample events spanning the given number of days (default 30).
+    /// Events are evenly spaced from `spanDays` ago to now.
+    private func sampleEvents(count: Int = 3, spanDays: Int = 30) -> [ResetEvent] {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let totalSpanMs = Int64(spanDays) * 24 * 3_600_000
+        let stepMs = count > 1 ? totalSpanMs / Int64(count - 1) : 0
+        return (0..<count).map { i in
+            ResetEvent(
+                id: Int64(i + 1),
+                timestamp: nowMs - totalSpanMs + Int64(i) * stepMs,
+                fiveHourPeak: 85.0 + Double(i),
+                sevenDayUtil: 40.0 + Double(i),
+                tier: "default_claude_pro",
+                usedCredits: nil,
+                constrainedCredits: nil,
+                wasteCredits: nil
+            )
+        }
     }
 
-    // MARK: - Reset Event Count Display
+    // MARK: - Two-band bar renders (AC 1)
 
-    @Test("HeadroomBreakdownBar shows reset event count when events present")
-    func showsResetEventCount() {
+    @Test("Bar renders two segments (used + wasted) without crashing")
+    func rendersTwoSegments() {
+        let mock = makeMockService()
+        let bar = makeBar(resetEvents: sampleEvents(), headroomAnalysisService: mock)
+        let _ = bar.body
+        #expect(mock.aggregateBreakdownCallCount == 1, "aggregateBreakdown should be called once")
+    }
+
+    @Test("Bar passes correct events to aggregateBreakdown")
+    func passesCorrectEvents() {
+        let events = sampleEvents(count: 5)
+        let mock = makeMockService()
+        let bar = makeBar(resetEvents: events, headroomAnalysisService: mock)
+        let _ = bar.body
+        #expect(mock.lastEvents?.count == 5, "Should pass all 5 events to service")
+    }
+
+    // MARK: - Dollar amounts (AC 2)
+
+    @Test("Pro tier week range produces correct dollar proration")
+    func proWeekDollarProration() {
+        let value = SubscriptionValueCalculator.calculate(
+            resetEvents: sampleEvents(),
+            creditLimits: RateLimitTier.pro.creditLimits,
+            timeRange: .week,
+            headroomAnalysisService: makeMockService()
+        )
+        #expect(value != nil)
+        // Period price = $20 * 7/30.44 ≈ $4.60
+        #expect(abs(value!.periodPrice - (20.0 * 7.0 / 30.44)) < 0.01)
+        #expect(value!.monthlyPrice == 20.0)
+    }
+
+    @Test("Max 5x month range produces correct dollar proration")
+    func max5xMonthDollarProration() {
+        let value = SubscriptionValueCalculator.calculate(
+            resetEvents: sampleEvents(),
+            creditLimits: RateLimitTier.max5x.creditLimits,
+            timeRange: .month,
+            headroomAnalysisService: makeMockService()
+        )
+        #expect(value != nil)
+        // Period price = $100 * 30/30.44 ≈ $98.55
+        #expect(abs(value!.periodPrice - (100.0 * 30.0 / 30.44)) < 0.01)
+        #expect(value!.monthlyPrice == 100.0)
+    }
+
+    @Test("usedDollars + wastedDollars = periodPrice")
+    func dollarsSumToPeriodPrice() {
+        let value = SubscriptionValueCalculator.calculate(
+            resetEvents: sampleEvents(),
+            creditLimits: RateLimitTier.pro.creditLimits,
+            timeRange: .week,
+            headroomAnalysisService: makeMockService()
+        )
+        #expect(value != nil)
+        let total = value!.usedDollars + value!.wastedDollars
+        #expect(abs(total - value!.periodPrice) < 0.01, "Used + wasted must equal period price")
+    }
+
+    // MARK: - Nil creditLimits (AC 4)
+
+    @Test("Nil creditLimits shows unavailable message -- does not call service")
+    func nilCreditLimitsShowsUnavailable() {
+        let mock = makeMockService()
+        let bar = makeBar(resetEvents: sampleEvents(), creditLimits: nil, headroomAnalysisService: mock)
+        let _ = bar.body
+        #expect(mock.aggregateBreakdownCallCount == 0, "Service should NOT be called when creditLimits is nil")
+    }
+
+    // MARK: - Empty resetEvents (AC 5)
+
+    @Test("Empty resetEvents shows no-events message -- does not call service")
+    func emptyEventsShowsNoEventsMessage() {
+        let mock = makeMockService()
+        let bar = makeBar(resetEvents: [], headroomAnalysisService: mock)
+        let _ = bar.body
+        #expect(mock.aggregateBreakdownCallCount == 0, "Service should NOT be called when events are empty")
+    }
+
+    // MARK: - Custom limits without price (percentage-only mode)
+
+    @Test("Custom limits with nil monthlyPrice shows percentage-only mode")
+    func customLimitsPercentageOnly() {
+        let customLimits = CreditLimits(fiveHourCredits: 1_000_000, sevenDayCredits: 10_000_000)
+        let mock = makeMockService()
+        let bar = makeBar(resetEvents: sampleEvents(), creditLimits: customLimits, headroomAnalysisService: mock)
+        let _ = bar.body
+        // SubscriptionValueCalculator returns nil -> percentage-only path calls aggregateBreakdown
+        #expect(mock.aggregateBreakdownCallCount == 1, "Service should be called for percentage-only mode")
+    }
+
+    // MARK: - VoiceOver (AC 3)
+
+    @Test("Dollar formatting: < $10 shows cents, >= $10 shows whole dollars")
+    func dollarFormatting() {
+        #expect(SubscriptionValueCalculator.formatDollars(4.60) == "$4.60")
+        #expect(SubscriptionValueCalculator.formatDollars(0.66) == "$0.66")
+        #expect(SubscriptionValueCalculator.formatDollars(9.99) == "$9.99")
+        #expect(SubscriptionValueCalculator.formatDollars(10.0) == "$10")
+        #expect(SubscriptionValueCalculator.formatDollars(75.0) == "$75")
+        #expect(SubscriptionValueCalculator.formatDollars(200.0) == "$200")
+    }
+
+    // MARK: - Time range variations
+
+    @Test("Day range proration is correct (1/30.44 of monthly)")
+    func dayRangeProration() {
+        let value = SubscriptionValueCalculator.calculate(
+            resetEvents: sampleEvents(),
+            creditLimits: RateLimitTier.pro.creditLimits,
+            timeRange: .day,
+            headroomAnalysisService: makeMockService()
+        )
+        #expect(value != nil)
+        #expect(abs(value!.periodPrice - (20.0 * 1.0 / 30.44)) < 0.01)
+    }
+
+    @Test(".all range uses actual event span")
+    func allRangeUsesEventSpan() {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         let events = [
-            ResetEvent(id: 1, timestamp: nowMs - 3_600_000, fiveHourPeak: 85.0, sevenDayUtil: 40.0, tier: "pro", usedCredits: nil, constrainedCredits: nil, wasteCredits: nil),
-            ResetEvent(id: 2, timestamp: nowMs - 1_800_000, fiveHourPeak: 92.0, sevenDayUtil: 42.0, tier: "pro", usedCredits: nil, constrainedCredits: nil, wasteCredits: nil),
-            ResetEvent(id: 3, timestamp: nowMs, fiveHourPeak: 78.0, sevenDayUtil: 38.0, tier: "pro", usedCredits: nil, constrainedCredits: nil, wasteCredits: nil)
+            ResetEvent(id: 1, timestamp: nowMs - 90 * 24 * 3_600_000, fiveHourPeak: 50, sevenDayUtil: 30, tier: "default_claude_pro", usedCredits: nil, constrainedCredits: nil, wasteCredits: nil),
+            ResetEvent(id: 2, timestamp: nowMs, fiveHourPeak: 60, sevenDayUtil: 40, tier: "default_claude_pro", usedCredits: nil, constrainedCredits: nil, wasteCredits: nil)
         ]
-        let bar = makeBar(resetEvents: events)
-        // Should display "Headroom breakdown: 3 reset events in period"
-        let _ = bar.body
+        let days = SubscriptionValueCalculator.periodDays(for: .all, events: events)
+        #expect(abs(days - 90.0) < 1.0, "Should be approximately 90 days")
     }
 
-    @Test("HeadroomBreakdownBar shows no-events message when empty")
-    func showsNoEventsMessage() {
-        let bar = makeBar(resetEvents: [])
-        // Should display "No reset events in this period"
-        let _ = bar.body
+    @Test(".all range with empty events returns 0 days")
+    func allRangeEmptyEvents() {
+        let days = SubscriptionValueCalculator.periodDays(for: .all, events: [])
+        #expect(days == 0)
     }
 
-    // MARK: - Nil Credit Limits (Unknown Tier)
+    // MARK: - Utilization color
 
-    @Test("HeadroomBreakdownBar shows unavailable message when credit limits are nil")
-    func showsUnavailableWhenNilCreditLimits() {
-        let bar = makeBar(creditLimits: nil)
-        // Should display "Headroom breakdown unavailable -- unknown subscription tier"
-        let _ = bar.body
+    @Test("Low utilization produces .normal state (green)")
+    func lowUtilizationProducesNormal() {
+        let state = HeadroomState(from: 30.0)
+        #expect(state == .normal, "30% utilization = 70% headroom -> .normal")
     }
 
-    @Test("HeadroomBreakdownBar prioritizes nil credit limits message over reset events")
-    func nilCreditLimitsPrioritizedOverEvents() {
-        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-        let events = [
-            ResetEvent(id: 1, timestamp: nowMs, fiveHourPeak: 85.0, sevenDayUtil: 40.0, tier: nil, usedCredits: nil, constrainedCredits: nil, wasteCredits: nil)
-        ]
-        let bar = makeBar(resetEvents: events, creditLimits: nil)
-        // Even with events present, nil credit limits should show unavailable message
-        let _ = bar.body
+    @Test("High utilization produces .critical state (red)")
+    func highUtilizationProducesCritical() {
+        let state = HeadroomState(from: 97.0)
+        #expect(state == .critical, "97% utilization = 3% headroom -> .critical")
     }
 
-    // MARK: - Fixed Height
+    // MARK: - Edge cases
 
-    @Test("HeadroomBreakdownBar renders at fixed 80px height")
-    func fixedHeight() {
-        // Cannot directly assert SwiftUI frame modifiers, but verify renders
-        let bar = makeBar()
-        let _ = bar.body
+    @Test("Bar renders with different time ranges")
+    func differentTimeRanges() {
+        let mock = makeMockService()
+        for range in TimeRange.allCases {
+            let bar = makeBar(resetEvents: sampleEvents(), headroomAnalysisService: mock, selectedTimeRange: range)
+            let _ = bar.body
+        }
+        // Called once per time range (4 times)
+        #expect(mock.aggregateBreakdownCallCount == 4)
     }
 
-    // MARK: - Different Credit Limit Tiers
-
-    @Test("HeadroomBreakdownBar renders with Pro tier limits")
-    func rendersWithProLimits() {
-        let bar = makeBar(creditLimits: RateLimitTier.pro.creditLimits)
-        let _ = bar.body
-    }
-
-    @Test("HeadroomBreakdownBar renders with Max 5x tier limits")
-    func rendersWithMax5xLimits() {
-        let bar = makeBar(creditLimits: RateLimitTier.max5x.creditLimits)
-        let _ = bar.body
-    }
-
-    // MARK: - Single Reset Event
-
-    @Test("HeadroomBreakdownBar shows count for single reset event")
+    @Test("Bar renders with single reset event")
     func singleResetEvent() {
-        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-        let events = [
-            ResetEvent(id: 1, timestamp: nowMs, fiveHourPeak: 90.0, sevenDayUtil: 35.0, tier: "pro", usedCredits: nil, constrainedCredits: nil, wasteCredits: nil)
-        ]
-        let bar = makeBar(resetEvents: events)
-        // Should display "Headroom breakdown: 1 reset event in period"
+        let mock = makeMockService()
+        let bar = makeBar(resetEvents: sampleEvents(count: 1), headroomAnalysisService: mock)
         let _ = bar.body
+        #expect(mock.lastEvents?.count == 1)
+    }
+
+    @Test("100% utilization produces zero wasted dollars")
+    func fullUtilizationZeroWaste() {
+        // usedCredits = sevenDayCredits * (7/7) = 5_000_000 (100% of weekly capacity)
+        let mock = makeMockService(usedCredits: 5_000_000)
+        let value = SubscriptionValueCalculator.calculate(
+            resetEvents: sampleEvents(),
+            creditLimits: RateLimitTier.pro.creditLimits,
+            timeRange: .week,
+            headroomAnalysisService: mock
+        )
+        #expect(value != nil)
+        #expect(value!.utilizationPercent == 100.0)
+        #expect(abs(value!.wastedDollars) < 0.01)
+    }
+
+    @Test("0% utilization means all money wasted")
+    func zeroUtilizationAllWaste() {
+        let mock = makeMockService(usedCredits: 0)
+        let value = SubscriptionValueCalculator.calculate(
+            resetEvents: sampleEvents(),
+            creditLimits: RateLimitTier.pro.creditLimits,
+            timeRange: .week,
+            headroomAnalysisService: mock
+        )
+        #expect(value != nil)
+        #expect(value!.utilizationPercent == 0.0)
+        #expect(value!.usedDollars == 0.0)
+        #expect(abs(value!.wastedDollars - value!.periodPrice) < 0.01)
+    }
+
+    // MARK: - RateLimitTier monthlyPrice
+
+    @Test("RateLimitTier.monthlyPrice values are correct")
+    func tierMonthlyPrices() {
+        #expect(RateLimitTier.pro.monthlyPrice == 20.0)
+        #expect(RateLimitTier.max5x.monthlyPrice == 100.0)
+        #expect(RateLimitTier.max20x.monthlyPrice == 200.0)
+    }
+
+    @Test("RateLimitTier.creditLimits includes monthlyPrice")
+    func tierCreditLimitsIncludePrice() {
+        #expect(RateLimitTier.pro.creditLimits.monthlyPrice == 20.0)
+        #expect(RateLimitTier.max5x.creditLimits.monthlyPrice == 100.0)
+        #expect(RateLimitTier.max20x.creditLimits.monthlyPrice == 200.0)
+    }
+
+    @Test("CreditLimits defaults monthlyPrice to nil")
+    func creditLimitsDefaultNilPrice() {
+        let limits = CreditLimits(fiveHourCredits: 100, sevenDayCredits: 909)
+        #expect(limits.monthlyPrice == nil)
     }
 }

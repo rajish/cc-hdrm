@@ -3,7 +3,7 @@ import os
 import SQLite3
 
 /// Current database schema version. Increment when schema changes require migration.
-private let currentSchemaVersion: Int = 1
+private let currentSchemaVersion: Int = 2
 
 /// SQLITE_TRANSIENT tells SQLite to make its own copy of the string data.
 /// Required when binding strings from Swift's withCString which uses temporary buffers.
@@ -139,11 +139,11 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
     func runMigrations() throws {
         let existingVersion = try getSchemaVersion()
 
-        // Future migrations go here
-        // Example:
-        // if existingVersion < 2 {
-        //     try migrateToVersion2()
-        // }
+        if existingVersion < 2 {
+            let connection = try getConnection()
+            try createRollupMetadataTable(connection)
+            Self.logger.info("Migration v1->v2: created rollup_metadata table")
+        }
 
         Self.logger.info("Migrations complete: \(existingVersion) -> \(currentSchemaVersion)")
         try setSchemaVersion(currentSchemaVersion)

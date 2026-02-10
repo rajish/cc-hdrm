@@ -19,6 +19,7 @@ final class PreferencesManager: PreferencesManagerProtocol {
         static let dismissedVersion = "com.cc-hdrm.dismissedVersion"
         static let customFiveHourCredits = "com.cc-hdrm.customFiveHourCredits"
         static let customSevenDayCredits = "com.cc-hdrm.customSevenDayCredits"
+        static let customMonthlyPrice = "com.cc-hdrm.customMonthlyPrice"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -163,6 +164,20 @@ final class PreferencesManager: PreferencesManagerProtocol {
         }
     }
 
+    var customMonthlyPrice: Double? {
+        get {
+            let value = defaults.double(forKey: Keys.customMonthlyPrice)
+            return value > 0 ? value : nil
+        }
+        set {
+            if let newValue {
+                defaults.set(newValue, forKey: Keys.customMonthlyPrice)
+            } else {
+                defaults.removeObject(forKey: Keys.customMonthlyPrice)
+            }
+        }
+    }
+
     // MARK: - Reset
 
     func resetToDefaults() {
@@ -174,5 +189,6 @@ final class PreferencesManager: PreferencesManagerProtocol {
         defaults.removeObject(forKey: Keys.dismissedVersion)
         defaults.removeObject(forKey: Keys.customFiveHourCredits)
         defaults.removeObject(forKey: Keys.customSevenDayCredits)
+        defaults.removeObject(forKey: Keys.customMonthlyPrice)
     }
 }
