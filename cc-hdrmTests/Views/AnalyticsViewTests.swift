@@ -231,11 +231,11 @@ struct AnalyticsViewDataLoadingTests {
         #expect(mock.getResetEventsCallCount == 2)
     }
 
-    @Test("getResetEvents is called for .all range (range + all-time)")
+    @Test("getResetEvents is called once for .all range (reuses range events as all-time)")
     func resetEventsCalledForAll() async throws {
         let mock = MockHistoricalDataService()
         _ = try await AnalyticsView.fetchData(for: .all, using: mock)
-        #expect(mock.getResetEventsCallCount == 2)
+        #expect(mock.getResetEventsCallCount == 1)
     }
 
     // MARK: - 3.7 Rollup failure does not prevent data loading

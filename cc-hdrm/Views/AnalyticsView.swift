@@ -187,9 +187,11 @@ struct AnalyticsView: View {
         let resetEvents = try await service.getResetEvents(range: range)
 
         // Reuse cached all-time events when available to avoid redundant DB queries on range switch.
-        // Always re-fetch for .all range (since range-specific events cover all time anyway).
         let allTimeResetEvents: [ResetEvent]
-        if let existing = existingAllTimeEvents, !existing.isEmpty, range != .all {
+        if range == .all {
+            // Range-specific events already cover all time — reuse them.
+            allTimeResetEvents = resetEvents
+        } else if let existing = existingAllTimeEvents, !existing.isEmpty {
             allTimeResetEvents = existing
         } else {
             try Task.checkCancellation()

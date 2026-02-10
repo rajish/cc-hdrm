@@ -169,9 +169,25 @@ enum ValueInsightEngine {
         var text = "Avg monthly utilization: \(formatPercent(avgUtil))"
         var isQuiet = isQuietUtilization(avgUtil)
 
-        // Trend detection: compare last 3 completed months
-        if monthlyUtilizations.count >= 3 {
-            let lastThree = Array(monthlyUtilizations.suffix(3))
+        // Trend detection: compare last 3 completed months.
+        // Exclude the current (potentially partial) month to avoid spurious trends.
+        let completedMonthUtils: [Double]
+        if let lastEvent = resetEvents.last {
+            let lastDate = Date(timeIntervalSince1970: Double(lastEvent.timestamp) / 1000.0)
+            let calendar = Calendar.current
+            if calendar.dateComponents([.year, .month], from: lastDate)
+                == calendar.dateComponents([.year, .month], from: Date()),
+               monthlyUtilizations.count > 1 {
+                completedMonthUtils = Array(monthlyUtilizations.dropLast())
+            } else {
+                completedMonthUtils = monthlyUtilizations
+            }
+        } else {
+            completedMonthUtils = monthlyUtilizations
+        }
+
+        if completedMonthUtils.count >= 3 {
+            let lastThree = Array(completedMonthUtils.suffix(3))
             let allRising = lastThree[1] - lastThree[0] > 5.0 && lastThree[2] - lastThree[1] > 5.0
             let allFalling = lastThree[0] - lastThree[1] > 5.0 && lastThree[1] - lastThree[2] > 5.0
 
