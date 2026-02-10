@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// Two-band horizontal bar showing how much subscription money was used vs wasted.
+/// Two-band horizontal bar showing how much subscription money was used vs unused.
 ///
 /// Segments (left-to-right):
 /// - **Used**: Solid fill, color derived from aggregate peak utilization via HeadroomState
-/// - **Wasted**: Light/empty fill — money paid but not used
+/// - **Unused**: Light/empty fill — money paid but not used
 struct HeadroomBreakdownBar: View {
     let resetEvents: [ResetEvent]
     let creditLimits: CreditLimits?
@@ -62,7 +62,7 @@ struct HeadroomBreakdownBar: View {
     @ViewBuilder
     private func dollarBreakdown(value: SubscriptionValue) -> some View {
         let usedFraction = value.utilizationPercent / 100.0
-        let wastedFraction = 1.0 - usedFraction
+        let unusedFraction = 1.0 - usedFraction
         let usedColor = HeadroomState(from: value.utilizationPercent).swiftUIColor
 
         VStack(spacing: 6) {
@@ -88,15 +88,15 @@ struct HeadroomBreakdownBar: View {
                             .frame(width: max(0, geometry.size.width * usedFraction))
                     }
 
-                    // Wasted segment — light fill
-                    if wastedFraction > 0 {
+                    // Unused segment — light fill
+                    if unusedFraction > 0 {
                         ZStack {
                             Rectangle()
                                 .fill(Color.secondary.opacity(0.08))
                             Rectangle()
                                 .strokeBorder(Color.secondary.opacity(0.15), lineWidth: 0.5)
                         }
-                        .frame(width: max(0, geometry.size.width * wastedFraction))
+                        .frame(width: max(0, geometry.size.width * unusedFraction))
                     }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 6))
@@ -121,7 +121,7 @@ struct HeadroomBreakdownBar: View {
         let totalAvailable = Double(limits.sevenDayCredits) * (periodDays / 7.0)
         let utilizationPercent = totalAvailable > 0 ? min(100.0, (summary.usedCredits / totalAvailable) * 100.0) : 0
         let usedFraction = utilizationPercent / 100.0
-        let wastedFraction = 1.0 - usedFraction
+        let unusedFraction = 1.0 - usedFraction
         let usedColor = HeadroomState(from: utilizationPercent).swiftUIColor
 
         VStack(spacing: 6) {
@@ -133,14 +133,14 @@ struct HeadroomBreakdownBar: View {
                             .fill(usedColor)
                             .frame(width: max(0, geometry.size.width * usedFraction))
                     }
-                    if wastedFraction > 0 {
+                    if unusedFraction > 0 {
                         ZStack {
                             Rectangle()
                                 .fill(Color.secondary.opacity(0.08))
                             Rectangle()
                                 .strokeBorder(Color.secondary.opacity(0.15), lineWidth: 0.5)
                         }
-                        .frame(width: max(0, geometry.size.width * wastedFraction))
+                        .frame(width: max(0, geometry.size.width * unusedFraction))
                     }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 6))
@@ -170,7 +170,7 @@ struct HeadroomBreakdownBar: View {
                 Spacer()
 
                 legendSwatch(color: Color.secondary.opacity(0.15), style: .outlined)
-                Text("Wasted: \(SubscriptionValueCalculator.formatDollars(value.wastedDollars)) (\(Int((100.0 - value.utilizationPercent).rounded()))%)")
+                Text("Unused: \(SubscriptionValueCalculator.formatDollars(value.unusedDollars)) (\(Int((100.0 - value.utilizationPercent).rounded()))%)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -192,7 +192,7 @@ struct HeadroomBreakdownBar: View {
             Spacer()
 
             legendSwatch(color: Color.secondary.opacity(0.15), style: .outlined)
-            Text("Wasted: \(Int((100.0 - utilizationPercent).rounded()))%")
+            Text("Unused: \(Int((100.0 - utilizationPercent).rounded()))%")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -232,7 +232,7 @@ private let previewEvents: [ResetEvent] = {
             tier: "default_claude_pro",
             usedCredits: nil,
             constrainedCredits: nil,
-            wasteCredits: nil
+            unusedCredits: nil
         )
     }
 }()
@@ -268,14 +268,14 @@ private let previewEvents: [ResetEvent] = {
 /// Minimal preview-only stub for HeadroomAnalysisServiceProtocol.
 private struct PreviewHeadroomAnalysisService: HeadroomAnalysisServiceProtocol {
     func analyzeResetEvent(fiveHourPeak: Double, sevenDayUtil: Double, creditLimits: CreditLimits) -> HeadroomBreakdown {
-        HeadroomBreakdown(usedPercent: 52, constrainedPercent: 12, wastePercent: 36,
-                          usedCredits: 286_000, constrainedCredits: 66_000, wasteCredits: 198_000)
+        HeadroomBreakdown(usedPercent: 52, constrainedPercent: 12, unusedPercent: 36,
+                          usedCredits: 286_000, constrainedCredits: 66_000, unusedCredits: 198_000)
     }
 
     func aggregateBreakdown(events: [ResetEvent]) -> PeriodSummary {
-        PeriodSummary(usedCredits: 2_860_000, constrainedCredits: 660_000, wasteCredits: 1_980_000,
+        PeriodSummary(usedCredits: 2_860_000, constrainedCredits: 660_000, unusedCredits: 1_980_000,
                       resetCount: events.count, avgPeakUtilization: 52.0,
-                      usedPercent: 52, constrainedPercent: 12, wastePercent: 36)
+                      usedPercent: 52, constrainedPercent: 12, unusedPercent: 36)
     }
 }
 #endif

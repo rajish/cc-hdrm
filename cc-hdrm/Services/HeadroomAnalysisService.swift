@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-/// Calculates headroom waste breakdown at each 5-hour reset event.
+/// Calculates headroom breakdown (used, constrained, unused) at each 5-hour reset event.
 /// Pure computation — no database access, no side effects.
 final class HeadroomAnalysisService: HeadroomAnalysisServiceProtocol, @unchecked Sendable {
     private static let logger = Logger(
@@ -31,32 +31,32 @@ final class HeadroomAnalysisService: HeadroomAnalysisServiceProtocol, @unchecked
         // Credits actually used
         let usedCredits = (fiveHourPeak / 100.0) * fiveHourLimit
 
-        // Determine waste vs constrained
-        let trueWasteCredits: Double
+        // Determine unused vs constrained
+        let trueUnusedCredits: Double
         let constrainedCredits: Double
 
         if fiveHourRemaining <= sevenDayRemaining {
             // 5h was NOT the binding constraint — all unused 5h was genuinely available
-            trueWasteCredits = fiveHourRemaining
+            trueUnusedCredits = fiveHourRemaining
             constrainedCredits = 0
         } else {
-            // 7d was the binding constraint — only 7d_remaining was truly wasted
-            trueWasteCredits = sevenDayRemaining
+            // 7d was the binding constraint — only 7d_remaining was truly unused
+            trueUnusedCredits = sevenDayRemaining
             constrainedCredits = fiveHourRemaining - sevenDayRemaining
         }
 
         // All percentages relative to 5h limit
         let usedPercent = fiveHourLimit > 0 ? (usedCredits / fiveHourLimit) * 100.0 : 0
-        let wastePercent = fiveHourLimit > 0 ? (trueWasteCredits / fiveHourLimit) * 100.0 : 0
+        let unusedPercent = fiveHourLimit > 0 ? (trueUnusedCredits / fiveHourLimit) * 100.0 : 0
         let constrainedPercent = fiveHourLimit > 0 ? (constrainedCredits / fiveHourLimit) * 100.0 : 0
 
         let breakdown = HeadroomBreakdown(
             usedPercent: usedPercent,
             constrainedPercent: constrainedPercent,
-            wastePercent: wastePercent,
+            unusedPercent: unusedPercent,
             usedCredits: usedCredits,
             constrainedCredits: constrainedCredits,
-            wasteCredits: trueWasteCredits
+            unusedCredits: trueUnusedCredits
         )
 
         return breakdown
@@ -67,7 +67,7 @@ final class HeadroomAnalysisService: HeadroomAnalysisServiceProtocol, @unchecked
     ) -> PeriodSummary {
         var totalUsed: Double = 0
         var totalConstrained: Double = 0
-        var totalWaste: Double = 0
+        var totalUnused: Double = 0
         var peakSum: Double = 0
         var validCount = 0
 
@@ -96,26 +96,26 @@ final class HeadroomAnalysisService: HeadroomAnalysisServiceProtocol, @unchecked
 
             totalUsed += breakdown.usedCredits
             totalConstrained += breakdown.constrainedCredits
-            totalWaste += breakdown.wasteCredits
+            totalUnused += breakdown.unusedCredits
             peakSum += peak
             validCount += 1
         }
 
-        let totalCredits = totalUsed + totalConstrained + totalWaste
+        let totalCredits = totalUsed + totalConstrained + totalUnused
         let usedPercent = totalCredits > 0 ? (totalUsed / totalCredits) * 100.0 : 0
         let constrainedPercent = totalCredits > 0 ? (totalConstrained / totalCredits) * 100.0 : 0
-        let wastePercent = totalCredits > 0 ? (totalWaste / totalCredits) * 100.0 : 0
+        let unusedPercent = totalCredits > 0 ? (totalUnused / totalCredits) * 100.0 : 0
         let avgPeak = validCount > 0 ? peakSum / Double(validCount) : 0
 
         return PeriodSummary(
             usedCredits: totalUsed,
             constrainedCredits: totalConstrained,
-            wasteCredits: totalWaste,
+            unusedCredits: totalUnused,
             resetCount: validCount,
             avgPeakUtilization: avgPeak,
             usedPercent: usedPercent,
             constrainedPercent: constrainedPercent,
-            wastePercent: wastePercent
+            unusedPercent: unusedPercent
         )
     }
 }

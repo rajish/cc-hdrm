@@ -2,7 +2,7 @@ import Foundation
 
 /// Represents a 5-hour window reset event for headroom analysis.
 /// Captures the peak utilization reached before a window reset, enabling
-/// future waste calculations (deferred to Epic 14).
+/// future unused credit calculations (deferred to Epic 14).
 struct ResetEvent: Sendable, Equatable {
     /// Database row ID
     let id: Int64
@@ -16,8 +16,8 @@ struct ResetEvent: Sendable, Equatable {
     let tier: String?
     /// Credits actually used (NULL until Epic 14)
     let usedCredits: Double?
-    /// Credits blocked by 7d limit - NOT waste (NULL until Epic 14)
+    /// Credits blocked by 7d limit - NOT unused (NULL until Epic 14)
     let constrainedCredits: Double?
-    /// True wasted credits (NULL until Epic 14)
-    let wasteCredits: Double?
+    /// True unused credits (NULL until Epic 14)
+    let unusedCredits: Double?
 }

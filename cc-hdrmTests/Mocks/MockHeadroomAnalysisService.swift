@@ -17,6 +17,10 @@ final class MockHeadroomAnalysisService: HeadroomAnalysisServiceProtocol, @unche
     /// Configurable return value for aggregateBreakdown. Must be set before calling.
     var mockPeriodSummary: PeriodSummary?
 
+    /// Optional closure for dynamic responses based on events.
+    /// Takes precedence over `mockPeriodSummary` when set.
+    var aggregateBreakdownHandler: (([ResetEvent]) -> PeriodSummary)?
+
     func analyzeResetEvent(
         fiveHourPeak: Double,
         sevenDayUtil: Double,
@@ -39,8 +43,12 @@ final class MockHeadroomAnalysisService: HeadroomAnalysisServiceProtocol, @unche
         aggregateBreakdownCallCount += 1
         lastEvents = events
 
+        if let handler = aggregateBreakdownHandler {
+            return handler(events)
+        }
+
         guard let mock = mockPeriodSummary else {
-            fatalError("MockHeadroomAnalysisService.aggregateBreakdown called without setting mockPeriodSummary")
+            fatalError("MockHeadroomAnalysisService.aggregateBreakdown called without setting mockPeriodSummary or aggregateBreakdownHandler")
         }
         return mock
     }

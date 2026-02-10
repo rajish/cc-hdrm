@@ -25,8 +25,8 @@ struct UsageRollup: Sendable, Equatable {
     let sevenDayMin: Double?
     /// Number of 5h reset events in the period
     let resetCount: Int
-    /// Calculated true waste credits (daily resolution only, NULL otherwise)
-    let wasteCredits: Double?
+    /// Calculated true unused credits (daily resolution only, NULL otherwise)
+    let unusedCredits: Double?
 
     /// Resolution tier for aggregated usage data.
     enum Resolution: String, Codable, CaseIterable, Sendable {

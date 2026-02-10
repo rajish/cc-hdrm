@@ -500,7 +500,7 @@ struct HistoricalDataServiceTests {
         #expect(events[0].tier == nil)
         #expect(events[0].usedCredits == nil)
         #expect(events[0].constrainedCredits == nil)
-        #expect(events[0].wasteCredits == nil)
+        #expect(events[0].unusedCredits == nil)
     }
 
     @Test("getLastPoll returns most recent poll")
@@ -732,7 +732,7 @@ struct HistoricalDataServiceTests {
         #expect(events.count == 1)
         #expect(events[0].usedCredits != nil, "usedCredits should be populated for known tier")
         #expect(events[0].constrainedCredits != nil, "constrainedCredits should be populated for known tier")
-        #expect(events[0].wasteCredits != nil, "wasteCredits should be populated for known tier")
+        #expect(events[0].unusedCredits != nil, "unusedCredits should be populated for known tier")
 
         // Pro tier: 5h_limit = 550,000. Peak 72% -> used = 396,000
         if let used = events[0].usedCredits {
@@ -772,7 +772,7 @@ struct HistoricalDataServiceTests {
         #expect(events.count == 1)
         #expect(events[0].usedCredits == nil, "usedCredits should be NULL without analysis service")
         #expect(events[0].constrainedCredits == nil, "constrainedCredits should be NULL without analysis service")
-        #expect(events[0].wasteCredits == nil, "wasteCredits should be NULL without analysis service")
+        #expect(events[0].unusedCredits == nil, "unusedCredits should be NULL without analysis service")
     }
 
     @Test("Reset event credit fields NULL when tier is unrecognized (AC 2)")
@@ -811,7 +811,7 @@ struct HistoricalDataServiceTests {
         #expect(events.count == 1)
         #expect(events[0].usedCredits == nil, "usedCredits should be NULL for unknown tier")
         #expect(events[0].constrainedCredits == nil, "constrainedCredits should be NULL for unknown tier")
-        #expect(events[0].wasteCredits == nil, "wasteCredits should be NULL for unknown tier")
+        #expect(events[0].unusedCredits == nil, "unusedCredits should be NULL for unknown tier")
     }
 
     // MARK: - Story 10.4: Tiered Rollup Engine Tests

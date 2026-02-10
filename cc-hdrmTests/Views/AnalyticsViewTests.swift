@@ -14,9 +14,9 @@ struct AnalyticsViewTests {
         headroomAnalysisService: any HeadroomAnalysisServiceProtocol = {
             let mock = MockHeadroomAnalysisService()
             mock.mockPeriodSummary = PeriodSummary(
-                usedCredits: 52, constrainedCredits: 12, wasteCredits: 36,
+                usedCredits: 52, constrainedCredits: 12, unusedCredits: 36,
                 resetCount: 1, avgPeakUtilization: 52.0,
-                usedPercent: 52, constrainedPercent: 12, wastePercent: 36
+                usedPercent: 52, constrainedPercent: 12, unusedPercent: 36
             )
             return mock
         }()
@@ -177,7 +177,8 @@ struct AnalyticsViewDataLoadingTests {
 
         #expect(mock.getRolledUpDataCallCount == 1)
         #expect(mock.getRecentPollsCallCount == 0)
-        #expect(mock.lastQueriedTimeRange == .week)
+        // lastQueriedTimeRange is .all due to the all-time reset events fetch
+        #expect(mock.lastQueriedTimeRange == .all)
         // .week returns rollupData, chartData should be empty
         #expect(result.chartData.isEmpty)
     }
@@ -204,33 +205,33 @@ struct AnalyticsViewDataLoadingTests {
         #expect(mock.ensureRollupsUpToDateCallCount == 1)
         #expect(mock.getRolledUpDataCallCount == 1)
         // Verify actual call ordering, not just counts
-        #expect(mock.callOrder == ["ensureRollupsUpToDate", "getRolledUpData", "getResetEvents"])
+        #expect(mock.callOrder == ["ensureRollupsUpToDate", "getRolledUpData", "getResetEvents", "getResetEvents"])
     }
 
     // MARK: - 3.6 getResetEvents is called for each range
 
-    @Test("getResetEvents is called for .day range")
+    @Test("getResetEvents is called for .day range (range + all-time)")
     func resetEventsCalledForDay() async throws {
         let mock = MockHistoricalDataService()
         _ = try await AnalyticsView.fetchData(for: .day, using: mock)
-        #expect(mock.getResetEventsCallCount == 1)
+        #expect(mock.getResetEventsCallCount == 2)
     }
 
-    @Test("getResetEvents is called for .week range")
+    @Test("getResetEvents is called for .week range (range + all-time)")
     func resetEventsCalledForWeek() async throws {
         let mock = MockHistoricalDataService()
         _ = try await AnalyticsView.fetchData(for: .week, using: mock)
-        #expect(mock.getResetEventsCallCount == 1)
+        #expect(mock.getResetEventsCallCount == 2)
     }
 
-    @Test("getResetEvents is called for .month range")
+    @Test("getResetEvents is called for .month range (range + all-time)")
     func resetEventsCalledForMonth() async throws {
         let mock = MockHistoricalDataService()
         _ = try await AnalyticsView.fetchData(for: .month, using: mock)
-        #expect(mock.getResetEventsCallCount == 1)
+        #expect(mock.getResetEventsCallCount == 2)
     }
 
-    @Test("getResetEvents is called for .all range")
+    @Test("getResetEvents is called once for .all range (reuses range events as all-time)")
     func resetEventsCalledForAll() async throws {
         let mock = MockHistoricalDataService()
         _ = try await AnalyticsView.fetchData(for: .all, using: mock)
@@ -250,7 +251,7 @@ struct AnalyticsViewDataLoadingTests {
                         resolution: .fiveMin,
                         fiveHourAvg: 25.0, fiveHourPeak: 40.0, fiveHourMin: 10.0,
                         sevenDayAvg: 12.0, sevenDayPeak: 20.0, sevenDayMin: 5.0,
-                        resetCount: 0, wasteCredits: nil)
+                        resetCount: 0, unusedCredits: nil)
         ]
 
         let result = try await AnalyticsView.fetchData(for: .week, using: mock)

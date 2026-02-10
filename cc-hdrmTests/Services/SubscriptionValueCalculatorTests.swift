@@ -14,12 +14,12 @@ struct SubscriptionValueCalculatorTests {
         mock.mockPeriodSummary = PeriodSummary(
             usedCredits: usedCredits,
             constrainedCredits: 660_000,
-            wasteCredits: 1_980_000,
+            unusedCredits: 1_980_000,
             resetCount: 3,
             avgPeakUtilization: 52.0,
             usedPercent: 52,
             constrainedPercent: 12,
-            wastePercent: 36
+            unusedPercent: 36
         )
         return mock
     }
@@ -39,7 +39,7 @@ struct SubscriptionValueCalculatorTests {
                 tier: "default_claude_pro",
                 usedCredits: nil,
                 constrainedCredits: nil,
-                wasteCredits: nil
+                unusedCredits: nil
             )
         }
     }
@@ -61,7 +61,7 @@ struct SubscriptionValueCalculatorTests {
         #expect(value!.monthlyPrice == 20.0)
     }
 
-    @Test("Pro tier week: usedDollars + wastedDollars = periodPrice")
+    @Test("Pro tier week: usedDollars + unusedDollars = periodPrice")
     func proWeekDollarsSumToPeriodPrice() {
         let mock = makeMockService()
         let value = SubscriptionValueCalculator.calculate(
@@ -71,8 +71,8 @@ struct SubscriptionValueCalculatorTests {
             headroomAnalysisService: mock
         )
         #expect(value != nil)
-        let total = value!.usedDollars + value!.wastedDollars
-        #expect(abs(total - value!.periodPrice) < 0.01, "Used + wasted must equal period price")
+        let total = value!.usedDollars + value!.unusedDollars
+        #expect(abs(total - value!.periodPrice) < 0.01, "Used + unused must equal period price")
     }
 
     // MARK: - 9.4: Max 5x, month range, 75% utilization -> $75 of $100
@@ -117,12 +117,12 @@ struct SubscriptionValueCalculatorTests {
         let event1 = ResetEvent(
             id: 1, timestamp: nowMs - ninetyDaysMs,
             fiveHourPeak: 50, sevenDayUtil: 30, tier: "default_claude_pro",
-            usedCredits: nil, constrainedCredits: nil, wasteCredits: nil
+            usedCredits: nil, constrainedCredits: nil, unusedCredits: nil
         )
         let event2 = ResetEvent(
             id: 2, timestamp: nowMs,
             fiveHourPeak: 60, sevenDayUtil: 40, tier: "default_claude_pro",
-            usedCredits: nil, constrainedCredits: nil, wasteCredits: nil
+            usedCredits: nil, constrainedCredits: nil, unusedCredits: nil
         )
         let days = SubscriptionValueCalculator.periodDays(for: .all, events: [event1, event2])
         #expect(abs(days - 90.0) < 1.0, "Should be approximately 90 days")
@@ -231,8 +231,8 @@ struct SubscriptionValueCalculatorTests {
 
     // MARK: - Edge cases
 
-    @Test("100% utilization produces zero wasted dollars")
-    func fullUtilizationZeroWaste() {
+    @Test("100% utilization produces zero unused dollars")
+    func fullUtilizationZeroUnused() {
         let mock = makeMockService(usedCredits: 5_000_000)
         let value = SubscriptionValueCalculator.calculate(
             resetEvents: sampleEvents(),
@@ -242,11 +242,11 @@ struct SubscriptionValueCalculatorTests {
         )
         #expect(value != nil)
         #expect(value!.utilizationPercent == 100.0)
-        #expect(abs(value!.wastedDollars) < 0.01)
+        #expect(abs(value!.unusedDollars) < 0.01)
     }
 
-    @Test("0% utilization means all money wasted")
-    func zeroUtilizationAllWaste() {
+    @Test("0% utilization means all money unused")
+    func zeroUtilizationAllUnused() {
         let mock = makeMockService(usedCredits: 0)
         let value = SubscriptionValueCalculator.calculate(
             resetEvents: sampleEvents(),
@@ -257,7 +257,7 @@ struct SubscriptionValueCalculatorTests {
         #expect(value != nil)
         #expect(value!.utilizationPercent == 0.0)
         #expect(value!.usedDollars == 0.0)
-        #expect(abs(value!.wastedDollars - value!.periodPrice) < 0.01)
+        #expect(abs(value!.unusedDollars - value!.periodPrice) < 0.01)
     }
 
     @Test("averageDaysPerMonth constant is 30.44")
@@ -291,7 +291,7 @@ struct SubscriptionValueCalculatorTests {
         let event = ResetEvent(
             id: 1, timestamp: 1000,
             fiveHourPeak: 50, sevenDayUtil: 30, tier: "default_claude_pro",
-            usedCredits: nil, constrainedCredits: nil, wasteCredits: nil
+            usedCredits: nil, constrainedCredits: nil, unusedCredits: nil
         )
         let days = SubscriptionValueCalculator.periodDays(for: .all, events: [event, event])
         #expect(days == 1.0, "Same-timestamp events should return minimum 1 day")

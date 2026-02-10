@@ -1,11 +1,19 @@
 ---
-stepsCompleted: [step-01-validate-prerequisites, step-02-design-epics, step-03-create-stories, step-04-final-validation, phase-2-epics-added, phase-3-epics-added]
+stepsCompleted:
+  [
+    step-01-validate-prerequisites,
+    step-02-design-epics,
+    step-03-create-stories,
+    step-04-final-validation,
+    phase-2-epics-added,
+    phase-3-epics-added,
+  ]
 inputDocuments:
   - _bmad-output/planning-artifacts/prd.md
   - _bmad-output/planning-artifacts/architecture.md
   - _bmad-output/planning-artifacts/ux-design-specification.md
   - _bmad-output/planning-artifacts/ux-design-specification-phase3.md
-lastUpdated: '2026-02-03'
+lastUpdated: "2026-02-03"
 ---
 
 # cc-hdrm - Epic Breakdown
@@ -83,6 +91,7 @@ NFR13: App resumes normal operation within one polling cycle after network conne
 ### Additional Requirements
 
 **From Architecture:**
+
 - Starter template: Xcode macOS App template (File → New → Project → macOS → App). Project initialization is first implementation step.
 - Manual configuration after template: LSUIElement=true in Info.plist, Keychain access entitlement, NSStatusItem setup, remove default ContentView/window scene
 - App architecture: MVVM with service layer, protocol-based interfaces for testability
@@ -100,6 +109,7 @@ NFR13: App resumes normal operation within one polling cycle after network conne
 - Project structure: layer-based (App/Models/Services/State/Views/Extensions/Resources)
 
 **From UX Design:**
+
 - HeadroomState enum with states: .normal (>40%), .caution (20-40%), .warning (5-20%), .critical (<5%), .exhausted (0%), .disconnected
 - Menu bar: Claude sparkle icon (✳) prefix + percentage or countdown, color + weight escalation per state
 - Context-adaptive display: percentage when capacity exists, countdown (↻ Xm) when exhausted
@@ -172,62 +182,77 @@ FR45: Epic 11 - Per-window slope indicators in popover
 ## Epic List
 
 ### Epic 1: Zero-Config Launch & Credential Discovery
+
 Alex launches the app and it silently finds his Claude credentials — or shows him exactly what's wrong. App runs as menu bar utility (no dock icon, no main window), reads OAuth credentials from macOS Keychain, detects subscription tier, and handles token expiry with clear actionable messaging.
 **FRs covered:** FR1, FR2, FR5, FR16, FR23
 
 ### Epic 2: Live Usage Data Pipeline
+
 Alex's usage data flows automatically — the app fetches from the Claude API in the background and keeps itself current, handling errors gracefully with auto-recovery.
 **FRs covered:** FR3, FR4, FR14, FR15, FR20, FR21, FR22
 
 ### Epic 3: Always-Visible Menu Bar Headroom
+
 Alex glances at his menu bar and instantly knows how much headroom he has — color-coded, weight-escalated percentage that registers in peripheral vision in under one second. Story 3.3 (course correction) refines the 7d promotion rule to credit-math, adds gauge corner dot/label for 7d awareness, normalizes slope to credit terms, and adds quotas display.
 **FRs covered:** FR6, FR7, FR39 (partial — credit-math promotion)
 
 ### Epic 4: Detailed Usage Panel
+
 Alex clicks to expand and sees the full picture — both usage windows with ring gauges, countdowns with relative and absolute times, subscription tier, data freshness, and app controls.
 **FRs covered:** FR8, FR9, FR10, FR11, FR12, FR13, FR24
 
 ### Epic 5: Threshold Notifications
+
 Alex gets notified before he hits the wall — macOS notifications fire at 20% and 5% headroom for both windows independently, with full context including reset countdowns and absolute times. Never misses a warning, even when AFK.
 **FRs covered:** FR17, FR18, FR19
 
 ### Epic 6: User Preferences & Settings (Phase 2)
+
 Alex tweaks cc-hdrm to fit his workflow — adjustable notification thresholds, custom poll interval, launch at login. All accessible from a settings view in the gear menu, all taking effect immediately.
 **FRs covered:** FR27, FR28, FR29, FR30
 
 ### Epic 7: Release Infrastructure & CI/CD (Phase 2)
+
 The maintainer merges a PR with `[minor]` in the title and walks away. GitHub Actions bumps the version, tags the release, builds the binary, generates a changelog from merged PRs, and publishes to GitHub Releases — no manual steps.
 **FRs covered:** FR31, FR32
 
 ### Epic 8: In-App Update Awareness (Phase 2)
+
 Alex sees a subtle badge in the popover when a new version is available — one click to download, one click to dismiss. No nag, no interruption, just awareness.
 **FRs covered:** FR25, FR26
 
 ### Epic 9: Homebrew Tap Distribution (Phase 2)
+
 A developer finds cc-hdrm, runs `brew install cc-hdrm`, and it works. Upgrades flow through `brew upgrade` automatically when new releases are published.
 **FRs covered:** (supports FR25/FR26 Homebrew update path)
 
 ### Epic 10: Data Persistence & Historical Storage (Phase 3)
+
 Alex's usage data is no longer ephemeral — every poll snapshot is persisted to SQLite, rolled up at decreasing resolution as it ages, creating a permanent record of usage patterns.
 **FRs covered:** FR33, FR34
 
 ### Epic 11: Usage Slope Indicator (Phase 3)
+
 Alex sees not just where he stands, but how fast he's burning. A 4-level slope indicator (↘→↗⬆) appears in the menu bar when burn rate is actionable, and always in the popover for both windows.
 **FRs covered:** FR42, FR43, FR44, FR45
 
 ### Epic 12: 24h Sparkline & Analytics Launcher (Phase 3)
+
 Alex glances at the popover and sees a compact 24-hour usage trend — a step-area sparkline showing the sawtooth pattern of his recent sessions. Clicking it opens the analytics window.
 **FRs covered:** FR35, FR37 (sparkline gaps)
 
 ### Epic 13: Full Analytics Window (Phase 3)
+
 Alex clicks the sparkline and a floating analytics panel appears — zoomable charts across all retention periods, time range selectors, series toggles, and honest gap rendering for periods when cc-hdrm wasn't running.
 **FRs covered:** FR36, FR37 (chart gaps)
 
 ### Epic 14: Headroom Analysis & Waste Breakdown (Phase 3)
+
 Alex sees the real story behind his usage — a three-band breakdown showing what he actually used, what was blocked by the weekly limit (not waste!), and what he genuinely left on the table.
 **FRs covered:** FR39, FR40, FR41
 
 ### Epic 15: Phase 3 Settings & Data Retention (Phase 3)
+
 Alex configures how long cc-hdrm keeps historical data and optionally overrides credit limits for unknown subscription tiers.
 **FRs covered:** FR38
 
@@ -411,14 +436,15 @@ So that I know my remaining capacity at a glance without any interaction.
 **When** the menu bar renders
 **Then** it shows Claude sparkle icon (✳) + headroom percentage (e.g., "✳ 83%")
 **And** text color matches the HeadroomState color token:
+
 - \> 40% headroom → `.headroomNormal` (muted green), Regular weight
 - 20-40% → `.headroomCaution` (yellow), Medium weight
 - 5-20% → `.headroomWarning` (orange), Semibold weight
 - < 5% → `.headroomCritical` (red), Bold weight
 - 0% → `.headroomExhausted` (red), Bold weight
 - Disconnected → `.disconnected` (grey), Regular weight, shows "✳ —"
-**And** the sparkle icon color matches the text color (shifts with state)
-**And** the display updates within 2 seconds of AppState changes (NFR1)
+  **And** the sparkle icon color matches the text color (shifts with state)
+  **And** the display updates within 2 seconds of AppState changes (NFR1)
 
 **Given** AppState indicates disconnected, token expired, or no credentials
 **When** the menu bar renders
@@ -992,7 +1018,7 @@ So that I'm aware of updates without being nagged.
 **And** the badge disappears immediately
 **And** the badge does not reappear on subsequent launches or popover opens
 
-**Given** a *newer* version is released after Alex dismissed a previous update
+**Given** a _newer_ version is released after Alex dismissed a previous update
 **When** UpdateCheckService detects a version newer than dismissedVersion
 **Then** the badge reappears for the new version
 **And** the cycle repeats (dismiss stores the new version)
@@ -1232,6 +1258,7 @@ So that the display is simple and actionable rather than noisy continuous values
 **When** calculateSlope(for: .fiveHour) is called
 **Then** it computes the average rate of change (% per minute) across the buffer
 **And** maps the rate to SlopeLevel:
+
 - Rate < 0.3% per min → .flat (→)
 - Rate 0.3 to 1.5% per min → .rising (↗)
 - Rate > 1.5% per min → .steep (⬆)
@@ -1436,14 +1463,15 @@ So that it's accessible without disrupting my main workflow or polluting the doc
 **Given** the sparkline is clicked
 **When** AnalyticsWindowController.toggle() is called
 **Then** an NSPanel opens with the following characteristics:
+
 - styleMask includes .nonactivatingPanel (doesn't steal focus)
 - collectionBehavior does NOT include .canJoinAllSpaces (stays on current desktop)
 - hidesOnDeactivate is false (stays visible when app loses focus)
 - level is .floating (above normal windows, below fullscreen)
 - No dock icon appears (app remains LSUIElement)
 - No Cmd+Tab entry is added
-**And** default size is ~600×500px
-**And** the window is resizable with reasonable minimum size (~400×350px)
+  **And** default size is ~600×500px
+  **And** the window is resizable with reasonable minimum size (~400×350px)
 
 **Given** the analytics window is open
 **When** Alex presses Escape or clicks the close button
@@ -1470,12 +1498,13 @@ So that I can explore my usage patterns effectively.
 **Given** the analytics window is open
 **When** AnalyticsView renders
 **Then** it displays (top to bottom):
+
 - Title bar: "Usage Analytics" with close button
 - Time range selector: [24h] [7d] [30d] [All] buttons
 - Series toggles: 5h (filled circle) | 7d (empty circle) toggle buttons
 - Main chart area (UsageChart component)
 - Headroom breakdown section (HeadroomBreakdownBar + stats)
-**And** vertical spacing follows macOS design guidelines
+  **And** vertical spacing follows macOS design guidelines
 
 **Given** the window is resized
 **When** AnalyticsView re-renders
@@ -1545,11 +1574,12 @@ So that I see an accurate representation of how utilization actually behaves.
 **Given** time range is "24h"
 **When** UsageChart renders
 **Then** it displays a step-area chart where:
+
 - Steps only go UP within each window (monotonically increasing)
 - Vertical drops mark reset boundaries (dashed vertical lines)
 - X-axis shows time labels: "8am", "12pm", "4pm", "8pm", "12am", "4am", "now"
 - Y-axis shows 0% to 100%
-**And** both 5h and 7d series can be overlaid (5h primary color, 7d secondary color)
+  **And** both 5h and 7d series can be overlaid (5h primary color, 7d secondary color)
 
 **Given** slope was steep during a period
 **When** the chart renders
@@ -1571,6 +1601,7 @@ So that long-term patterns are visible without visual clutter.
 **Given** time range is "7d"
 **When** UsageChart renders
 **Then** it displays a bar chart where:
+
 - Each bar represents one hour
 - Bar height = peak utilization during that hour (not average)
 - Reset events are marked with subtle indicators below affected bars
@@ -1613,9 +1644,9 @@ So that I trust the visualization isn't fabricating data.
 **Then** the gap is visually continuous (not segmented per period)
 **And** gap boundaries are clear
 
-## Epic 14: Headroom Analysis & Waste Breakdown (Phase 3)
+## Epic 14: Subscription Value & Usage Insights (Phase 3)
 
-Alex sees the real story behind his usage — a three-band breakdown showing what he actually used, what was blocked by the weekly limit (not waste!), and what he genuinely left on the table.
+Alex sees the real story behind his subscription — a money-based value bar showing what he used in dollar terms, with context-aware summary insights that adapt to the selected time range.
 
 ### Story 14.1: Rate Limit Tier & Credit Limits (Absorbed into Story 3.3)
 
@@ -1631,6 +1662,7 @@ So that headroom can be calculated in absolute terms.
 **When** referenced across the codebase
 **Then** it includes cases: .pro, .max5x, .max20x
 **And** each case provides fiveHourCredits and sevenDayCredits properties:
+
 - Pro: 550,000 / 5,000,000
 - Max 5x: 3,300,000 / 41,666,700
 - Max 20x: 11,000,000 / 83,333,300
@@ -1657,18 +1689,20 @@ So that waste breakdown is accurate and meaningful.
 **Given** a reset event is detected (from Story 10.3)
 **When** HeadroomAnalysisService.analyzeResetEvent() is called
 **Then** it calculates:
+
 ```
 5h_remaining_credits = (100% - 5h_peak%) × 5h_limit
 7d_remaining_credits = (100% - 7d_util%) × 7d_limit
 effective_headroom_credits = min(5h_remaining, 7d_remaining)
 
 If 5h_remaining ≤ 7d_remaining:
-    true_waste_credits = 5h_remaining  
+    true_waste_credits = 5h_remaining
     constrained_credits = 0
 Else:
-    true_waste_credits = 7d_remaining  
+    true_waste_credits = 7d_remaining
     constrained_credits = 5h_remaining - 7d_remaining
 ```
+
 **And** returns a HeadroomBreakdown struct with: usedPercent, constrainedPercent, wastePercent, usedCredits, constrainedCredits, wasteCredits
 
 **Given** credit limits are unknown (tier not recognized, no user override)
@@ -1692,6 +1726,7 @@ So that the emotional framing is clear — constrained is not waste.
 **Given** HeadroomBreakdownBar is instantiated with breakdown data
 **When** the view renders
 **Then** it displays a horizontal stacked bar with three segments:
+
 - **Used (▓)**: solid fill, headroom color based on the aggregate peak level
 - **7d-constrained (░)**: hatched/stippled pattern, muted slate blue
 - **True waste (□)**: light/empty fill, faint outline
@@ -1709,51 +1744,76 @@ So that the emotional framing is clear — constrained is not waste.
 **When** VoiceOver reads the element
 **Then** it announces: "Headroom breakdown: [X]% used, [Y]% constrained by weekly limit, [Z]% unused"
 
-### Story 14.4: Breakdown Summary Statistics
+### Story 14.4: Context-Aware Value Summary & Terminology Refactor
 
 As a developer using Claude Code,
-I want summary stats below the breakdown bar,
-So that I understand the scale and patterns of my usage.
+I want a context-aware summary below the subscription value bar that adapts to the selected time range,
+So that I see the single most relevant insight for the data I'm looking at.
 
 **Acceptance Criteria:**
 
 **Given** the analytics view shows a time range with reset events
-**When** the breakdown section renders
-**Then** it displays below the bar:
-- **Avg peak:** Average of peak utilization across resets in the period
-- **Total waste:** Sum of waste_credits formatted as "X.XM credits" or "XXXk credits"
-- **7d-constrained:** Percentage of unused capacity blocked by weekly limit
+**When** the summary section renders
+**Then** it selects and displays the most relevant insight for the time range:
 
-**Given** the selected time range is "24h" with 0-2 resets
-**When** the breakdown renders
-**Then** it shows aggregate for those resets (may be just one)
-**And** if zero resets in range, shows: "No reset events in this period"
+- **24h:** Simple capacity gauge — "Used $X of $Y today" or utilization percentage if no pricing
+- **7d:** Usage vs. personal average — "X% above/below your typical week"
+- **30d:** Dollar summary — "Used $X of $Y this month" with utilization percentage
+- **All:** Long-term trend — "Avg monthly utilization: X%" with trend direction
+
+**Given** zero reset events exist in the selected range
+**When** the summary section renders
+**Then** it displays: "No reset events in this period"
+
+**Given** nothing notable is detected (utilization between 20-80%, no trend change)
+**When** the summary section renders
+**Then** the summary collapses to a single quiet line (e.g., "Normal usage")
+**And** does not demand visual attention
 
 **Given** credit limits are unknown
-**When** the breakdown section renders
-**Then** it shows percentages only (no absolute credit values)
-**And** "Total waste" shows as percentage, not credits
+**When** the summary section renders
+**Then** it shows percentages only (no dollar values)
 
-### Story 14.5: Analytics View Integration
+**Terminology refactor (technical task):**
+
+- Rename `HeadroomBreakdown.wastePercent` → `unusedPercent`
+- Rename `HeadroomBreakdown.wasteCredits` → `unusedCredits`
+- Rename `SubscriptionValue.wastedDollars` → `unusedDollars`
+- Update all call sites, tests, and VoiceOver labels to use neutral terminology
+- Bar legend: "wasted" → "unused"
+
+### Story 14.5: Analytics View Integration with Conditional Display
 
 As a developer using Claude Code,
-I want the headroom breakdown integrated into the analytics view,
-So that I can see breakdown alongside the usage chart.
+I want the subscription value bar and context-aware summary integrated into the analytics view with time-range-aware behavior,
+So that the value section adapts meaningfully as I explore different time ranges.
 
 **Acceptance Criteria:**
 
 **Given** the analytics window is open
 **When** AnalyticsView renders
-**Then** HeadroomBreakdownBar and summary stats appear below the UsageChart
+**Then** the subscription value bar and context-aware summary appear below the UsageChart
+**And** the value bar recalculates when the time range changes via HistoricalDataService
 
-**Given** the time range changes
-**When** the breakdown re-renders
-**Then** it recalculates aggregate breakdown for the new range
-**And** queries reset_events for that range via HistoricalDataService
+**Given** the selected time range changes
+**When** the value section re-renders
+**Then** the summary insight updates to match the new time range (per Story 14.4 rules)
+**And** the value bar recalculates aggregate breakdown for the new range
+
+**Given** the selected time range has fewer than 6 hours of data
+**When** the value bar renders
+**Then** it shows a qualifier: "X hours of data in this view"
+**And** does not display dollar amounts (insufficient data for meaningful proration)
 
 **Given** no reset events exist in the selected range
-**When** the breakdown section renders
-**Then** it displays: "No reset events in this period — usage continues from previous window"
+**When** the value section renders
+**Then** the bar is hidden
+**And** the summary shows: "No reset events in this period"
+
+**Given** the value section has nothing notable to display
+**When** conditional visibility evaluates
+**Then** the section collapses to minimal height (single line summary only, no bar)
+**And** expands again when the user selects a range with meaningful data
 
 ## Epic 15: Phase 3 Settings & Data Retention (Phase 3)
 
@@ -1770,6 +1830,7 @@ So that I can balance storage usage with analytical depth.
 **Given** the settings view is open (from Epic 6)
 **When** SettingsView renders
 **Then** a new "Historical Data" section appears with:
+
 - Data retention: picker with options: 30 days, 90 days, 6 months, 1 year (default), 2 years, 5 years
 - Database size: read-only display showing current size (e.g., "14.2 MB")
 - "Clear History" button
@@ -1800,6 +1861,7 @@ So that headroom analysis works even if Anthropic introduces new tiers.
 **Given** the settings view is open
 **When** SettingsView renders
 **Then** an "Advanced" section appears (collapsed by default) with:
+
 - Custom 5h credit limit: optional number field
 - Custom 7d credit limit: optional number field
 - Hint text: "Override credit limits if your tier isn't recognized"
@@ -1816,3 +1878,293 @@ So that headroom analysis works even if Anthropic introduces new tiers.
 **When** validation runs
 **Then** the invalid values are rejected with inline error message
 **And** previous valid values are retained
+
+## Epic 16: Subscription Intelligence (Phase 4)
+
+Alex doesn't just see what happened — cc-hdrm tells him what it means. Slow-burn patterns surface as macOS notifications before they become costly surprises. Tier recommendations answer "am I on the right plan?" with concrete numbers. Over time, the analytics view learns to present the single most relevant conclusion from multiple valid lenses, anchored against Alex's own usage history.
+
+### Brainstorming Origin
+
+This epic implements Themes 2–5 from the brainstorming session (2026-02-09):
+
+- Theme 1 (Denominator Fix): Completed in Story 14.3 (PR 41)
+- Theme 2 (Slow-Burn Pattern Detection): Stories 16.1–16.2
+- Theme 3 (API Pricing & Tier Recommendation): Stories 16.3–16.4
+- Theme 4 (Multiple Conclusions from Same Data): Story 16.5
+- Theme 5 (Self-Benchmarking & Visual Trends): Story 16.6
+
+### Story 16.1: Slow-Burn Pattern Detection Service
+
+As a developer using Claude Code,
+I want cc-hdrm to detect slow-burn subscription patterns from my usage history,
+So that costly patterns are caught before they become expensive surprises.
+
+**Acceptance Criteria:**
+
+**Given** SubscriptionPatternDetector is initialized with access to ResetEvent history
+**When** analyzePatterns() is called (triggered after each reset event detection)
+**Then** it evaluates the following pattern rules against historical data:
+
+**Pattern: Forgotten Subscription**
+**Given** utilization is below 5% for 2+ consecutive weeks (14+ days)
+**When** the pattern is detected
+**Then** it returns a .forgottenSubscription finding with:
+
+- Duration of low usage (in weeks)
+- Average utilization during the period
+- Monthly cost being incurred
+
+**Pattern: Chronic Overpaying**
+**Given** actual usage fits within a cheaper tier's credit limits for 3+ consecutive months
+**When** the pattern is detected
+**Then** it returns a .chronicOverpaying finding with:
+
+- Current tier and monthly cost
+- Recommended tier and monthly cost
+- Potential monthly savings
+
+**Pattern: Chronic Underpowering**
+**Given** the user has been rate-limited (hit 100% on either window) more than N times per billing cycle for 2+ consecutive cycles
+**When** the pattern is detected
+**Then** it returns a .chronicUnderpowering finding with:
+
+- Rate-limit frequency
+- Current tier
+- Suggested higher tier
+
+**Pattern: Usage Decay**
+**Given** monthly utilization has declined for 3+ consecutive months
+**When** the pattern is detected
+**Then** it returns a .usageDecay finding with:
+
+- Trend direction and magnitude
+- Current vs. 3-month-ago utilization
+
+**Given** no patterns are detected
+**When** analyzePatterns() completes
+**Then** it returns an empty findings array
+
+**Given** insufficient history to evaluate a pattern (e.g., less than 2 weeks of data)
+**When** that pattern is evaluated
+**Then** it is skipped (not reported as negative finding)
+
+### Story 16.2: Pattern Notification & Analytics Display
+
+As a developer using Claude Code,
+I want slow-burn pattern findings to surface as macOS notifications and appear in the analytics view,
+So that I'm alerted to costly patterns even when I'm not looking at the app.
+
+**Acceptance Criteria:**
+
+**Given** SubscriptionPatternDetector returns a .forgottenSubscription finding
+**When** the finding is new (not previously notified)
+**Then** a macOS notification is delivered:
+
+- Title: "Subscription check-in"
+- Body: "You've used less than 5% of your Claude capacity for [N] weeks. Worth reviewing?"
+- Action: Opens analytics window
+
+**Given** SubscriptionPatternDetector returns a .chronicOverpaying finding
+**When** the finding is new (not previously notified)
+**Then** a macOS notification is delivered:
+
+- Title: "Tier recommendation"
+- Body: "Your usage fits [recommended tier] — you could save $[amount]/mo"
+- Action: Opens analytics window
+
+**Given** SubscriptionPatternDetector returns a .chronicUnderpowering finding
+**When** the finding is new (not previously notified)
+**Then** a macOS notification is delivered:
+
+- Title: "Tier recommendation"
+- Body: "You've been rate-limited [N] times recently. [higher tier] would cover your usage."
+- Action: Opens analytics window
+
+**Given** a pattern finding has already been notified
+**When** the same pattern is detected again within 30 days
+**Then** no duplicate notification is sent
+**And** the cooldown period is tracked in UserDefaults
+
+**Given** the analytics window is open and pattern findings exist
+**When** the value section renders
+**Then** active findings appear as a compact insight card below the subscription value bar
+**And** each card shows the finding summary in natural language
+**And** cards are dismissable (dismissed state persisted)
+
+**Given** the user has disabled notifications in system preferences
+**When** a pattern is detected
+**Then** findings still appear in the analytics view
+**And** no macOS notification is attempted
+
+### Story 16.3: Tier Recommendation Service
+
+As a developer using Claude Code,
+I want cc-hdrm to compare my actual usage against all available tiers,
+So that I know whether I'm on the right plan with concrete dollar figures.
+
+**Acceptance Criteria:**
+
+**Given** TierRecommendationService is initialized with access to ResetEvent history and RateLimitTier data
+**When** recommendTier() is called with a time range
+**Then** it compares actual credit consumption against each tier's credit limits:
+
+- For each tier: would this tier's 5h and 7d limits have covered the user's usage?
+- Safety margin: requires 20% headroom above actual peak usage (configurable)
+
+**Given** the user's usage fits a cheaper tier with safety margin
+**When** the recommendation is computed
+**Then** it returns a .downgrade recommendation with:
+
+- Current tier name and monthly price
+- Recommended tier name and monthly price
+- Monthly savings
+- Confidence note: "Based on [N] weeks of usage data"
+
+**Given** the user has been rate-limited and a higher tier would have prevented it
+**When** the recommendation is computed
+**Then** it returns a .upgrade recommendation with:
+
+- Current tier name and monthly price
+- Recommended tier name and monthly price
+- Number of rate-limit events that would have been avoided
+- Additional monthly cost
+
+**Given** the user is on the best-fit tier
+**When** the recommendation is computed
+**Then** it returns a .goodFit recommendation with:
+
+- Current tier name
+- Headroom percentage remaining
+- Brief confirmation: no action needed
+
+**Given** fewer than 2 weeks of usage data exist
+**When** recommendTier() is called
+**Then** it returns nil (insufficient data for a meaningful recommendation)
+
+**Given** billing cycle day is configured in preferences
+**When** the recommendation is computed
+**Then** it aligns analysis to complete billing cycles where possible
+**And** flags the current partial cycle as provisional
+
+### Story 16.4: Tier Recommendation Display & Billing Cycle Preference
+
+As a developer using Claude Code,
+I want to see tier recommendations in the analytics view and configure my billing cycle day,
+So that recommendations are grounded in my actual billing periods and visible when relevant.
+
+**Acceptance Criteria:**
+
+**Given** TierRecommendationService returns a .downgrade or .upgrade recommendation
+**When** the analytics view renders
+**Then** a recommendation card appears below the subscription value bar (after any pattern findings from 16.2):
+
+- Natural language summary (e.g., "Your usage fits Pro ($20/mo) — you'd save $80/mo")
+- Based-on context: "Based on 12 weeks of usage data"
+- Card is dismissable (dismissed state persisted, re-shown if recommendation changes)
+
+**Given** TierRecommendationService returns a .goodFit recommendation
+**When** the analytics view renders
+**Then** no card is shown (conditional visibility — quiet when nothing actionable)
+
+**Given** the settings view is open
+**When** SettingsView renders
+**Then** a "Billing" section appears with:
+
+- Billing cycle day: picker with values 1–28
+- Help text: "Day of month your Anthropic subscription renews. Enables accurate monthly summaries."
+- Default: nil (unset)
+
+**Given** billing cycle day is configured
+**When** the subscription value bar renders for 30d or All time ranges
+**Then** dollar summaries align to complete billing cycles
+**And** the current partial cycle is visually distinguished (e.g., lighter fill or "so far" qualifier)
+
+**Given** billing cycle day is not configured
+**When** tier recommendation or subscription value renders
+**Then** calculations use calendar months as approximation
+**And** settings shows a subtle hint: "Set your billing day for more accurate insights"
+
+### Story 16.5: Context-Aware Insight Engine (Future Iteration)
+
+As a developer using Claude Code,
+I want the analytics value section to choose the single most relevant conclusion from multiple valid lenses,
+So that the display tells me what matters most right now instead of showing every metric at once.
+
+**Acceptance Criteria:**
+
+**Given** the analytics value section has multiple data sources available (subscription value, pattern findings, tier recommendation, usage trend)
+**When** the context-aware insight engine evaluates what to display
+**Then** it selects insights by priority:
+
+1. Active pattern findings (forgotten subscription, chronic mismatch) — highest priority
+2. Tier recommendation (actionable change) — high priority
+3. Notable usage deviation from personal baseline — medium priority
+4. Subscription value summary — default fallback
+
+**Given** multiple insights compete for display
+**When** the value section renders
+**Then** the highest-priority insight is shown prominently
+**And** a secondary insight may appear as a subdued one-liner below
+**And** no more than two insights are shown simultaneously
+
+**Given** the user dismisses an insight card
+**When** the value section re-evaluates
+**Then** the next-priority insight promotes to the primary position
+**And** the dismissed insight does not reappear until conditions change materially
+
+**Given** insights are displayed
+**When** the text is generated
+**Then** it uses natural language, not raw numbers:
+
+- "About three-quarters" not "76.2%"
+- "Your heaviest week since November" not "Peak: 847,291 credits"
+- "Roughly double your usual" not "198% of average"
+  **And** precise values are available on hover/VoiceOver for users who want them
+
+**Given** the emotional tone of the data varies
+**When** insights are composed
+**Then** tone matches context:
+
+- High utilization near reset: cautious, not celebratory
+- Low utilization with headroom: reassuring, not accusatory
+- Chronic pattern detected: matter-of-fact, not alarmist
+
+### Story 16.6: Self-Benchmarking & Visual Trends (Future Iteration)
+
+As a developer using Claude Code,
+I want my usage anchored against my own history with visual cycle-over-cycle trends,
+So that raw numbers have personal context and I can spot long-term patterns at a glance.
+
+**Acceptance Criteria:**
+
+**Given** the analytics view is open with 30d or All time range selected
+**When** sufficient history exists (3+ billing cycles or 3+ calendar months)
+**Then** a compact cycle-over-cycle mini-bar or sparkline appears showing utilization per cycle:
+
+- Each bar/point represents one billing cycle (or calendar month if billing day unset)
+- Current partial cycle is visually distinguished
+- Trend direction is immediately visible without reading numbers
+
+**Given** the cycle-over-cycle visualization is rendered
+**When** the user hovers over a cycle bar/point
+**Then** a tooltip shows: month label, utilization percentage, dollar value (if pricing known)
+
+**Given** a notable personal benchmark is detected
+**When** the insight engine (16.5) evaluates available insights
+**Then** self-benchmarking anchors are available as candidates:
+
+- "Your highest usage week since [month]"
+- "3rd consecutive month above 80% utilization"
+- "Usage down 40% from your peak in [month]"
+
+**Given** fewer than 3 cycles of history exist
+**When** the cycle-over-cycle section would render
+**Then** it is hidden (insufficient data for meaningful comparison)
+
+**Given** the 24h or 7d time range is selected
+**When** the analytics view renders
+**Then** the cycle-over-cycle visualization is hidden (not relevant at short ranges)
+
+**Given** a VoiceOver user focuses the cycle-over-cycle visualization
+**When** VoiceOver reads the element
+**Then** it announces: "Usage trend over [N] months. [Trend summary]. Double-tap for details."

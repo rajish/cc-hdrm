@@ -58,6 +58,7 @@ struct AnalyticsView: View {
     @State private var chartData: [UsagePoll] = []
     @State private var rollupData: [UsageRollup] = []
     @State private var resetEvents: [ResetEvent] = []
+    @State private var allTimeResetEvents: [ResetEvent] = []
     @State private var isLoading: Bool = false
     /// Tracks whether any historical data exists in the database (across all time ranges).
     /// Set to true once any successful load returns data. Used to distinguish
@@ -88,6 +89,13 @@ struct AnalyticsView: View {
                 headroomAnalysisService: headroomAnalysisService,
                 selectedTimeRange: selectedTimeRange
             )
+            ContextAwareValueSummary(
+                timeRange: selectedTimeRange,
+                resetEvents: resetEvents,
+                allTimeResetEvents: allTimeResetEvents,
+                creditLimits: appState.creditLimits,
+                headroomAnalysisService: headroomAnalysisService
+            )
         }
         .padding()
         .task(id: selectedTimeRange) {
@@ -104,11 +112,13 @@ struct AnalyticsView: View {
         do {
             let result = try await Self.fetchData(
                 for: selectedTimeRange,
-                using: historicalDataService
+                using: historicalDataService,
+                existingAllTimeEvents: allTimeResetEvents.isEmpty ? nil : allTimeResetEvents
             )
             chartData = result.chartData
             rollupData = result.rollupData
             resetEvents = result.resetEvents
+            allTimeResetEvents = result.allTimeResetEvents
 
             if !hasAnyHistoricalData && (chartData.count + rollupData.count) > 0 {
                 hasAnyHistoricalData = true
@@ -131,6 +141,7 @@ struct AnalyticsView: View {
         var chartData: [UsagePoll] = []
         var rollupData: [UsageRollup] = []
         var resetEvents: [ResetEvent] = []
+        var allTimeResetEvents: [ResetEvent] = []
     }
 
     /// Fetches analytics data for the given time range.
@@ -145,7 +156,8 @@ struct AnalyticsView: View {
     /// - Throws: `CancellationError` on rapid range switching, or data service errors
     static func fetchData(
         for range: TimeRange,
-        using service: any HistoricalDataServiceProtocol
+        using service: any HistoricalDataServiceProtocol,
+        existingAllTimeEvents: [ResetEvent]? = nil
     ) async throws -> DataLoadResult {
         // Rollup update is best-effort — failure must not block data display.
         // The sparkline proves data exists in usage_polls; if rollups fail,
@@ -174,10 +186,23 @@ struct AnalyticsView: View {
 
         let resetEvents = try await service.getResetEvents(range: range)
 
+        // Reuse cached all-time events when available to avoid redundant DB queries on range switch.
+        let allTimeResetEvents: [ResetEvent]
+        if range == .all {
+            // Range-specific events already cover all time — reuse them.
+            allTimeResetEvents = resetEvents
+        } else if let existing = existingAllTimeEvents, !existing.isEmpty {
+            allTimeResetEvents = existing
+        } else {
+            try Task.checkCancellation()
+            allTimeResetEvents = try await service.getResetEvents(range: .all)
+        }
+
         return DataLoadResult(
             chartData: chartData,
             rollupData: rollupData,
-            resetEvents: resetEvents
+            resetEvents: resetEvents,
+            allTimeResetEvents: allTimeResetEvents
         )
     }
 
@@ -274,14 +299,14 @@ struct AnalyticsView: View {
 /// Minimal stub for HeadroomAnalysisServiceProtocol in previews only.
 private struct PreviewAnalyticsHeadroomService: HeadroomAnalysisServiceProtocol {
     func analyzeResetEvent(fiveHourPeak: Double, sevenDayUtil: Double, creditLimits: CreditLimits) -> HeadroomBreakdown {
-        HeadroomBreakdown(usedPercent: 52, constrainedPercent: 12, wastePercent: 36,
-                          usedCredits: 286_000, constrainedCredits: 66_000, wasteCredits: 198_000)
+        HeadroomBreakdown(usedPercent: 52, constrainedPercent: 12, unusedPercent: 36,
+                          usedCredits: 286_000, constrainedCredits: 66_000, unusedCredits: 198_000)
     }
 
     func aggregateBreakdown(events: [ResetEvent]) -> PeriodSummary {
-        PeriodSummary(usedCredits: 2_860_000, constrainedCredits: 660_000, wasteCredits: 1_980_000,
+        PeriodSummary(usedCredits: 2_860_000, constrainedCredits: 660_000, unusedCredits: 1_980_000,
                       resetCount: events.count, avgPeakUtilization: 52.0,
-                      usedPercent: 52, constrainedPercent: 12, wastePercent: 36)
+                      usedPercent: 52, constrainedPercent: 12, unusedPercent: 36)
     }
 }
 
