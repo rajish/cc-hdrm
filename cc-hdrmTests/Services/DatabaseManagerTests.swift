@@ -51,7 +51,7 @@ struct DatabaseManagerTests {
         #expect(manager.indexExists("idx_reset_events_timestamp"))
     }
 
-    @Test("Schema creation sets schema version to current (2)")
+    @Test("Schema creation sets schema version to current (3)")
     func schemaCreationSetsVersion() throws {
         let (manager, path) = makeManager()
         defer { cleanup(manager: manager, path: path) }
@@ -59,7 +59,7 @@ struct DatabaseManagerTests {
         try manager.ensureSchema()
 
         let version = try manager.getSchemaVersion()
-        #expect(version == 2)
+        #expect(version == 3)
     }
 
     @Test("Database path is correct")
@@ -202,7 +202,7 @@ struct DatabaseManagerTests {
         let version2 = try manager2.getSchemaVersion()
 
         #expect(version1 == version2)
-        #expect(version1 == 2)
+        #expect(version1 == 3)
     }
 
     @Test("Migration v1->v2 creates rollup_metadata table")
@@ -288,8 +288,96 @@ struct DatabaseManagerTests {
         sqlite3_finalize(dataStmt)
         #expect(util == 0.99)
 
-        // Verify version bumped to 2
-        #expect(try manager2.getSchemaVersion() == 2)
+        // Verify version bumped to current (migration runs all the way through)
+        #expect(try manager2.getSchemaVersion() == 3)
+    }
+
+    @Test("Migration v2->v3 adds extra_usage columns to usage_polls")
+    func migrationV2ToV3AddsExtraUsageColumns() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let testPath = tempDir.appendingPathComponent("test_\(UUID().uuidString).db")
+
+        // Create a v2 database manually (with rollup_metadata but no extra_usage columns)
+        let manager1 = DatabaseManager(databasePath: testPath)
+        let connection = try manager1.getConnection()
+
+        // Create v2 tables (no extra_usage columns on usage_polls)
+        sqlite3_exec(connection, """
+            CREATE TABLE IF NOT EXISTS usage_polls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp INTEGER NOT NULL,
+                five_hour_util REAL,
+                five_hour_resets_at INTEGER,
+                seven_day_util REAL,
+                seven_day_resets_at INTEGER
+            )
+            """, nil, nil, nil)
+        sqlite3_exec(connection, """
+            CREATE TABLE IF NOT EXISTS usage_rollups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                period_start INTEGER NOT NULL,
+                period_end INTEGER NOT NULL,
+                resolution TEXT NOT NULL,
+                five_hour_avg REAL,
+                five_hour_peak REAL,
+                five_hour_min REAL,
+                seven_day_avg REAL,
+                seven_day_peak REAL,
+                seven_day_min REAL,
+                reset_count INTEGER DEFAULT 0,
+                waste_credits REAL
+            )
+            """, nil, nil, nil)
+        sqlite3_exec(connection, """
+            CREATE TABLE IF NOT EXISTS reset_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp INTEGER NOT NULL,
+                five_hour_peak REAL,
+                seven_day_util REAL,
+                tier TEXT,
+                used_credits REAL,
+                constrained_credits REAL,
+                waste_credits REAL
+            )
+            """, nil, nil, nil)
+        sqlite3_exec(connection, """
+            CREATE TABLE IF NOT EXISTS rollup_metadata (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+            """, nil, nil, nil)
+        sqlite3_exec(connection, "PRAGMA user_version = 2", nil, nil, nil)
+
+        // Insert data to verify tables aren't dropped
+        sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util) VALUES (888, 0.88)", nil, nil, nil)
+
+        manager1.closeConnection()
+
+        // New manager triggers migration
+        let manager2 = DatabaseManager(databasePath: testPath)
+        defer { cleanup(manager: manager2, path: testPath) }
+        try manager2.ensureSchema()
+
+        // Verify extra_usage columns exist by inserting data that uses them
+        let connection2 = try manager2.getConnection()
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        let insertResult = sqlite3_exec(
+            connection2,
+            "INSERT INTO usage_polls (timestamp, extra_usage_enabled, extra_usage_monthly_limit, extra_usage_used_credits, extra_usage_utilization) VALUES (999, 1, 500.0, 123.45, 0.247)",
+            nil, nil, &errorMessage
+        )
+        #expect(insertResult == SQLITE_OK, "INSERT with extra_usage columns should succeed after migration")
+
+        // Verify original data persists
+        var dataStmt: OpaquePointer?
+        sqlite3_prepare_v2(connection2, "SELECT five_hour_util FROM usage_polls WHERE timestamp = 888", -1, &dataStmt, nil)
+        #expect(sqlite3_step(dataStmt) == SQLITE_ROW)
+        let util = sqlite3_column_double(dataStmt, 0)
+        sqlite3_finalize(dataStmt)
+        #expect(util == 0.88)
+
+        // Verify version bumped to 3
+        #expect(try manager2.getSchemaVersion() == 3)
     }
 
     // MARK: - Table Schema Verification (AC #1)
@@ -319,6 +407,10 @@ struct DatabaseManagerTests {
         #expect(columns.contains("five_hour_resets_at"))
         #expect(columns.contains("seven_day_util"))
         #expect(columns.contains("seven_day_resets_at"))
+        #expect(columns.contains("extra_usage_enabled"))
+        #expect(columns.contains("extra_usage_monthly_limit"))
+        #expect(columns.contains("extra_usage_used_credits"))
+        #expect(columns.contains("extra_usage_utilization"))
     }
 
     @Test("usage_rollups table has correct columns")

@@ -14,4 +14,12 @@ struct UsagePoll: Sendable, Equatable {
     let sevenDayUtil: Double?
     /// 7-day window reset time as Unix milliseconds, nil if unavailable
     let sevenDayResetsAt: Int64?
+    /// Whether extra usage billing is enabled, nil if not reported
+    var extraUsageEnabled: Bool? = nil
+    /// Monthly extra usage credit limit, nil if not reported
+    var extraUsageMonthlyLimit: Double? = nil
+    /// Extra usage credits consumed this month, nil if not reported
+    var extraUsageUsedCredits: Double? = nil
+    /// Extra usage utilization fraction (0-1), nil if not reported
+    var extraUsageUtilization: Double? = nil
 }

@@ -73,6 +73,11 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             .flatMap { Date.fromISO8601($0) }
             .map { Int64($0.timeIntervalSince1970 * 1000) }
 
+        let extraUsageEnabled = response.extraUsage?.isEnabled
+        let extraUsageMonthlyLimit = response.extraUsage?.monthlyLimit
+        let extraUsageUsedCredits = response.extraUsage?.usedCredits
+        let extraUsageUtilization = response.extraUsage?.utilization
+
         // Prepare INSERT statement
         let sql = """
             INSERT INTO usage_polls (
@@ -80,8 +85,12 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 five_hour_util,
                 five_hour_resets_at,
                 seven_day_util,
-                seven_day_resets_at
-            ) VALUES (?, ?, ?, ?, ?)
+                seven_day_resets_at,
+                extra_usage_enabled,
+                extra_usage_monthly_limit,
+                extra_usage_used_credits,
+                extra_usage_utilization
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
 
         var statement: OpaquePointer?
@@ -125,6 +134,30 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             sqlite3_bind_null(statement, 5)
         }
 
+        if let enabled = extraUsageEnabled {
+            sqlite3_bind_int(statement, 6, enabled ? 1 : 0)
+        } else {
+            sqlite3_bind_null(statement, 6)
+        }
+
+        if let limit = extraUsageMonthlyLimit {
+            sqlite3_bind_double(statement, 7, limit)
+        } else {
+            sqlite3_bind_null(statement, 7)
+        }
+
+        if let used = extraUsageUsedCredits {
+            sqlite3_bind_double(statement, 8, used)
+        } else {
+            sqlite3_bind_null(statement, 8)
+        }
+
+        if let util = extraUsageUtilization {
+            sqlite3_bind_double(statement, 9, util)
+        } else {
+            sqlite3_bind_null(statement, 9)
+        }
+
         // Execute
         let stepResult = sqlite3_step(statement)
         guard stepResult == SQLITE_DONE else {
@@ -166,7 +199,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         let cutoffMs = Int64((Date().timeIntervalSince1970 - Double(hours * 3600)) * 1000)
 
         let sql = """
-            SELECT id, timestamp, five_hour_util, five_hour_resets_at, seven_day_util, seven_day_resets_at
+            SELECT id, timestamp, five_hour_util, five_hour_resets_at, seven_day_util, seven_day_resets_at,
+                   extra_usage_enabled, extra_usage_monthly_limit, extra_usage_used_credits, extra_usage_utilization
             FROM usage_polls
             WHERE timestamp >= ?
             ORDER BY timestamp ASC
@@ -190,26 +224,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
 
         var polls: [UsagePoll] = []
         while sqlite3_step(statement) == SQLITE_ROW {
-            let id = sqlite3_column_int64(statement, 0)
-            let timestamp = sqlite3_column_int64(statement, 1)
-
-            let fiveHourUtil: Double? = sqlite3_column_type(statement, 2) == SQLITE_NULL
-                ? nil : sqlite3_column_double(statement, 2)
-            let fiveHourResetsAt: Int64? = sqlite3_column_type(statement, 3) == SQLITE_NULL
-                ? nil : sqlite3_column_int64(statement, 3)
-            let sevenDayUtil: Double? = sqlite3_column_type(statement, 4) == SQLITE_NULL
-                ? nil : sqlite3_column_double(statement, 4)
-            let sevenDayResetsAt: Int64? = sqlite3_column_type(statement, 5) == SQLITE_NULL
-                ? nil : sqlite3_column_int64(statement, 5)
-
-            polls.append(UsagePoll(
-                id: id,
-                timestamp: timestamp,
-                fiveHourUtil: fiveHourUtil,
-                fiveHourResetsAt: fiveHourResetsAt,
-                sevenDayUtil: sevenDayUtil,
-                sevenDayResetsAt: sevenDayResetsAt
-            ))
+            polls.append(Self.readPollRow(statement!))
         }
 
         Self.logger.debug("Retrieved \(polls.count, privacy: .public) polls from last \(hours, privacy: .public) hours")
@@ -243,7 +258,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         let connection = try databaseManager.getConnection()
 
         let sql = """
-            SELECT id, timestamp, five_hour_util, five_hour_resets_at, seven_day_util, seven_day_resets_at
+            SELECT id, timestamp, five_hour_util, five_hour_resets_at, seven_day_util, seven_day_resets_at,
+                   extra_usage_enabled, extra_usage_monthly_limit, extra_usage_used_credits, extra_usage_utilization
             FROM usage_polls
             ORDER BY timestamp DESC
             LIMIT 1
@@ -268,25 +284,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             return nil
         }
 
-        let id = sqlite3_column_int64(statement, 0)
-        let timestamp = sqlite3_column_int64(statement, 1)
-        let fiveHourUtil: Double? = sqlite3_column_type(statement, 2) == SQLITE_NULL
-            ? nil : sqlite3_column_double(statement, 2)
-        let fiveHourResetsAt: Int64? = sqlite3_column_type(statement, 3) == SQLITE_NULL
-            ? nil : sqlite3_column_int64(statement, 3)
-        let sevenDayUtil: Double? = sqlite3_column_type(statement, 4) == SQLITE_NULL
-            ? nil : sqlite3_column_double(statement, 4)
-        let sevenDayResetsAt: Int64? = sqlite3_column_type(statement, 5) == SQLITE_NULL
-            ? nil : sqlite3_column_int64(statement, 5)
-
-        return UsagePoll(
-            id: id,
-            timestamp: timestamp,
-            fiveHourUtil: fiveHourUtil,
-            fiveHourResetsAt: fiveHourResetsAt,
-            sevenDayUtil: sevenDayUtil,
-            sevenDayResetsAt: sevenDayResetsAt
-        )
+        return Self.readPollRow(statement!)
     }
 
     func getResetEvents(fromTimestamp: Int64?, toTimestamp: Int64?) async throws -> [ResetEvent] {
@@ -381,6 +379,46 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         }
 
         return try await getResetEvents(fromTimestamp: fromTimestamp, toTimestamp: nowMs)
+    }
+
+    // MARK: - Row Reading Helper
+
+    /// Reads a UsagePoll from the current row of a prepared statement.
+    /// Expects columns: id(0), timestamp(1), five_hour_util(2), five_hour_resets_at(3),
+    /// seven_day_util(4), seven_day_resets_at(5), extra_usage_enabled(6),
+    /// extra_usage_monthly_limit(7), extra_usage_used_credits(8), extra_usage_utilization(9).
+    private static func readPollRow(_ statement: OpaquePointer) -> UsagePoll {
+        let id = sqlite3_column_int64(statement, 0)
+        let timestamp = sqlite3_column_int64(statement, 1)
+        let fiveHourUtil: Double? = sqlite3_column_type(statement, 2) == SQLITE_NULL
+            ? nil : sqlite3_column_double(statement, 2)
+        let fiveHourResetsAt: Int64? = sqlite3_column_type(statement, 3) == SQLITE_NULL
+            ? nil : sqlite3_column_int64(statement, 3)
+        let sevenDayUtil: Double? = sqlite3_column_type(statement, 4) == SQLITE_NULL
+            ? nil : sqlite3_column_double(statement, 4)
+        let sevenDayResetsAt: Int64? = sqlite3_column_type(statement, 5) == SQLITE_NULL
+            ? nil : sqlite3_column_int64(statement, 5)
+        let extraUsageEnabled: Bool? = sqlite3_column_type(statement, 6) == SQLITE_NULL
+            ? nil : sqlite3_column_int(statement, 6) != 0
+        let extraUsageMonthlyLimit: Double? = sqlite3_column_type(statement, 7) == SQLITE_NULL
+            ? nil : sqlite3_column_double(statement, 7)
+        let extraUsageUsedCredits: Double? = sqlite3_column_type(statement, 8) == SQLITE_NULL
+            ? nil : sqlite3_column_double(statement, 8)
+        let extraUsageUtilization: Double? = sqlite3_column_type(statement, 9) == SQLITE_NULL
+            ? nil : sqlite3_column_double(statement, 9)
+
+        return UsagePoll(
+            id: id,
+            timestamp: timestamp,
+            fiveHourUtil: fiveHourUtil,
+            fiveHourResetsAt: fiveHourResetsAt,
+            sevenDayUtil: sevenDayUtil,
+            sevenDayResetsAt: sevenDayResetsAt,
+            extraUsageEnabled: extraUsageEnabled,
+            extraUsageMonthlyLimit: extraUsageMonthlyLimit,
+            extraUsageUsedCredits: extraUsageUsedCredits,
+            extraUsageUtilization: extraUsageUtilization
+        )
     }
 
     // MARK: - Private Reset Detection
@@ -802,7 +840,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
     /// Queries raw polls in a time range for rollup processing.
     private func queryRawPollsForRollup(from: Int64, to: Int64, connection: OpaquePointer) throws -> [UsagePoll] {
         let sql = """
-            SELECT id, timestamp, five_hour_util, five_hour_resets_at, seven_day_util, seven_day_resets_at
+            SELECT id, timestamp, five_hour_util, five_hour_resets_at, seven_day_util, seven_day_resets_at,
+                   extra_usage_enabled, extra_usage_monthly_limit, extra_usage_used_credits, extra_usage_utilization
             FROM usage_polls
             WHERE timestamp >= ? AND timestamp < ?
             ORDER BY timestamp ASC
@@ -826,25 +865,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
 
         var polls: [UsagePoll] = []
         while sqlite3_step(statement) == SQLITE_ROW {
-            let id = sqlite3_column_int64(statement, 0)
-            let timestamp = sqlite3_column_int64(statement, 1)
-            let fiveHourUtil: Double? = sqlite3_column_type(statement, 2) == SQLITE_NULL
-                ? nil : sqlite3_column_double(statement, 2)
-            let fiveHourResetsAt: Int64? = sqlite3_column_type(statement, 3) == SQLITE_NULL
-                ? nil : sqlite3_column_int64(statement, 3)
-            let sevenDayUtil: Double? = sqlite3_column_type(statement, 4) == SQLITE_NULL
-                ? nil : sqlite3_column_double(statement, 4)
-            let sevenDayResetsAt: Int64? = sqlite3_column_type(statement, 5) == SQLITE_NULL
-                ? nil : sqlite3_column_int64(statement, 5)
-
-            polls.append(UsagePoll(
-                id: id,
-                timestamp: timestamp,
-                fiveHourUtil: fiveHourUtil,
-                fiveHourResetsAt: fiveHourResetsAt,
-                sevenDayUtil: sevenDayUtil,
-                sevenDayResetsAt: sevenDayResetsAt
-            ))
+            polls.append(Self.readPollRow(statement!))
         }
 
         return polls
