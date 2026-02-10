@@ -1,7 +1,9 @@
 ---
 stepsCompleted: [step-01-init, step-02-discovery, step-03-success, step-04-journeys, step-05-domain, step-06-innovation, step-07-project-type, step-08-scoping, step-09-functional, step-10-nonfunctional, step-11-polish, step-e-01-discovery, step-e-02-review, step-e-03-edit]
-lastEdited: '2026-02-03'
+lastEdited: '2026-02-10'
 editHistory:
+  - date: '2026-02-10'
+    changes: 'Replaced waste terminology with neutral unused capacity framing (FR40, headroom categories), moved extra usage from Phase 4 to Phase 3, added FR46-FR48 for subscription intelligence (pattern detection, total cost comparison, analytics display)'
   - date: '2026-02-03'
     changes: 'Updated Phase 3 with brainstorming results (historical tracking, headroom analysis, slope indicator), added FR33-FR45, deferred unexplored items to new Phase 4'
 classification:
@@ -184,7 +186,7 @@ Persist each poll snapshot to a local SQLite database, building a client-agnosti
 | 7-30 days  | Hourly averages   | Weekly pattern analysis             |
 | 30+ days   | Daily summary     | Long-term trends, seasonal patterns |
 
-Daily summary includes: average utilization, peak utilization, minimum utilization, and calculated wasted headroom percentage.
+Daily summary includes: average utilization, peak utilization, minimum utilization, and calculated unused headroom percentage.
 
 **Retention:** Configurable via settings, default 1 year.
 
@@ -196,21 +198,21 @@ Daily summary includes: average utilization, peak utilization, minimum utilizati
 
 **Research dependency:** Investigate whether Anthropic exposes a historical usage API endpoint to backfill gaps from periods when cc-hdrm was not running.
 
-#### Underutilised Headroom Analysis
+#### Subscription Value & Headroom Analysis
 
 The 5-hour and 7-day limits form a nested constraint system. Effective headroom = min(5h remaining capacity, 7d remaining capacity). A user at 10% of 5h but 92% of 7d has very little real headroom.
 
-**Three Waste Categories:**
+**Three Unused Capacity Categories:**
 
 | Category           | Definition                                                    | User Insight                                                                  |
 | ------------------ | ------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| **5h waste**       | 5h window reset with unused capacity; 7d had room            | "You could have done more in that window"                                     |
+| **5h unused**      | 5h window reset with unused capacity; 7d had room            | "You could have done more in that window"                                     |
 | **7d-constrained** | 5h had headroom but 7d was the binding constraint             | "You were pacing correctly — pushing harder would've hit the weekly wall"     |
-| **True waste**     | Both 5h and 7d had significant remaining capacity at 5h reset | "You genuinely left capacity unused"                                          |
+| **True unused**    | Both 5h and 7d had significant remaining capacity at 5h reset | "You genuinely left capacity unused"                                          |
 
-7d-constrained is explicitly **not waste** — the visualization must distinguish this to avoid misleading users.
+7d-constrained is explicitly **not unused capacity** — the visualization must distinguish this to avoid misleading users.
 
-**Visualization:** Three-band stacked chart in analytics view — used (solid), 7d-constrained (hatched/muted), true available (empty/light). Calculation at render time since the relationship between limits depends on the time horizon analyzed.
+**Visualization:** Three-band stacked chart in analytics view — used (solid), 7d-constrained (hatched/muted), true unused (empty/light). Calculation at render time since the relationship between limits depends on the time horizon analyzed.
 
 #### Usage Slope Indicator
 
@@ -233,7 +235,7 @@ Replaces the original "limit prediction" concept. Explicit time-to-exhaustion pr
 
 - Sonnet-specific usage breakdown (API returns `seven_day_sonnet` data)
 - Linux tray support
-- Extra usage / spending tracking (API returns `extra_usage` with spending data)
+- ~~Extra usage / spending tracking~~ -- Moved to Phase 3 / Epic 16 (data already available and persisted via PR 43)
 
 ### Risk Mitigation
 
@@ -398,7 +400,7 @@ Without cc-hdrm, he'd have kept going, gotten cut off mid-response, lost context
 ### Underutilised Headroom Analysis (Phase 3)
 
 - FR39: App calculates effective headroom as min(5h remaining capacity, 7d remaining capacity)
-- FR40: App detects 5h window resets and classifies unused capacity into three categories: 5h waste, 7d-constrained (not waste), and true waste
+- FR40: App detects 5h window resets and classifies unused capacity into three categories: 5h unused, 7d-constrained (not unused), and true unused
 - FR41: User can view a breakdown of used capacity, 7d-constrained capacity, and true available capacity in the analytics view
 
 ### Usage Slope Indicator (Phase 3)
@@ -407,6 +409,12 @@ Without cc-hdrm, he'd have kept going, gotten cut off mid-response, lost context
 - FR43: App maps rate of change to a discrete 4-level slope indicator (Cooling ↘, Flat →, Rising ↗, Steep ⬆)
 - FR44: User can see the slope indicator inline next to the utilization percentage in the menu bar
 - FR45: User can see per-window slope indicators in the popover for both 5h and 7d gauges
+
+### Subscription Intelligence (Phase 3)
+
+- FR46: App detects extra usage overflow patterns from persisted extra_usage data and includes them in slow-burn pattern analysis
+- FR47: Tier recommendation computes total cost (base subscription + extra usage charges) when comparing tiers
+- FR48: Analytics displays total cost breakdown when extra usage data is available
 
 ## Non-Functional Requirements
 

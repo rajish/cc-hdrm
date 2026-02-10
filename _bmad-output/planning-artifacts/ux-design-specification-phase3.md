@@ -260,9 +260,9 @@ The analytics window is cc-hdrm's first real window. This is a significant expan
 │  ┌─────────────────────────────────────────────────┐    │
 │  │▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░                       │    │
 │  └─────────────────────────────────────────────────┘    │
-│  ▓ Used: 52%   ░ 7d-constrained: 12%   □ Waste: 36%    │
+│  ▓ Used: 52%   ░ 7d-constrained: 12%   □ Unused: 36%   │
 │                                                         │
-│  Avg peak: 64%  │  Total waste: 2.1M credits           │
+│  Context-aware summary (adapts to time range)           │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -317,7 +317,9 @@ No custom date picker for MVP — presets cover the primary user stories.
 
 ---
 
-## Feature 4: Underutilised Headroom Analysis
+## Feature 4: Subscription Value & Headroom Analysis
+
+> **Renamed** from "Underutilised Headroom Analysis" per sprint change proposal (2026-02-10). The "waste" framing is replaced with neutral terminology. Unused capacity is one of many valid conclusions, not the only lens.
 
 ### The Math
 
@@ -365,11 +367,11 @@ The headroom breakdown appears in the analytics window below the main chart.
 
 ```
 100% ┌────────────────────────────────────────┐
-     │              □ True waste              │ ← genuinely unused
+     │              □ Unused                  │ ← genuinely available capacity
      │         (both windows had room)        │
      ├────────────────────────────────────────┤
      │           ░ 7d-constrained             │ ← blocked by weekly limit
-     │   (would've hit weekly wall anyway)    │   (NOT waste)
+     │   (would've hit weekly wall anyway)    │   (NOT unused by choice)
      ├────────────────────────────────────────┤
      │               ▓ Used                   │ ← actual consumption
      │         (peak 5h utilization)          │
@@ -379,18 +381,27 @@ The headroom breakdown appears in the analytics window below the main chart.
 **Visual encoding:**
 - **Used (▓)** — solid fill, headroom color based on peak level
 - **7d-constrained (░)** — hatched/stippled pattern, muted slate blue. Visually reads as "blocked by system" not "you messed up"
-- **True waste (□)** — light/empty, faint fill or outline only. The "could've been yours" signal
+- **Unused (□)** — light/empty, faint fill or outline only. Genuinely available capacity that went unused.
 
 **Emotional framing:**
-- True waste → "You left capacity on the table"
+- Unused capacity → neutral tone, one of many valid conclusions (not inherently "waste")
 - 7d-constrained → "You were right to leave this — pushing harder would've blown your week"
+- High unused + low utilization → context-aware insight may suggest tier review
 
-### Summary Statistics
+### Context-Aware Summary
 
-Below the three-band bar:
-- **Avg peak:** Average of peak utilization across resets in selected period
-- **Total waste:** Sum of true waste in credits (gives absolute sense of scale)
-- **7d-constrained:** Percentage of unused capacity that was blocked by weekly limit
+> **Replaced** fixed summary statistics per sprint change proposal (2026-02-10). Instead of always showing Avg peak / Total waste / 7d-constrained, the summary adapts to the selected time range and shows the single most relevant insight.
+
+Below the three-band bar, a context-aware summary selects the most relevant insight:
+
+- **24h:** Simple capacity gauge — "Used $X of $Y today" or utilization percentage if no pricing
+- **7d:** Usage vs. personal average — "X% above/below your typical week"
+- **30d:** Dollar summary — "Used $X of $Y this month" with utilization percentage
+- **All:** Long-term trend — "Avg monthly utilization: X%" with trend direction
+
+**Conditional visibility:** Collapses to a quiet single line when nothing notable (utilization 20-80%, no trend change). Expands when there's real signal.
+
+**Zero reset events:** Shows "No reset events in this period" with bar hidden.
 
 ### Display Context
 
@@ -525,14 +536,14 @@ Below the three-band bar:
 **Props:**
 - `used: Double` (percentage)
 - `sevenDayConstrained: Double` (percentage)
-- `trueWaste: Double` (percentage)
+- `unused: Double` (percentage)
 
 **Rendering:**
 - Used: solid fill, headroom color
 - 7d-constrained: hatched pattern, muted slate blue
-- True waste: light/empty fill
+- Unused: light/empty fill
 
-**Accessibility:** "Headroom breakdown: 52% used, 12% constrained by weekly limit, 36% unused."
+**Accessibility:** "Headroom breakdown: 52% used, 12% constrained by weekly limit, 36% unused capacity."
 
 #### AnalyticsWindow
 
@@ -641,7 +652,7 @@ All Phase 3 visualizations maintain color independence:
 | Slope bands        | Warm tint            | Presence/absence of tint    |
 | Used band          | Headroom color       | Solid fill pattern          |
 | 7d-constrained     | Slate blue           | Hatched pattern             |
-| True waste         | Light/transparent    | Empty/outline pattern       |
+| Unused capacity    | Light/transparent    | Empty/outline pattern       |
 | Gap regions        | Grey                 | Hatched pattern + label     |
 
 ---
