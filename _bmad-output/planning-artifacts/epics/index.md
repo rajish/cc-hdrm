@@ -2,7 +2,7 @@
 
 ## Table of Contents
 
-- [cc-hdrm - Epic Breakdown](#table-of-contents)
+- [cc-hdrm - Epic Breakdown](#cc-hdrm---epic-breakdown)
   - [Overview](./overview.md)
   - [Requirements Inventory](./requirements-inventory.md)
     - [Functional Requirements](./requirements-inventory.md#functional-requirements)
@@ -23,7 +23,7 @@
     - [Epic 11: Usage Slope Indicator (Phase 3)](./epic-list.md#epic-11-usage-slope-indicator-phase-3)
     - [Epic 12: 24h Sparkline & Analytics Launcher (Phase 3)](./epic-list.md#epic-12-24h-sparkline-analytics-launcher-phase-3)
     - [Epic 13: Full Analytics Window (Phase 3)](./epic-list.md#epic-13-full-analytics-window-phase-3)
-    - [Epic 14: Headroom Analysis & Waste Breakdown (Phase 3)](./epic-list.md#epic-14-headroom-analysis-waste-breakdown-phase-3)
+    - [Epic 14: Headroom Analysis & Unused Capacity Breakdown (Phase 3)](./epic-list.md#epic-14-headroom-analysis-unused-capacity-breakdown-phase-3)
     - [Epic 15: Phase 3 Settings & Data Retention (Phase 3)](./epic-list.md#epic-15-phase-3-settings-data-retention-phase-3)
   - [Epic 1: Zero-Config Launch & Credential Discovery](./epic-1-zero-config-launch-credential-discovery.md)
     - [Story 1.1: Xcode Project Initialization & Menu Bar Shell](./epic-1-zero-config-launch-credential-discovery.md#story-11-xcode-project-initialization-menu-bar-shell)
@@ -58,7 +58,7 @@
     - [Story 7.3: Post-Merge Release Publish Workflow](./epic-7-release-infrastructure-cicd-phase-2.md#story-73-post-merge-release-publish-workflow)
   - [Epic 8: In-App Update Awareness (Phase 2)](./epic-8-in-app-update-awareness-phase-2.md)
     - [Story 8.1: Update Check Service](./epic-8-in-app-update-awareness-phase-2.md#story-81-update-check-service)
-    - [Story 8.2: Dismissable Update Badge & Download Link](./epic-8-in-app-update-awareness-phase-2.md#story-82-dismissable-update-badge-download-link)
+    - [Story 8.2: Dismissible Update Badge & Download Link](./epic-8-in-app-update-awareness-phase-2.md#story-82-dismissible-update-badge-download-link)
   - [Epic 9: Homebrew Tap Distribution (Phase 2)](./epic-9-homebrew-tap-distribution-phase-2.md)
     - [Story 9.1: Homebrew Tap Repository Setup](./epic-9-homebrew-tap-distribution-phase-2.md#story-91-homebrew-tap-repository-setup)
     - [Story 9.2: Automated Homebrew Formula Update](./epic-9-homebrew-tap-distribution-phase-2.md#story-92-automated-homebrew-formula-update)

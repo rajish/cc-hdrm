@@ -5,19 +5,19 @@ A developer finds cc-hdrm, runs `brew install cc-hdrm`, and it works. Upgrades f
 ## Story 9.1: Homebrew Tap Repository Setup
 
 As a project maintainer,
-I want a Homebrew tap repository with a working formula,
+I want a Homebrew tap repository with a working cask,
 So that users can install cc-hdrm via `brew install`.
 
 **Acceptance Criteria:**
 
 **Given** the maintainer creates a separate repository `{owner}/homebrew-tap`
 **When** the repository is configured
-**Then** it contains `Formula/cc-hdrm.rb` with a valid Homebrew formula
-**And** the formula downloads the ZIP asset from the latest GitHub Release
-**And** the formula includes the correct SHA256 checksum of the ZIP
-**And** the formula installs the cc-hdrm.app bundle to the appropriate location
+**Then** it contains `Casks/cc-hdrm.rb` with a valid Homebrew cask (cask is the correct distribution method for macOS `.app` bundles per Homebrew policy)
+**And** the cask downloads the ZIP asset from the latest GitHub Release
+**And** the cask includes the correct SHA256 checksum of the ZIP
+**And** the cask installs the cc-hdrm.app bundle to `/Applications`
 
-**Given** a user runs `brew tap {owner}/tap && brew install cc-hdrm`
+**Given** a user runs `brew tap {owner}/homebrew-tap && brew install --cask cc-hdrm`
 **When** Homebrew processes the formula
 **Then** cc-hdrm is downloaded, extracted, and installed
 **And** the user can launch cc-hdrm from the installed location

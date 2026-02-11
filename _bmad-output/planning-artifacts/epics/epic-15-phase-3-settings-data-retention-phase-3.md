@@ -49,13 +49,13 @@ So that headroom analysis works even if Anthropic introduces new tiers.
 - Custom 7d credit limit: optional number field
 - Hint text: "Override credit limits if your tier isn't recognized"
 
-**Given** Alex enters custom credit limits
-**When** the values are saved to PreferencesManager
-**Then** HeadroomAnalysisService uses the custom limits instead of tier lookup
+**Given** Alex enters custom credit limits and the tier is NOT recognized
+**When** HeadroomAnalysisService needs limits
+**Then** it uses the custom limits from PreferencesManager as a fallback
 
 **Given** custom limits are set AND tier is recognized
 **When** HeadroomAnalysisService needs limits
-**Then** tier lookup values take precedence (custom limits are fallback only)
+**Then** tier lookup values take precedence (custom limits are fallback only for unknown tiers)
 
 **Given** invalid values are entered (e.g., negative numbers, zero)
 **When** validation runs

@@ -397,11 +397,11 @@ Without cc-hdrm, he'd have kept going, gotten cut off mid-response, lost context
 - FR37: App renders data gaps as a visually distinct state with no interpolation of missing data
 - FR38: User can configure data retention period in settings (default 1 year)
 
-### Underutilised Headroom Analysis (Phase 3)
+### Subscription Value & Headroom Analysis (Phase 3)
 
 - FR39: App calculates effective headroom as min(5h remaining capacity, 7d remaining capacity)
-- FR40: App detects 5h window resets and classifies unused capacity into three categories: 5h unused, 7d-constrained (not unused), and true unused
-- FR41: User can view a breakdown of used capacity, 7d-constrained capacity, and true available capacity in the analytics view
+- FR40: App detects 5h window resets and classifies unused capacity into three categories: 5h unused, 7d-constrained (not unused), and true unused capacity
+- FR41: User can view a breakdown of used capacity, 7d-constrained capacity, and true unused capacity in the analytics view
 
 ### Usage Slope Indicator (Phase 3)
 

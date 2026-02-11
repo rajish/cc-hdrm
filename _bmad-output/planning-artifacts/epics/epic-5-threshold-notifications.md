@@ -22,6 +22,10 @@ So that threshold alerts can be delivered when headroom drops.
 
 ## Story 5.2: Threshold State Machine & Warning Notifications
 
+**Referenced Requirements:**
+- FR17: User receives macOS notification when 5-hour headroom drops below 20%
+- FR19: App includes reset countdown time in notification messages
+
 As a developer using Claude Code,
 I want to receive a macOS notification when my headroom drops below 20%,
 So that I can make informed decisions about which Claude sessions to prioritize.
@@ -31,6 +35,7 @@ So that I can make informed decisions about which Claude sessions to prioritize.
 **Given** 5-hour headroom is above 20%
 **When** a poll cycle reports 5-hour headroom below 20%
 **Then** a macOS notification fires: "Claude headroom at [X]% — resets in [relative] (at [absolute])" (FR17, FR19)
+**Example format:** "Claude headroom at 18% — resets in 2h 15m (at 5:30 PM)"
 **And** the notification is standard (not persistent)
 **And** the threshold state transitions from ABOVE_20 to WARNED_20
 
@@ -58,8 +63,9 @@ So that I have maximum warning to wrap up before hitting the limit.
 
 **Given** the threshold state is WARNED_20 (already received 20% warning)
 **When** a poll cycle reports headroom below 5%
-**Then** a persistent macOS notification fires with sound: "Claude headroom at [X]% — resets in [relative] (at [absolute])" (FR18, FR19)
+**Then** a macOS notification fires with `.timeSensitive` interruption level and sound: "Claude headroom at [X]% — resets in [relative] (at [absolute])" (FR18, FR19)
 **And** the notification remains in Notification Center
+**Note:** Whether the notification appears as a banner (auto-dismisses) or alert (stays on-screen) is controlled by the user's macOS notification settings, not by the app. The `.timeSensitive` level allows breaking through Focus modes (requires Time Sensitive Notifications entitlement: `com.apple.developer.usernotifications.time-sensitive`).
 **And** the threshold state transitions from WARNED_20 to WARNED_5
 
 **Given** headroom drops directly from above 20% to below 5% in a single poll

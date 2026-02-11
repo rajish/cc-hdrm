@@ -1563,7 +1563,7 @@ var patternNotificationCooldowns: [String: Date]  // pattern type -> last notifi
 
 ### Phase 4 Project Structure
 
-```
+```text
 cc-hdrm/
 ├── cc-hdrm/
 │   ├── Models/
@@ -1591,7 +1591,7 @@ cc-hdrm/
 
 ### Extra Usage Data Flow
 
-```
+```text
 ┌───────────────┐     ┌──────────────────┐     ┌──────────────────┐
 │ Claude API    │     │ UsageResponse    │     │ HistoricalData   │
 │ extra_usage:  │────▶│ .extraUsage:     │────▶│ Service          │
