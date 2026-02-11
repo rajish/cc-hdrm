@@ -39,10 +39,11 @@ So that the display is simple and actionable rather than noisy continuous values
 **Then** it computes the average rate of change (% per minute) across the buffer
 **And** maps the rate to SlopeLevel:
 
-- Rate < -0.3% per min → .cooling (↘)
-- Rate -0.3% to 0.3% per min → .flat (→)
+- Rate < 0.3% per min → .flat (→)
 - Rate 0.3 to 1.5% per min → .rising (↗)
 - Rate > 1.5% per min → .steep (⬆)
+
+> **Note:** No `.cooling` level exists. Within a usage window, utilization is monotonically increasing — it can only reset (jump down), not decrease gradually. A 3-level indicator is sufficient.
 
 **Given** slope is calculated for both windows
 **When** the calculation completes
@@ -52,7 +53,7 @@ So that the display is simple and actionable rather than noisy continuous values
 **Given** the SlopeLevel enum is defined
 **When** referenced across the codebase
 **Then** it includes properties: arrow (String), color (Color), accessibilityLabel (String)
-**And** .cooling uses secondary color; .flat uses secondary color; .rising and .steep use headroom color
+**And** .flat uses secondary color; .rising and .steep use headroom color
 
 ## Story 11.3: Menu Bar Slope Display (Escalation-Only)
 
@@ -128,4 +129,4 @@ So that slope display is consistent across menu bar and popover.
 
 **Given** any SlopeIndicator instance
 **When** accessibility is evaluated
-**Then** it has .accessibilityLabel set to the slope level name ("cooling", "flat", "rising", "steep")
+**Then** it has .accessibilityLabel set to the slope level name ("flat", "rising", "steep")
