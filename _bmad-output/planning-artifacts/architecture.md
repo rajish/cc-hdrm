@@ -134,7 +134,11 @@ Native macOS desktop application (Swift/SwiftUI) — determined by PRD requireme
 16. CI/CD → GitHub Actions: keyword-driven release from PR merge to `master`
 
 **Deferred Decisions (Post-MVP, Post-Phase 2):**
-- Sonnet-specific / extra usage display
+- Sonnet-specific usage breakdown
+
+**Phase 4 Decisions (Now Resolved — Sprint Change Proposal 2026-02-10):**
+17. Extra usage awareness → Integrated into Epic 16 stories (pattern detection, tier recommendation, insight engine). Data already available via API `extra_usage` object and persisted to SQLite (PR 43).
+18. Tier monthly pricing → Hardcoded `monthlyPrice` on `RateLimitTier`, user override fallback via `PreferencesManager`
 
 ### App Architecture
 
@@ -926,7 +930,7 @@ enum SlopeLevel: String {
 
 #### HeadroomAnalysisService
 
-**Responsibility:** Waste categorization math, credit limit lookup.
+**Responsibility:** Unused capacity categorization math, credit limit lookup.
 
 ```swift
 protocol HeadroomAnalysisServiceProtocol {
@@ -937,11 +941,11 @@ protocol HeadroomAnalysisServiceProtocol {
 
 struct HeadroomBreakdown {
     let usedPercent: Double
-    let constrainedPercent: Double  // 7d-blocked, NOT waste
-    let wastePercent: Double        // true waste
+    let constrainedPercent: Double  // 7d-blocked, NOT unused
+    let unusedPercent: Double       // genuinely unused capacity
     let usedCredits: Int
     let constrainedCredits: Int
-    let wasteCredits: Int
+    let unusedCredits: Int
 }
 ```
 
@@ -959,6 +963,55 @@ Else:
     true_waste = 7d_remaining  (7d was the binding constraint)
     7d_constrained = 5h_remaining - 7d_remaining
 ```
+
+#### SubscriptionPatternDetector (Phase 4 / Epic 16)
+
+**Responsibility:** Analyze ResetEvent and extra usage history for slow-burn subscription patterns.
+
+```swift
+protocol SubscriptionPatternDetectorProtocol {
+    func analyzePatterns() async throws -> [PatternFinding]
+}
+
+enum PatternFinding {
+    case forgottenSubscription(weeks: Int, avgUtilization: Double, monthlyCost: Int)
+    case chronicOverpaying(currentTier: RateLimitTier, recommendedTier: RateLimitTier, monthlySavings: Int)
+    case chronicUnderpowering(rateLimitCount: Int, currentTier: RateLimitTier, suggestedTier: RateLimitTier)
+    case usageDecay(currentUtil: Double, threeMonthAgoUtil: Double)
+    case extraUsageOverflow(avgExtraSpend: Double, recommendedTier: RateLimitTier, estimatedSavings: Int)
+    case persistentExtraUsage(avgMonthlyExtra: Double, basePrice: Int, recommendedTier: RateLimitTier)
+}
+```
+
+**Data sources:** `HistoricalDataService` for ResetEvent history, extra usage poll data from `usage_polls` table (persisted by PR 43).
+
+**Trigger:** Called after each reset event detection. Evaluates 6 pattern rules.
+
+**Extra usage patterns** require `extra_usage.is_enabled == true` and non-nil `used_credits` data. Skipped silently when unavailable.
+
+#### TierRecommendationService (Phase 4 / Epic 16)
+
+**Responsibility:** Compare actual usage against all tiers using total cost (base + extra usage).
+
+```swift
+protocol TierRecommendationServiceProtocol {
+    func recommendTier(for range: TimeRange) async throws -> TierRecommendation?
+}
+
+enum TierRecommendation {
+    case downgrade(current: RateLimitTier, recommended: RateLimitTier, monthlySavings: Int, confidence: String)
+    case upgrade(current: RateLimitTier, recommended: RateLimitTier, additionalCost: Int, rateLimitsAvoided: Int, costComparison: String?)
+    case goodFit(tier: RateLimitTier, headroomPercent: Double)
+}
+```
+
+**Total cost calculation:** For each tier, computes `total = tier.monthlyPrice + estimated_extra_usage`. If usage fits within a tier's limits, extra usage = $0. Uses `RateLimitTier.monthlyPrice` for base costs.
+
+**Data sources:** ResetEvent history, extra usage data from `usage_polls`, `RateLimitTier` credit limits and monthly prices.
+
+**Minimum data:** Returns nil with fewer than 2 weeks of usage data. Aligns to billing cycles when `billingCycleDay` is configured in `PreferencesManager`.
+
+**Fallback:** When extra usage data is unavailable (`is_enabled = false` or no data), falls back to credit-only comparison.
 
 #### DatabaseManager
 
@@ -985,7 +1038,7 @@ enum RateLimitTier: String, CaseIterable {
     case pro = "default_claude_pro"
     case max5x = "default_claude_max_5x"
     case max20x = "default_claude_max_20x"
-    
+
     var fiveHourCredits: Int {
         switch self {
         case .pro: return 550_000
@@ -993,12 +1046,22 @@ enum RateLimitTier: String, CaseIterable {
         case .max20x: return 11_000_000
         }
     }
-    
+
     var sevenDayCredits: Int {
         switch self {
         case .pro: return 5_000_000
         case .max5x: return 41_666_700
         case .max20x: return 83_333_300
+        }
+    }
+
+    /// Monthly base subscription price in dollars.
+    /// Used by TierRecommendationService for total cost comparison (base + extra usage).
+    var monthlyPrice: Int {
+        switch self {
+        case .pro: return 20
+        case .max5x: return 100
+        case .max20x: return 200
         }
     }
 }
@@ -1209,9 +1272,9 @@ struct Sparkline: View {
 │  ┌─────────────────────────────────────────────────┐    │
 │  │▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░                       │    │
 │  └─────────────────────────────────────────────────┘    │
-│  ▓ Used: 52%   ░ 7d-constrained: 12%   □ Waste: 36%    │
+│  ▓ Used: 52%   ░ 7d-constrained: 12%   □ Unused: 36%   │
 │                                                         │
-│  Avg peak: 64%  │  Total waste: 2.1M credits           │
+│  Context-aware summary (adapts to time range)           │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -1474,8 +1537,101 @@ All Phase 3 components maintain color independence:
 | Slope bands        | Warm tint         | Presence/absence         |
 | Used band          | Headroom color    | Solid fill pattern       |
 | 7d-constrained     | Slate blue        | Hatched pattern          |
-| True waste         | Light/transparent | Empty/outline pattern    |
+| Unused capacity    | Light/transparent | Empty/outline pattern    |
 | Gap regions        | Grey              | Hatched pattern + label  |
+
+## Phase 4 Architectural Additions (Epic 16: Subscription Intelligence)
+
+Phase 4 adds intelligence services that analyze historical data for slow-burn patterns and tier recommendations. All data sources already exist — the API returns `extra_usage` data (documented in PRD API spike) and PR 43 persists it to SQLite.
+
+### New Services
+
+- **SubscriptionPatternDetector** — 6 pattern rules analyzing ResetEvent and extra usage history (see service description above)
+- **TierRecommendationService** — Total cost comparison across tiers including extra usage overflow (see service description above)
+
+### Phase 4 Settings Additions
+
+**PreferencesManager additions:**
+
+```swift
+// Billing cycle
+var billingCycleDay: Int?   // nil = unset, 1-28
+
+// Notification cooldowns (internal, not user-facing)
+var patternNotificationCooldowns: [String: Date]  // pattern type -> last notified date
+```
+
+### Phase 4 Project Structure
+
+```
+cc-hdrm/
+├── cc-hdrm/
+│   ├── Models/
+│   │   └── PatternFinding.swift                     # NEW
+│   │
+│   ├── Services/
+│   │   ├── SubscriptionPatternDetectorProtocol.swift # NEW
+│   │   ├── SubscriptionPatternDetector.swift         # NEW
+│   │   ├── TierRecommendationServiceProtocol.swift   # NEW
+│   │   └── TierRecommendationService.swift           # NEW
+│
+├── cc-hdrmTests/
+│   ├── Services/
+│   │   ├── SubscriptionPatternDetectorTests.swift    # NEW
+│   │   └── TierRecommendationServiceTests.swift      # NEW
+```
+
+### Phase 4 Requirements to Structure Mapping
+
+| FR   | Requirement                                          | Primary File(s)                                                          |
+| ---- | ---------------------------------------------------- | ------------------------------------------------------------------------ |
+| FR46 | Detect extra usage overflow patterns                 | `SubscriptionPatternDetector.swift`, `HistoricalDataService.swift`        |
+| FR47 | Tier recommendation with total cost comparison       | `TierRecommendationService.swift`, `RateLimitTier.swift`                 |
+| FR48 | Analytics displays total cost breakdown              | `AnalyticsView.swift`                                                    |
+
+### Extra Usage Data Flow
+
+```
+┌───────────────┐     ┌──────────────────┐     ┌──────────────────┐
+│ Claude API    │     │ UsageResponse    │     │ HistoricalData   │
+│ extra_usage:  │────▶│ .extraUsage:     │────▶│ Service          │
+│  is_enabled   │     │  isEnabled       │     │ persistPoll()    │
+│  monthly_limit│     │  monthlyLimit    │     │                  │
+│  used_credits │     │  usedCredits     │     └────────┬─────────┘
+│  utilization  │     │  utilization     │              │ SQLite
+└───────────────┘     └──────────────────┘              ▼
+                                              ┌──────────────────┐
+                                              │ usage_polls      │
+                                              │ (extra_usage     │
+                                              │  columns, PR 43) │
+                                              └────────┬─────────┘
+                                                       │ query
+                              ┌─────────────────┬──────┘
+                              ▼                 ▼
+                    ┌──────────────────┐ ┌──────────────────┐
+                    │ Subscription     │ │ TierRecommend.   │
+                    │ PatternDetector  │ │ Service          │
+                    │                  │ │                  │
+                    │ • overflow freq  │ │ • total cost per │
+                    │ • persistent     │ │   tier (base +   │
+                    │   extra usage    │ │   extra usage)   │
+                    │ • chronic over/  │ │ • .downgrade/    │
+                    │   underpaying    │ │   .upgrade/      │
+                    │   (total cost)   │ │   .goodFit       │
+                    └────────┬─────────┘ └────────┬─────────┘
+                             │                    │
+                             └────────┬───────────┘
+                                      ▼
+                            ┌──────────────────┐
+                            │ Analytics View   │
+                            │                  │
+                            │ • Pattern cards  │
+                            │ • Tier recommend │
+                            │ • Total cost     │
+                            │   breakdown      │
+                            │ • Insight engine │
+                            └──────────────────┘
+```
 
 ## Architecture Validation Results
 
@@ -1492,10 +1648,11 @@ Every architectural component has a defined file location. Boundaries are enforc
 
 ### Requirements Coverage Validation ✅
 
-**Functional Requirements:** All 45 FRs have traceable architectural support with specific file mappings:
+**Functional Requirements:** All 48 FRs have traceable architectural support with specific file mappings:
 - FR1-FR24 (Phase 1): See "Requirements to Structure Mapping" section
 - FR25-FR32 (Phase 2): See "Phase 2 Requirements to Structure Mapping" section
 - FR33-FR45 (Phase 3): See "Phase 3 Requirements to Structure Mapping" section
+- FR46-FR48 (Phase 4): See "Phase 4 Requirements to Structure Mapping" section
 
 **Non-Functional Requirements:** All 13 NFRs are addressed architecturally.
 
@@ -1507,6 +1664,7 @@ Every architectural component has a defined file location. Boundaries are enforc
 - Phase 1: 10 core architectural decisions documented
 - Phase 2: 6 additional decisions (settings, CI/CD, update checks)
 - Phase 3: 8 additional decisions (SQLite, rollups, slope, analytics window)
+- Phase 4: 2 additional decisions (extra usage awareness, tier monthly pricing)
 All with rationale. Technology versions specified. All critical choices made.
 
 **Structure Completeness:** Every source file named and placed across all phases. Directory structure is complete and specific, not generic. Phase 3 adds 7 new model files, 7 new service files, 7 new view files.
@@ -1557,7 +1715,7 @@ All with rationale. Technology versions specified. All critical choices made.
 - [x] Complete directory structure defined (every file named)
 - [x] Component boundaries established (4 boundary types + SQLite boundary)
 - [x] Integration points mapped (data flow diagrams for all phases)
-- [x] All 45 FRs mapped to specific files (FR1-24 Phase 1, FR25-32 Phase 2, FR33-45 Phase 3)
+- [x] All 48 FRs mapped to specific files (FR1-24 Phase 1, FR25-32 Phase 2, FR33-45 Phase 3, FR46-48 Phase 4)
 
 ### Architecture Readiness Assessment
 
@@ -1569,7 +1727,7 @@ All with rationale. Technology versions specified. All critical choices made.
 - API spike eliminated the highest-risk unknown — concrete endpoint, auth headers, and response format are documented
 - Minimal external dependencies — SQLite bundled with macOS, nothing else
 - Single @Observable AppState provides clear, testable state management
-- Every FR (45 total) has a traceable path to a specific file
+- Every FR (48 total) has a traceable path to a specific file
 - Patterns are prescriptive enough to prevent agent divergence without being over-engineered
 - Phase 3 data layer is well-bounded — SQLite only touched by DatabaseManager and HistoricalDataService
 - On-demand rollup strategy ensures CPU is consumed only when user expects it
