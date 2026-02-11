@@ -6,6 +6,7 @@ enum PreferencesDefaults {
     static let criticalThreshold: Double = 5.0
     static let pollInterval: TimeInterval = 30
     static let launchAtLogin: Bool = false
+    static let dataRetentionDays: Int = 365
 }
 
 /// Protocol for the preferences manager that handles reading/writing user preferences.
@@ -16,6 +17,9 @@ protocol PreferencesManagerProtocol: AnyObject {
     var pollInterval: TimeInterval { get set }
     var launchAtLogin: Bool { get set }
     var dismissedVersion: String? { get set }
+
+    /// User-configured data retention period in days. Clamped to 30...1825.
+    var dataRetentionDays: Int { get set }
 
     /// User-configured custom 5-hour credit limit for unknown tiers. Nil if unset.
     var customFiveHourCredits: Int? { get set }

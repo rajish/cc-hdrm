@@ -381,5 +381,6 @@ private struct PreviewHistoricalDataService: HistoricalDataServiceProtocol {
     func ensureRollupsUpToDate() async throws {}
     func getRolledUpData(range: TimeRange) async throws -> [UsageRollup] { [] }
     func pruneOldData(retentionDays: Int) async throws {}
+    func clearAllData() async throws {}
 }
 #endif

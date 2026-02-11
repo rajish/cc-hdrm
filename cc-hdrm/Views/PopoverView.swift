@@ -6,7 +6,9 @@ struct PopoverView: View {
     let appState: AppState
     let preferencesManager: PreferencesManagerProtocol
     let launchAtLoginService: LaunchAtLoginServiceProtocol
+    var historicalDataService: (any HistoricalDataServiceProtocol)?
     var onThresholdChange: (() -> Void)?
+    var onClearHistory: (() -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -55,7 +57,7 @@ struct PopoverView: View {
 
             Divider()
 
-            PopoverFooterView(appState: appState, preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, onThresholdChange: onThresholdChange)
+            PopoverFooterView(appState: appState, preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, historicalDataService: historicalDataService, onThresholdChange: onThresholdChange, onClearHistory: onClearHistory)
                 .padding(.horizontal)
                 .padding(.vertical, 8)
         }

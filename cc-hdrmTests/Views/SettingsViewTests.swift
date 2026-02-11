@@ -58,6 +58,34 @@ struct SettingsViewTests {
         #expect(SettingsView.formatInterval(300) == "5m")
     }
 
+    @Test("SettingsView renders Historical Data section with retention picker when historicalDataService provided")
+    func rendersHistoricalDataSection() {
+        let mock = MockPreferencesManager()
+        let mockLaunch = MockLaunchAtLoginService()
+        let mockHistorical = MockHistoricalDataService()
+        let view = SettingsView(preferencesManager: mock, launchAtLoginService: mockLaunch, historicalDataService: mockHistorical)
+        _ = view.body
+    }
+
+    @Test("SettingsView formatSize returns human-readable size strings")
+    func formatSize() {
+        #expect(SettingsView.formatSize(0) == "Zero KB")
+        #expect(SettingsView.formatSize(1024).contains("KB"))
+        #expect(SettingsView.formatSize(1_048_576).contains("MB"))
+        #expect(SettingsView.formatSize(1_073_741_824).contains("GB"))
+    }
+
+    @Test("SettingsView retentionLabel returns correct labels for known values")
+    func retentionLabel() {
+        #expect(SettingsView.retentionLabel(for: 30) == "30 days")
+        #expect(SettingsView.retentionLabel(for: 90) == "90 days")
+        #expect(SettingsView.retentionLabel(for: 180) == "6 months")
+        #expect(SettingsView.retentionLabel(for: 365) == "1 year")
+        #expect(SettingsView.retentionLabel(for: 730) == "2 years")
+        #expect(SettingsView.retentionLabel(for: 1825) == "5 years")
+        #expect(SettingsView.retentionLabel(for: 999) == "999 days")
+    }
+
     @Test("SettingsView onThresholdChange closure is accepted and stored")
     func onThresholdChangeClosureAccepted() {
         let mock = MockPreferencesManager()

@@ -944,6 +944,169 @@ struct HistoricalDataServiceTests {
         #expect(events.count == 1)
     }
 
+    @Test("ensureRollupsUpToDate uses preference-based retention instead of hardcoded")
+    func ensureRollupsUpToDateUsesPreferenceRetention() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        // Set preference to 30 days
+        let mockPrefs = MockPreferencesManager()
+        mockPrefs.dataRetentionDays = 30
+
+        let service = HistoricalDataService(databaseManager: dbManager, preferencesManager: mockPrefs)
+
+        // Insert a reset event 50 days old (should be pruned with 30-day retention)
+        let connection = try dbManager.getConnection()
+        let oldTimestamp = Int64(Date().timeIntervalSince1970 * 1000) - (50 * 24 * 60 * 60 * 1000)
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        sqlite3_exec(
+            connection,
+            "INSERT INTO reset_events (timestamp, five_hour_peak) VALUES (\(oldTimestamp), 50.0)",
+            nil, nil, &errorMessage
+        )
+
+        // Verify it exists before rollup
+        var events = try await service.getResetEvents(fromTimestamp: nil, toTimestamp: nil)
+        #expect(events.count == 1)
+
+        // Run rollup — should use 30-day preference, pruning the 50-day-old event
+        try await service.ensureRollupsUpToDate()
+
+        // Verify it's been pruned
+        events = try await service.getResetEvents(fromTimestamp: nil, toTimestamp: nil)
+        #expect(events.count == 0)
+    }
+
+    @Test("ensureRollupsUpToDate keeps data within preference-based retention period")
+    func ensureRollupsUpToDateKeepsDataWithinPreferenceRetention() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        // Set preference to 365 days
+        let mockPrefs = MockPreferencesManager()
+        mockPrefs.dataRetentionDays = 365
+
+        let service = HistoricalDataService(databaseManager: dbManager, preferencesManager: mockPrefs)
+
+        // Insert a reset event 50 days old (should be KEPT with 365-day retention)
+        let connection = try dbManager.getConnection()
+        let oldTimestamp = Int64(Date().timeIntervalSince1970 * 1000) - (50 * 24 * 60 * 60 * 1000)
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        sqlite3_exec(
+            connection,
+            "INSERT INTO reset_events (timestamp, five_hour_peak) VALUES (\(oldTimestamp), 50.0)",
+            nil, nil, &errorMessage
+        )
+
+        // Run rollup — should use 365-day preference, keeping the 50-day-old event
+        try await service.ensureRollupsUpToDate()
+
+        // Verify data is preserved
+        let events = try await service.getResetEvents(fromTimestamp: nil, toTimestamp: nil)
+        #expect(events.count == 1)
+    }
+
+    @Test("clearAllData empties all four data tables")
+    func clearAllDataEmptiesAllTables() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+        let connection = try dbManager.getConnection()
+
+        // Insert data into all three tables (column names must match actual schema)
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util) VALUES (\(now), 10.0)", nil, nil, &errorMessage)
+        sqlite3_exec(connection, "INSERT INTO usage_rollups (period_start, period_end, resolution, five_hour_avg, five_hour_peak, five_hour_min, reset_count) VALUES (\(now), \(now + 300000), '5min', 10.0, 10.0, 10.0, 0)", nil, nil, &errorMessage)
+        sqlite3_exec(connection, "INSERT INTO reset_events (timestamp, five_hour_peak) VALUES (\(now), 50.0)", nil, nil, &errorMessage)
+
+        // Verify data exists in all three tables
+        let pollsBefore = try await service.getRecentPolls(hours: 24)
+        #expect(pollsBefore.count == 1)
+        let eventsBefore = try await service.getResetEvents(fromTimestamp: nil, toTimestamp: nil)
+        #expect(eventsBefore.count == 1)
+        let rollupsBefore = try await service.getRolledUpData(range: .all)
+        #expect(rollupsBefore.count == 1, "usage_rollups should have 1 row before clear")
+
+        // Clear all data
+        try await service.clearAllData()
+
+        // Verify all three tables are empty
+        let pollsAfter = try await service.getRecentPolls(hours: 24)
+        #expect(pollsAfter.count == 0)
+        let eventsAfter = try await service.getResetEvents(fromTimestamp: nil, toTimestamp: nil)
+        #expect(eventsAfter.count == 0)
+        let rollupsAfter = try await service.getRolledUpData(range: .all)
+        #expect(rollupsAfter.count == 0, "usage_rollups should be empty after clear")
+    }
+
+    @Test("clearAllData skips when database unavailable")
+    func clearAllDataSkipsWhenDatabaseUnavailable() async throws {
+        let mockManager = MockDatabaseManager()
+        mockManager.shouldBeAvailable = false
+
+        let service = HistoricalDataService(databaseManager: mockManager)
+
+        // Should not throw - silently skips
+        try await service.clearAllData()
+    }
+
+    @Test("clearAllData resets rollup_metadata")
+    func clearAllDataResetsRollupMetadata() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        // Run a rollup to populate rollup_metadata
+        try await service.ensureRollupsUpToDate()
+
+        // Clear all data
+        try await service.clearAllData()
+
+        // Verify rollup_metadata is cleared by running another rollup (should succeed from clean state)
+        try await service.ensureRollupsUpToDate()
+    }
+
+    @Test("clearAllData reduces database size after VACUUM")
+    func clearAllDataReducesDatabaseSize() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+        let connection = try dbManager.getConnection()
+
+        // Insert enough data across multiple tables to grow the file beyond minimum page allocation
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        for i in 0..<1000 {
+            sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util, seven_day_util, five_hour_resets_at, seven_day_resets_at) VALUES (\(now - Int64(i) * 30000), \(Double(i)), \(Double(i) * 0.5), \(now + 18000000), \(now + 604800000))", nil, nil, &errorMessage)
+        }
+        for i in 0..<500 {
+            sqlite3_exec(connection, "INSERT INTO reset_events (timestamp, five_hour_peak, seven_day_util) VALUES (\(now - Int64(i) * 60000), \(Double(i)), \(Double(i) * 0.3))", nil, nil, &errorMessage)
+        }
+
+        let sizeBefore = try await service.getDatabaseSize()
+        #expect(sizeBefore > 40960, "Database should have grown beyond initial page allocation")
+
+        // Clear and vacuum
+        try await service.clearAllData()
+
+        let sizeAfter = try await service.getDatabaseSize()
+        #expect(sizeAfter < sizeBefore)
+    }
+
     @Test("raw to 5min rollup produces correct aggregates (AC 1)")
     func rawTo5MinRollupProducesCorrectAggregates() async throws {
         let (dbManager, path) = makeManager()

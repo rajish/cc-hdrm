@@ -277,6 +277,55 @@ struct PreferencesManagerTests {
         #expect(manager.warningThreshold == 30.0)
     }
 
+    // MARK: - Data Retention Days
+
+    @Test("Default data retention days is 365")
+    func defaultDataRetentionDays() {
+        let (manager, _, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        #expect(manager.dataRetentionDays == 365)
+    }
+
+    @Test("Data retention days setter clamps to min 30")
+    func dataRetentionDaysClampedToMin() {
+        let (manager, _, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        manager.dataRetentionDays = 10
+        #expect(manager.dataRetentionDays == 30)
+    }
+
+    @Test("Data retention days setter clamps to max 1825")
+    func dataRetentionDaysClampedToMax() {
+        let (manager, _, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        manager.dataRetentionDays = 3000
+        #expect(manager.dataRetentionDays == 1825)
+    }
+
+    @Test("Data retention days getter clamps raw value below 30 to 30")
+    func dataRetentionDaysGetterClampedToMin() {
+        let (manager, defaults, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        defaults.set(15, forKey: "com.cc-hdrm.dataRetentionDays")
+        #expect(manager.dataRetentionDays == 30)
+    }
+
+    @Test("Data retention days getter clamps raw value above 1825 to 1825")
+    func dataRetentionDaysGetterClampedToMax() {
+        let (manager, defaults, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        defaults.set(5000, forKey: "com.cc-hdrm.dataRetentionDays")
+        #expect(manager.dataRetentionDays == 1825)
+    }
+
+    @Test("Data retention days persists and reads back correctly")
+    func dataRetentionDaysPersists() {
+        let (manager, _, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        manager.dataRetentionDays = 180
+        #expect(manager.dataRetentionDays == 180)
+    }
+
     // MARK: - Reset to Defaults
 
     @Test("resetToDefaults restores all values to defaults")
@@ -288,6 +337,7 @@ struct PreferencesManagerTests {
         manager.pollInterval = 60.0
         manager.launchAtLogin = true
         manager.dismissedVersion = "1.0.0"
+        manager.dataRetentionDays = 90
 
         manager.resetToDefaults()
 
@@ -296,6 +346,7 @@ struct PreferencesManagerTests {
         #expect(manager.pollInterval == PreferencesDefaults.pollInterval)
         #expect(manager.launchAtLogin == PreferencesDefaults.launchAtLogin)
         #expect(manager.dismissedVersion == nil)
+        #expect(manager.dataRetentionDays == PreferencesDefaults.dataRetentionDays)
     }
 
     // MARK: - Protocol Conformance

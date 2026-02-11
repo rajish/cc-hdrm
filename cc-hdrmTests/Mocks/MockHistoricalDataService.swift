@@ -107,4 +107,9 @@ final class MockHistoricalDataService: HistoricalDataServiceProtocol, @unchecked
     func pruneOldData(retentionDays: Int) async throws {
         // No-op for mock
     }
+
+    var clearAllDataCallCount = 0
+    func clearAllData() async throws {
+        clearAllDataCallCount += 1
+    }
 }

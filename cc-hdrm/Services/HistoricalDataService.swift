@@ -712,7 +712,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             try await performHourlyToDailyRollup(connection: connection)
 
             // Prune old data as final step (Task 9.4)
-            try await performPruneOldData(retentionDays: Self.defaultRetentionDays, connection: connection)
+            let retention = preferencesManager?.dataRetentionDays ?? Self.defaultRetentionDays
+            try await performPruneOldData(retentionDays: retention, connection: connection)
 
             // Update last rollup timestamp after successful completion (Task 7.4)
             let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
@@ -740,6 +741,33 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         // Implementation in Task 8
         let connection = try databaseManager.getConnection()
         return try await queryRolledUpData(range: range, connection: connection)
+    }
+
+    func clearAllData() async throws {
+        guard databaseManager.isAvailable else {
+            Self.logger.debug("Database unavailable - skipping clear")
+            return
+        }
+        let connection = try databaseManager.getConnection()
+
+        let tables = ["usage_polls", "usage_rollups", "reset_events", "rollup_metadata"]
+        for table in tables {
+            let result = sqlite3_exec(connection, "DELETE FROM \(table)", nil, nil, nil)
+            guard result == SQLITE_OK else {
+                let errorMessage = String(cString: sqlite3_errmsg(connection))
+                Self.logger.error("Failed to clear \(table, privacy: .public): \(errorMessage, privacy: .public)")
+                throw AppError.databaseQueryFailed(underlying: SQLiteError.execFailed(message: errorMessage))
+            }
+        }
+
+        // VACUUM must run outside a transaction; non-fatal if it fails (data is already cleared)
+        let vacuumResult = sqlite3_exec(connection, "VACUUM", nil, nil, nil)
+        if vacuumResult != SQLITE_OK {
+            let errorMessage = String(cString: sqlite3_errmsg(connection))
+            Self.logger.warning("VACUUM failed after clear: \(errorMessage, privacy: .public)")
+        }
+
+        Self.logger.info("Cleared all historical data and vacuumed database")
     }
 
     func pruneOldData(retentionDays: Int) async throws {
