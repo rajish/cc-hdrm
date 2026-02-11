@@ -131,9 +131,9 @@ development_status:
   14-5-analytics-view-integration-conditional-display: done  # Rewritten per sprint change proposal 2026-02-10
   epic-14-retrospective: optional
 
-  epic-15: in-progress  # Phase 3 Settings & Data Retention (Phase 3)
+  epic-15: done  # Phase 3 Settings & Data Retention (Phase 3)
   15-1-data-retention-configuration: done
-  15-2-custom-credit-limit-override: backlog
+  15-2-custom-credit-limit-override: done
   epic-15-retrospective: optional
 
   epic-16: backlog  # Subscription Intelligence (Phase 4)

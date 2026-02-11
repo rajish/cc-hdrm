@@ -19,6 +19,11 @@ struct SettingsView: View {
     @State private var dataRetentionDays: Int
     @State private var showClearConfirmation = false
     @State private var isClearing = false
+    @State private var showAdvanced = false
+    @State private var customFiveHourText: String
+    @State private var customSevenDayText: String
+    @State private var fiveHourError: String?
+    @State private var sevenDayError: String?
 
     /// Discrete poll interval options per AC #2.
     private static let pollIntervalOptions: [TimeInterval] = [10, 15, 30, 60, 120, 300]
@@ -53,6 +58,8 @@ struct SettingsView: View {
         _dataRetentionDays = State(initialValue: snapped)
         // AC #3: Initialize from SMAppService reality, not stored preference
         _launchAtLogin = State(initialValue: launchAtLoginService.isEnabled)
+        _customFiveHourText = State(initialValue: preferencesManager.customFiveHourCredits.map(String.init) ?? "")
+        _customSevenDayText = State(initialValue: preferencesManager.customSevenDayCredits.map(String.init) ?? "")
     }
 
     var body: some View {
@@ -201,6 +208,83 @@ struct SettingsView: View {
                 }
             }
 
+            // Advanced section (Story 15.2: Custom credit limit override)
+            Divider()
+
+            DisclosureGroup(isExpanded: $showAdvanced) {
+                Text("Override credit limits if your tier isn't recognized")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack {
+                    Text("5-hour credit limit")
+                    Spacer()
+                    TextField("None", text: $customFiveHourText)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 100)
+                        .multilineTextAlignment(.trailing)
+                        .accessibilityLabel("Custom five hour credit limit")
+                }
+                .onChange(of: customFiveHourText) { _, newValue in
+                    guard !isUpdating else { return }
+                    isUpdating = true
+                    switch Self.validateCreditInput(newValue) {
+                    case .clear:
+                        preferencesManager.customFiveHourCredits = nil
+                        fiveHourError = nil
+                    case .valid(let value):
+                        preferencesManager.customFiveHourCredits = value
+                        fiveHourError = nil
+                    case .invalid(let message):
+                        fiveHourError = message
+                    }
+                    isUpdating = false
+                }
+
+                if let error = fiveHourError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .accessibilityLabel("Validation error: \(error)")
+                }
+
+                HStack {
+                    Text("7-day credit limit")
+                    Spacer()
+                    TextField("None", text: $customSevenDayText)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 100)
+                        .multilineTextAlignment(.trailing)
+                        .accessibilityLabel("Custom seven day credit limit")
+                }
+                .onChange(of: customSevenDayText) { _, newValue in
+                    guard !isUpdating else { return }
+                    isUpdating = true
+                    switch Self.validateCreditInput(newValue) {
+                    case .clear:
+                        preferencesManager.customSevenDayCredits = nil
+                        sevenDayError = nil
+                    case .valid(let value):
+                        preferencesManager.customSevenDayCredits = value
+                        sevenDayError = nil
+                    case .invalid(let message):
+                        sevenDayError = message
+                    }
+                    isUpdating = false
+                }
+
+                if let error = sevenDayError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .accessibilityLabel("Validation error: \(error)")
+                }
+            } label: {
+                Text("Advanced")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+
             Divider()
 
             // Reset to Defaults button (AC #4)
@@ -215,6 +299,11 @@ struct SettingsView: View {
                     dataRetentionDays = preferencesManager.dataRetentionDays
                     launchAtLogin = launchAtLoginService.isEnabled
                     preferencesManager.launchAtLogin = launchAtLogin
+                    customFiveHourText = ""
+                    customSevenDayText = ""
+                    fiveHourError = nil
+                    sevenDayError = nil
+                    showAdvanced = false
                     onThresholdChange?()
                 }
                 .accessibilityLabel("Reset all settings to default values")
@@ -279,5 +368,27 @@ struct SettingsView: View {
     /// Returns the display label for a given retention days value.
     static func retentionLabel(for days: Int) -> String {
         retentionOptions.first { $0.days == days }?.label ?? "\(days) days"
+    }
+
+    /// Result of validating credit limit text input.
+    enum CreditInputValidation: Equatable {
+        /// Text was empty — clear the stored preference.
+        case clear
+        /// Text parsed to a valid positive integer.
+        case valid(Int)
+        /// Text was invalid — do not update the stored preference.
+        case invalid(String)
+    }
+
+    /// Validates credit limit text input and returns the appropriate action.
+    static func validateCreditInput(_ text: String) -> CreditInputValidation {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            return .clear
+        } else if let value = Int(trimmed), value > 0 {
+            return .valid(value)
+        } else {
+            return .invalid("Must be a positive whole number")
+        }
     }
 }

@@ -93,6 +93,39 @@ struct RateLimitTierTests {
         #expect(limits?.sevenDayCredits == 8_000_000)
     }
 
+    @Test("resolve() with known tier string ignores custom limits set in preferences (AC 3)")
+    func resolveKnownTierIgnoresCustomLimits() {
+        let mockPrefs = MockPreferencesManager()
+        mockPrefs.customFiveHourCredits = 999_999
+        mockPrefs.customSevenDayCredits = 9_999_999
+
+        let limits = RateLimitTier.resolve(tierString: "default_claude_pro", preferencesManager: mockPrefs)
+        #expect(limits != nil)
+        #expect(limits?.fiveHourCredits == 550_000, "Known tier should use built-in limits, not custom")
+        #expect(limits?.sevenDayCredits == 5_000_000, "Known tier should use built-in limits, not custom")
+    }
+
+    @Test("resolve() with unknown tier + only one custom limit set returns nil (both required)")
+    func resolveUnknownTierPartialCustomLimits() {
+        let mockPrefs = MockPreferencesManager()
+        // Only 5h set, 7d is nil
+        mockPrefs.customFiveHourCredits = 1_000_000
+        mockPrefs.customSevenDayCredits = nil
+
+        let limits = RateLimitTier.resolve(tierString: "some_future_tier", preferencesManager: mockPrefs)
+        #expect(limits == nil, "Should return nil when only one custom limit is set")
+    }
+
+    @Test("resolve() with unknown tier + only 7d custom limit set returns nil")
+    func resolveUnknownTierOnlySevenDaySet() {
+        let mockPrefs = MockPreferencesManager()
+        mockPrefs.customFiveHourCredits = nil
+        mockPrefs.customSevenDayCredits = 10_000_000
+
+        let limits = RateLimitTier.resolve(tierString: "some_future_tier", preferencesManager: mockPrefs)
+        #expect(limits == nil, "Should return nil when only 7d custom limit is set")
+    }
+
     // MARK: - CreditLimits normalizationFactor
 
     @Test("CreditLimits.normalizationFactor is approximately correct for each tier")

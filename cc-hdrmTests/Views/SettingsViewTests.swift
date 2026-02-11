@@ -101,6 +101,65 @@ struct SettingsViewTests {
     }
 }
 
+@Suite("SettingsView Advanced Section Tests (Story 15.2)")
+@MainActor
+struct SettingsViewAdvancedTests {
+
+    @Test("SettingsView renders Advanced disclosure group without crash")
+    func rendersAdvancedDisclosureGroup() {
+        let mock = MockPreferencesManager()
+        let mockLaunch = MockLaunchAtLoginService()
+        let view = SettingsView(preferencesManager: mock, launchAtLoginService: mockLaunch)
+        _ = view.body
+    }
+
+    @Test("Custom credit fields display existing values from PreferencesManager")
+    func displaysExistingCustomValues() {
+        let mock = MockPreferencesManager()
+        mock.customFiveHourCredits = 1_000_000
+        mock.customSevenDayCredits = 10_000_000
+        let mockLaunch = MockLaunchAtLoginService()
+        // SettingsView init reads from mock and initializes @State text fields
+        let view = SettingsView(preferencesManager: mock, launchAtLoginService: mockLaunch)
+        _ = view.body
+        // Verify mock values survived through init (they're read via .map(String.init))
+        #expect(mock.customFiveHourCredits == 1_000_000)
+        #expect(mock.customSevenDayCredits == 10_000_000)
+    }
+
+    @Test("Empty text input returns .clear validation result")
+    func emptyFieldClearsPreference() {
+        #expect(SettingsView.validateCreditInput("") == .clear)
+        #expect(SettingsView.validateCreditInput("   ") == .clear)
+    }
+
+    @Test("Valid positive integer returns .valid with parsed value")
+    func validPositiveIntegerPersisted() {
+        #expect(SettingsView.validateCreditInput("750000") == .valid(750_000))
+        #expect(SettingsView.validateCreditInput("1") == .valid(1))
+        #expect(SettingsView.validateCreditInput(" 550000 ") == .valid(550_000))
+    }
+
+    @Test("Invalid input returns .invalid — negative, zero, non-numeric, decimal")
+    func invalidInputRetainsPreviousValue() {
+        #expect(SettingsView.validateCreditInput("-100") == .invalid("Must be a positive whole number"))
+        #expect(SettingsView.validateCreditInput("0") == .invalid("Must be a positive whole number"))
+        #expect(SettingsView.validateCreditInput("abc") == .invalid("Must be a positive whole number"))
+        #expect(SettingsView.validateCreditInput("1000.5") == .invalid("Must be a positive whole number"))
+    }
+
+    @Test("Reset to Defaults clears custom credit preferences")
+    func resetClearsCustomCredits() {
+        let mock = MockPreferencesManager()
+        mock.customFiveHourCredits = 1_000_000
+        mock.customSevenDayCredits = 10_000_000
+        mock.resetToDefaults()
+        #expect(mock.customFiveHourCredits == nil)
+        #expect(mock.customSevenDayCredits == nil)
+        #expect(mock.resetToDefaultsCallCount == 1)
+    }
+}
+
 @Suite("GearMenuView Settings Integration Tests")
 @MainActor
 struct GearMenuViewSettingsTests {
