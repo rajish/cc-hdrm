@@ -67,43 +67,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let preferences = PreferencesManager()
         self.preferencesManager = preferences
 
-        // Configure NSPopover with SwiftUI content
-        let pop = NSPopover()
-        pop.contentSize = NSSize(width: 220, height: 0) // width hint only; SwiftUI determines height
-        pop.behavior = .transient
-        // Task wrapper required: onThresholdChange is a synchronous closure (called from SwiftUI
-        // .onChange), but reevaluateThresholds() is async — Task bridges sync→async context.
         if launchAtLoginService == nil {
             launchAtLoginService = LaunchAtLoginService()
         }
-
-        pop.contentViewController = NSHostingController(rootView: PopoverView(appState: state, preferencesManager: preferences, launchAtLoginService: launchAtLoginService!, onThresholdChange: { [weak self] in
-            guard let self else { return }
-            Task { @MainActor in
-                await self.notificationService?.reevaluateThresholds()
-            }
-        }))
-        pop.animates = true
-        self.popover = pop
-
-        // Wire status item button to toggle popover
-        statusItem?.button?.action = #selector(togglePopover(_:))
-        statusItem?.button?.target = self
-        statusItem?.button?.sendAction(on: .leftMouseUp)
-
-        // Close main popover when settings view dismisses
-        NotificationCenter.default.addObserver(
-            forName: .dismissPopover,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self, let popover = self.popover, popover.isShown else { return }
-            Self.popoverLogger.info("Popover closing via settings dismiss")
-            popover.performClose(nil)
-            self.removeEventMonitor()
-        }
-
-        Self.logger.info("Menu bar status item configured")
 
         // Create NotificationService if not already injected (test path)
         if notificationService == nil {
@@ -146,6 +112,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let histService = historicalDataServiceRef, let headroomService = headroomAnalysisServiceRef {
             analyticsWindow?.configure(appState: state, historicalDataService: histService, headroomAnalysisService: headroomService)
         }
+
+        // Configure NSPopover with SwiftUI content (after services created so historicalDataService is available)
+        let pop = NSPopover()
+        pop.contentSize = NSSize(width: 220, height: 0) // width hint only; SwiftUI determines height
+        pop.behavior = .transient
+        // Task wrapper required: onThresholdChange is a synchronous closure (called from SwiftUI
+        // .onChange), but reevaluateThresholds() is async — Task bridges sync→async context.
+        pop.contentViewController = NSHostingController(rootView: PopoverView(appState: state, preferencesManager: preferences, launchAtLoginService: launchAtLoginService!, historicalDataService: historicalDataServiceRef, onThresholdChange: { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in
+                await self.notificationService?.reevaluateThresholds()
+            }
+        }, onClearHistory: { [weak state] in
+            state?.updateSparklineData([])
+            AnalyticsWindow.shared.close()
+        }))
+        pop.animates = true
+        self.popover = pop
+
+        // Wire status item button to toggle popover
+        statusItem?.button?.action = #selector(togglePopover(_:))
+        statusItem?.button?.target = self
+        statusItem?.button?.sendAction(on: .leftMouseUp)
+
+        // Close main popover when settings view dismisses
+        NotificationCenter.default.addObserver(
+            forName: .dismissPopover,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, let popover = self.popover, popover.isShown else { return }
+            Self.popoverLogger.info("Popover closing via settings dismiss")
+            popover.performClose(nil)
+            self.removeEventMonitor()
+        }
+
+        Self.logger.info("Menu bar status item configured")
 
         // Create FreshnessMonitor if not already injected (test path)
         if freshnessMonitor == nil {

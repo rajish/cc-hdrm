@@ -65,4 +65,9 @@ protocol HistoricalDataServiceProtocol: Sendable {
     /// Called automatically at the end of ensureRollupsUpToDate().
     /// - Parameter retentionDays: Maximum age of data to retain
     func pruneOldData(retentionDays: Int) async throws
+
+    /// Deletes all historical data (usage_polls, usage_rollups, reset_events, rollup_metadata)
+    /// and reclaims disk space via VACUUM.
+    /// - Throws: Database errors (caller should handle gracefully)
+    func clearAllData() async throws
 }

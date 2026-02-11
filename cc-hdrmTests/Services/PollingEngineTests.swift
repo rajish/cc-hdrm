@@ -162,6 +162,10 @@ private final class PEMockHistoricalDataService: HistoricalDataServiceProtocol, 
     func pruneOldData(retentionDays: Int) async throws {
         // No-op for mock
     }
+
+    func clearAllData() async throws {
+        // No-op for mock
+    }
 }
 
 private struct PEMockAPIClient: APIClientProtocol {

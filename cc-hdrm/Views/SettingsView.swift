@@ -5,26 +5,48 @@ import SwiftUI
 struct SettingsView: View {
     let preferencesManager: PreferencesManagerProtocol
     let launchAtLoginService: LaunchAtLoginServiceProtocol
+    let historicalDataService: (any HistoricalDataServiceProtocol)?
     var onDone: (() -> Void)?
     var onThresholdChange: (() -> Void)?
+    var onClearHistory: (() -> Void)?
 
     @State private var warningThreshold: Double
     @State private var criticalThreshold: Double
     @State private var pollInterval: TimeInterval
     @State private var launchAtLogin: Bool
     @State private var isUpdating = false
+    @State private var databaseSizeBytes: Int64 = 0
+    @State private var dataRetentionDays: Int
+    @State private var showClearConfirmation = false
+    @State private var isClearing = false
 
     /// Discrete poll interval options per AC #2.
     private static let pollIntervalOptions: [TimeInterval] = [10, 15, 30, 60, 120, 300]
 
-    init(preferencesManager: PreferencesManagerProtocol, launchAtLoginService: LaunchAtLoginServiceProtocol, onDone: (() -> Void)? = nil, onThresholdChange: (() -> Void)? = nil) {
+    /// Discrete retention options mapping display labels to day values.
+    private static let retentionOptions: [(label: String, days: Int)] = [
+        ("30 days", 30),
+        ("90 days", 90),
+        ("6 months", 180),
+        ("1 year", 365),
+        ("2 years", 730),
+        ("5 years", 1825),
+    ]
+
+    /// Warning threshold for database size (500 MB).
+    private static let databaseSizeWarningThreshold: Int64 = 524_288_000
+
+    init(preferencesManager: PreferencesManagerProtocol, launchAtLoginService: LaunchAtLoginServiceProtocol, historicalDataService: (any HistoricalDataServiceProtocol)? = nil, onDone: (() -> Void)? = nil, onThresholdChange: (() -> Void)? = nil, onClearHistory: (() -> Void)? = nil) {
         self.preferencesManager = preferencesManager
         self.launchAtLoginService = launchAtLoginService
+        self.historicalDataService = historicalDataService
         self.onDone = onDone
         self.onThresholdChange = onThresholdChange
+        self.onClearHistory = onClearHistory
         _warningThreshold = State(initialValue: preferencesManager.warningThreshold)
         _criticalThreshold = State(initialValue: preferencesManager.criticalThreshold)
         _pollInterval = State(initialValue: preferencesManager.pollInterval)
+        _dataRetentionDays = State(initialValue: preferencesManager.dataRetentionDays)
         // AC #3: Initialize from SMAppService reality, not stored preference
         _launchAtLogin = State(initialValue: launchAtLoginService.isEnabled)
     }
@@ -119,6 +141,62 @@ struct SettingsView: View {
                 }
                 .accessibilityLabel("Launch at login, \(launchAtLogin ? "on" : "off")")
 
+            // Historical Data section (Story 15.1)
+            if historicalDataService != nil {
+                Divider()
+
+                Text("Historical Data")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                // Data retention picker
+                HStack {
+                    Text("Data retention")
+                    Spacer()
+                    Picker("Data retention", selection: $dataRetentionDays) {
+                        ForEach(Self.retentionOptions, id: \.days) { option in
+                            Text(option.label).tag(option.days)
+                        }
+                    }
+                    .labelsHidden()
+                    .onChange(of: dataRetentionDays) { _, newValue in
+                        guard !isUpdating else { return }
+                        isUpdating = true
+                        preferencesManager.dataRetentionDays = newValue
+                        dataRetentionDays = preferencesManager.dataRetentionDays
+                        isUpdating = false
+                    }
+                    .accessibilityLabel("Data retention period, \(Self.retentionLabel(for: dataRetentionDays))")
+                }
+
+                // Database size display
+                HStack {
+                    Text("Database size")
+                    Spacer()
+                    Text(Self.formatSize(databaseSizeBytes))
+                        .foregroundStyle(databaseSizeBytes > Self.databaseSizeWarningThreshold ? Color.headroomWarning : .secondary)
+                        .accessibilityLabel("Database size, \(Self.formatSize(databaseSizeBytes))")
+                }
+
+                // Warning hint when database is large
+                if databaseSizeBytes > Self.databaseSizeWarningThreshold {
+                    Text("Consider reducing retention or clearing history")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                // Clear History button
+                HStack {
+                    Spacer()
+                    Button("Clear History\u{2026}") {
+                        showClearConfirmation = true
+                    }
+                    .disabled(isClearing)
+                    .accessibilityLabel("Clear all historical usage data")
+                    Spacer()
+                }
+            }
+
             Divider()
 
             // Reset to Defaults button (AC #4)
@@ -130,6 +208,7 @@ struct SettingsView: View {
                     warningThreshold = preferencesManager.warningThreshold
                     criticalThreshold = preferencesManager.criticalThreshold
                     pollInterval = preferencesManager.pollInterval
+                    dataRetentionDays = preferencesManager.dataRetentionDays
                     launchAtLogin = launchAtLoginService.isEnabled
                     preferencesManager.launchAtLogin = launchAtLogin
                     onThresholdChange?()
@@ -149,6 +228,30 @@ struct SettingsView: View {
         }
         .padding()
         .frame(width: 280)
+        .task {
+            // Load database size asynchronously on appear
+            if let service = historicalDataService {
+                databaseSizeBytes = (try? await service.getDatabaseSize()) ?? 0
+            }
+        }
+        .alert("Clear History?", isPresented: $showClearConfirmation) {
+            Button("Clear", role: .destructive) {
+                isClearing = true
+                Task {
+                    do {
+                        try await historicalDataService?.clearAllData()
+                        onClearHistory?()
+                    } catch {
+                        // Clear failed — size will refresh unchanged, indicating failure to user
+                    }
+                    databaseSizeBytes = (try? await historicalDataService?.getDatabaseSize()) ?? 0
+                    isClearing = false
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This will permanently delete all historical usage data. Sparkline and analytics will show empty until new data is collected.")
+        }
     }
 
     /// Formats a TimeInterval into a human-readable short string.
@@ -159,5 +262,18 @@ struct SettingsView: View {
         } else {
             return "\(seconds / 60)m"
         }
+    }
+
+    /// Formats byte count into human-readable size string.
+    static func formatSize(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useKB, .useMB, .useGB]
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes)
+    }
+
+    /// Returns the display label for a given retention days value.
+    static func retentionLabel(for days: Int) -> String {
+        retentionOptions.first { $0.days == days }?.label ?? "\(days) days"
     }
 }

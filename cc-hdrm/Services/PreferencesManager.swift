@@ -17,6 +17,7 @@ final class PreferencesManager: PreferencesManagerProtocol {
         static let pollInterval = "com.cc-hdrm.pollInterval"
         static let launchAtLogin = "com.cc-hdrm.launchAtLogin"
         static let dismissedVersion = "com.cc-hdrm.dismissedVersion"
+        static let dataRetentionDays = "com.cc-hdrm.dataRetentionDays"
         static let customFiveHourCredits = "com.cc-hdrm.customFiveHourCredits"
         static let customSevenDayCredits = "com.cc-hdrm.customSevenDayCredits"
         static let customMonthlyPrice = "com.cc-hdrm.customMonthlyPrice"
@@ -134,6 +135,21 @@ final class PreferencesManager: PreferencesManagerProtocol {
         }
     }
 
+    // MARK: - Data Retention
+
+    var dataRetentionDays: Int {
+        get {
+            let raw = defaults.integer(forKey: Keys.dataRetentionDays)
+            guard raw > 0 else { return PreferencesDefaults.dataRetentionDays }
+            return min(max(raw, 30), 1825)
+        }
+        set {
+            let clamped = min(max(newValue, 30), 1825)
+            Self.logger.info("Data retention changed to \(clamped) days")
+            defaults.set(clamped, forKey: Keys.dataRetentionDays)
+        }
+    }
+
     // MARK: - Custom Credit Limits
 
     var customFiveHourCredits: Int? {
@@ -187,6 +203,7 @@ final class PreferencesManager: PreferencesManagerProtocol {
         defaults.removeObject(forKey: Keys.pollInterval)
         defaults.removeObject(forKey: Keys.launchAtLogin)
         defaults.removeObject(forKey: Keys.dismissedVersion)
+        defaults.removeObject(forKey: Keys.dataRetentionDays)
         defaults.removeObject(forKey: Keys.customFiveHourCredits)
         defaults.removeObject(forKey: Keys.customSevenDayCredits)
         defaults.removeObject(forKey: Keys.customMonthlyPrice)

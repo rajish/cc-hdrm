@@ -8,6 +8,7 @@ final class MockPreferencesManager: PreferencesManagerProtocol {
     var pollInterval: TimeInterval = PreferencesDefaults.pollInterval
     var launchAtLogin: Bool = PreferencesDefaults.launchAtLogin
     var dismissedVersion: String?
+    var dataRetentionDays: Int = PreferencesDefaults.dataRetentionDays
     var customFiveHourCredits: Int?
     var customSevenDayCredits: Int?
     var customMonthlyPrice: Double?
@@ -20,6 +21,7 @@ final class MockPreferencesManager: PreferencesManagerProtocol {
         pollInterval = PreferencesDefaults.pollInterval
         launchAtLogin = PreferencesDefaults.launchAtLogin
         dismissedVersion = nil
+        dataRetentionDays = PreferencesDefaults.dataRetentionDays
         customFiveHourCredits = nil
         customSevenDayCredits = nil
         customMonthlyPrice = nil
