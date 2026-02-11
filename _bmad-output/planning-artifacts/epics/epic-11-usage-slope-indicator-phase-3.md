@@ -43,6 +43,8 @@ So that the display is simple and actionable rather than noisy continuous values
 - Rate 0.3 to 1.5% per min → .rising (↗)
 - Rate > 1.5% per min → .steep (⬆)
 
+> **Note:** No `.cooling` level exists. Within a usage window, utilization is monotonically increasing — it can only reset (jump down), not decrease gradually. A 3-level indicator is sufficient.
+
 **Given** slope is calculated for both windows
 **When** the calculation completes
 **Then** AppState.fiveHourSlope and AppState.sevenDaySlope are updated

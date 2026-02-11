@@ -41,8 +41,8 @@ FR36: User can open a full analytics view in a separate window with zoomable his
 FR37: App renders data gaps as a visually distinct state with no interpolation of missing data (Phase 3)
 FR38: User can configure data retention period in settings (default 1 year) (Phase 3)
 FR39: App calculates effective headroom as min(5h remaining capacity, 7d remaining capacity) (Phase 3)
-FR40: App detects 5h window resets and classifies unused capacity into three categories: 5h waste, 7d-constrained (not waste), and true waste (Phase 3)
-FR41: User can view a breakdown of used capacity, 7d-constrained capacity, and true available capacity in the analytics view (Phase 3)
+FR40: App detects 5h window resets and classifies unused capacity into three categories: 5h unused, 7d-constrained (not unused), and true unused capacity (Phase 3)
+FR41: User can view a breakdown of used capacity, 7d-constrained capacity, and true unused capacity in the analytics view (Phase 3)
 FR42: App computes usage rate of change from recent poll history (Phase 3)
 FR43: App maps rate of change to a discrete 4-level slope indicator (Cooling ↘, Flat →, Rising ↗, Steep ⬆) (Phase 3)
 FR44: User can see the slope indicator inline next to the utilization percentage in the menu bar (Phase 3)
@@ -133,7 +133,7 @@ FR21: Epic 2 - Connection failure explanation in panel
 FR22: Epic 2 - Auto-resume on connectivity return
 FR23: Epic 1 - Zero-config launch
 FR24: Epic 4 - Quit from menu bar
-FR25: Epic 8 - Dismissable update badge in popover
+FR25: Epic 8 - Dismissible update badge in popover
 FR26: Epic 8 - Direct download link in popover
 FR27: Epic 6 - Configurable notification thresholds
 FR28: Epic 6 - Configurable poll interval
@@ -148,7 +148,7 @@ FR36: Epic 13 - Full analytics window with zoomable charts
 FR37: Epic 12, 13 - Gap rendering in sparkline and charts
 FR38: Epic 15 - Configurable data retention
 FR39: Epic 14 - Effective headroom calculation
-FR40: Epic 14 - Reset detection and waste classification
+FR40: Epic 14 - Reset detection and unused capacity classification
 FR41: Epic 14 - Three-band headroom breakdown visualization
 FR42: Epic 11 - Usage rate of change computation
 FR43: Epic 11 - Discrete 4-level slope indicator mapping

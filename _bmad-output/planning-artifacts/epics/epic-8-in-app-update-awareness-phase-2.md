@@ -30,7 +30,7 @@ So that I know when a newer version is available without leaving the app.
 **Then** the failure is silent — no error state, no UI impact, no log noise beyond `.debug` level
 **And** the app functions normally without update awareness
 
-## Story 8.2: Dismissable Update Badge & Download Link
+## Story 8.2: Dismissible Update Badge & Download Link
 
 As a developer using Claude Code,
 I want to see and dismiss an update badge in the popover,

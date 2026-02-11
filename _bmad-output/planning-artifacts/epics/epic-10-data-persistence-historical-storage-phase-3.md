@@ -14,8 +14,8 @@ So that poll snapshots can be persisted reliably across app restarts.
 **When** DatabaseManager initializes
 **Then** it creates a SQLite database at `~/Library/Application Support/cc-hdrm/usage.db`
 **And** the database contains table `usage_polls` with columns: id (INTEGER PRIMARY KEY), timestamp (INTEGER), five_hour_util (REAL), five_hour_resets_at (INTEGER nullable), seven_day_util (REAL), seven_day_resets_at (INTEGER nullable)
-**And** the database contains table `usage_rollups` with columns: id, period_start, period_end, resolution (TEXT), five_hour_avg, five_hour_peak, five_hour_min, seven_day_avg, seven_day_peak, seven_day_min, reset_count, waste_credits
-**And** the database contains table `reset_events` with columns: id, timestamp, five_hour_peak, seven_day_util, tier, used_credits, constrained_credits, waste_credits
+**And** the database contains table `usage_rollups` with columns: id, period_start, period_end, resolution (TEXT), five_hour_avg, five_hour_peak, five_hour_min, seven_day_avg, seven_day_peak, seven_day_min, reset_count, unused_credits
+**And** the database contains table `reset_events` with columns: id, timestamp, five_hour_peak, seven_day_util, tier, used_credits, constrained_credits, unused_credits
 **And** indexes exist on: usage_polls(timestamp), usage_rollups(resolution, period_start), reset_events(timestamp)
 **And** DatabaseManager conforms to DatabaseManagerProtocol for testability
 
@@ -76,7 +76,7 @@ So that headroom analysis can be performed at each reset boundary.
 
 **Given** a reset event is detected
 **When** the event is recorded
-**Then** used_credits, constrained_credits, and waste_credits are calculated per the headroom analysis math (deferred to Epic 14 for full calculation)
+**Then** used_credits, constrained_credits, and unused_credits are calculated per the headroom analysis math (deferred to Epic 14 for full calculation)
 **And** if credit limits are unknown for the tier, the credit fields are set to null
 
 ## Story 10.4: Tiered Rollup Engine
@@ -102,7 +102,7 @@ So that storage remains efficient while preserving analytical value.
 **Given** usage_rollups contains hourly data older than 30 days
 **When** ensureRollupsUpToDate() processes that data
 **Then** hourly rollups from 30+ days ago are aggregated into daily summaries
-**And** daily summaries include: avg utilization, peak utilization, min utilization, calculated waste %
+**And** daily summaries include: avg utilization, peak utilization, min utilization, calculated unused %
 **And** original hourly rollups older than 30 days are deleted
 
 **Given** the analytics window opens

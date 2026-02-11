@@ -35,6 +35,8 @@ So that I know my remaining capacity at a glance without any interaction.
 
 ## Story 3.2: Context-Adaptive Display & Tighter Constraint Promotion
 
+> **Note:** The 7-day promotion logic in this story (percentage-comparison rule) has been superseded by Story 3.3's credit-math-based promotion rule (`quotas_remaining < 1.0`). The countdown display and percentage formatting logic below remain valid. On unknown tiers without custom limits, Story 3.3 falls back to this story's percentage-comparison rule.
+
 As a developer using Claude Code,
 I want the menu bar to automatically switch between percentage and countdown and show whichever limit is tighter,
 So that I always see the most relevant information without any manual action.

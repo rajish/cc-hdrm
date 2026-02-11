@@ -30,18 +30,18 @@ So that I don't have to manually edit Info.plist or remember version numbers.
 
 **Acceptance Criteria:**
 
-**Given** a maintainer opens a PR with `[patch]` in the title
+**Given** a maintainer opens a PR with `[patch]` at the front of the title (e.g., `[patch] feat: my feature`)
 **When** the `release-prepare.yml` GitHub Actions workflow runs
 **Then** it reads the current version from Info.plist
 **And** bumps the patch component (e.g., `1.0.0` → `1.0.1`)
 **And** commits the updated Info.plist back to the PR branch
 **And** the commit message is: `chore: bump version to {new_version}`
 
-**Given** a maintainer opens a PR with `[minor]` in the title
+**Given** a maintainer opens a PR with `[minor]` at the front of the title
 **When** the workflow runs
 **Then** it bumps the minor component and resets patch (e.g., `1.0.1` → `1.1.0`)
 
-**Given** a maintainer opens a PR with `[major]` in the title
+**Given** a maintainer opens a PR with `[major]` at the front of the title
 **When** the workflow runs
 **Then** it bumps the major component and resets minor + patch (e.g., `1.1.0` → `2.0.0`)
 
@@ -70,7 +70,7 @@ So that the entire release process requires zero manual steps after merge.
 **And** if the merged PR body contained release notes between `<!-- release-notes-start -->` and `<!-- release-notes-end -->`, prepends that preamble
 **And** updates CHANGELOG.md with the new entry and commits to `master`
 **And** builds a universal binary (arm64 + x86_64) via `xcodebuild`
-**And** creates a ZIP: `cc-hdrm-{version}-macos.zip`
+**And** creates a ZIP: `cc-hdrm-{version}-macOS.zip`
 **And** creates a GitHub Release with the changelog entry as body and the ZIP as an asset
 
 **Given** a PR without a version bump commit is merged to `master`

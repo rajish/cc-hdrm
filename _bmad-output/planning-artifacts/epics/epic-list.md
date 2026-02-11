@@ -65,9 +65,9 @@ Alex glances at the popover and sees a compact 24-hour usage trend — a step-ar
 Alex clicks the sparkline and a floating analytics panel appears — zoomable charts across all retention periods, time range selectors, series toggles, and honest gap rendering for periods when cc-hdrm wasn't running.
 **FRs covered:** FR36, FR37 (chart gaps)
 
-## Epic 14: Headroom Analysis & Waste Breakdown (Phase 3)
+## Epic 14: Headroom Analysis & Unused Capacity Breakdown (Phase 3)
 
-Alex sees the real story behind his usage — a three-band breakdown showing what he actually used, what was blocked by the weekly limit (not waste!), and what he genuinely left on the table.
+Alex sees the real story behind his usage — a three-band breakdown showing what he actually used, what was blocked by the weekly limit (not unused!), and what he genuinely left on the table.
 **FRs covered:** FR39, FR40, FR41
 
 ## Epic 15: Phase 3 Settings & Data Retention (Phase 3)

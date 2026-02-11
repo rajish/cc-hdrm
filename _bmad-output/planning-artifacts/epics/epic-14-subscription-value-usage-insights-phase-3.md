@@ -34,9 +34,11 @@ So that headroom can be calculated in absolute terms.
 
 ## Story 14.2: Headroom Analysis Service
 
+> **Terminology note:** This story and Story 14.3 use pre-refactor terminology (`true_waste_credits`, `wastePercent`, etc.) in formulas and acceptance criteria. Story 14.4 defines the terminology refactor that renames these to "unused" terms. Implementers should use the post-refactor names (`unusedCredits`, `unusedPercent`, etc.) from the start — the old names here describe the _concept_, not the final variable names.
+
 As a developer using Claude Code,
 I want headroom analysis calculated at each reset event,
-So that waste breakdown is accurate and meaningful.
+So that unused capacity breakdown is accurate and meaningful.
 
 **Acceptance Criteria:**
 
@@ -44,20 +46,20 @@ So that waste breakdown is accurate and meaningful.
 **When** HeadroomAnalysisService.analyzeResetEvent() is called
 **Then** it calculates:
 
-```
+```text
 5h_remaining_credits = (100% - 5h_peak%) × 5h_limit
 7d_remaining_credits = (100% - 7d_util%) × 7d_limit
 effective_headroom_credits = min(5h_remaining, 7d_remaining)
 
 If 5h_remaining ≤ 7d_remaining:
-    true_waste_credits = 5h_remaining
+    true_unused_credits = 5h_remaining
     constrained_credits = 0
 Else:
-    true_waste_credits = 7d_remaining
+    true_unused_credits = 7d_remaining
     constrained_credits = 5h_remaining - 7d_remaining
 ```
 
-**And** returns a HeadroomBreakdown struct with: usedPercent, constrainedPercent, wastePercent, usedCredits, constrainedCredits, wasteCredits
+**And** returns a HeadroomBreakdown struct with: usedPercent, constrainedPercent, unusedPercent, usedCredits, constrainedCredits, unusedCredits
 
 **Given** credit limits are unknown (tier not recognized, no user override)
 **When** analyzeResetEvent() is called
@@ -66,14 +68,14 @@ Else:
 
 **Given** multiple reset events in a time range
 **When** HeadroomAnalysisService.aggregateBreakdown() is called
-**Then** it sums used_credits, constrained_credits, and waste_credits across all events
+**Then** it sums used_credits, constrained_credits, and unused_credits across all events
 **And** returns aggregate percentages and totals
 
 ## Story 14.3: Headroom Breakdown Bar Component
 
 As a developer using Claude Code,
-I want a three-band visualization showing used, constrained, and waste,
-So that the emotional framing is clear — constrained is not waste.
+I want a three-band visualization showing used, constrained, and unused capacity,
+So that the emotional framing is clear — constrained is not unused.
 
 **Acceptance Criteria:**
 
@@ -83,16 +85,16 @@ So that the emotional framing is clear — constrained is not waste.
 
 - **Used (▓)**: solid fill, headroom color based on the aggregate peak level
 - **7d-constrained (░)**: hatched/stippled pattern, muted slate blue
-- **True waste (□)**: light/empty fill, faint outline
+- **True unused (□)**: light/empty fill, faint outline
 
-**Given** breakdown percentages (e.g., 52% used, 12% constrained, 36% waste)
+**Given** breakdown percentages (e.g., 52% used, 12% constrained, 36% unused)
 **When** the bar renders
 **Then** segment widths are proportional to percentages
-**And** segments are stacked left-to-right: Used | Constrained | Waste
+**And** segments are stacked left-to-right: Used | Constrained | Unused
 
 **Given** constrained is 0%
 **When** the bar renders
-**Then** the constrained segment is not visible (only Used and Waste)
+**Then** the constrained segment is not visible (only Used and Unused)
 
 **Given** a VoiceOver user focuses the breakdown bar
 **When** VoiceOver reads the element
