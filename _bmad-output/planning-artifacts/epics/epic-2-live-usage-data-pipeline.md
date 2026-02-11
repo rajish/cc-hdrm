@@ -63,7 +63,13 @@ So that my headroom display is always current without any manual action.
 
 **Given** the system is in Low Power Mode (`ProcessInfo.processInfo.isLowPowerModeEnabled`)
 **When** the polling engine evaluates the next cycle
-**Then** the polling interval is doubled (e.g., 30s → 60s) to reduce resource usage
+**Then** the base polling interval is doubled (e.g., 30s → 60s) to reduce resource usage
+
+**Given** the system is in Low Power Mode AND experiencing exponential backoff
+**When** the polling engine calculates the next interval
+**Then** Low Power Mode doubling is applied to the base interval before backoff (e.g., base 30s → 60s in Low Power Mode → backoff progression 60s → 120s → 240s → capped at 5 minutes)
+**And** the 5-minute cap applies to the final computed interval
+**And** when Low Power Mode is disabled mid-backoff, the interval reverts to the current backoff level without the doubling multiplier
 
 **Given** connectivity returns after a disconnected period
 **When** the next poll cycle succeeds

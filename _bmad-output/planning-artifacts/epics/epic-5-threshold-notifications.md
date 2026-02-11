@@ -55,6 +55,10 @@ So that I can make informed decisions about which Claude sessions to prioritize.
 
 ## Story 5.3: Critical Threshold & Persistent Notifications
 
+**Referenced Requirements:**
+- FR18: User receives macOS notification when 5-hour headroom drops below 5%
+- FR19: App includes reset countdown time in notification messages
+
 As a developer using Claude Code,
 I want to receive a persistent notification when my headroom drops below 5%,
 So that I have maximum warning to wrap up before hitting the limit.

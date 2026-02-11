@@ -61,7 +61,7 @@
     - [Story 8.2: Dismissible Update Badge & Download Link](./epic-8-in-app-update-awareness-phase-2.md#story-82-dismissible-update-badge-download-link)
   - [Epic 9: Homebrew Tap Distribution (Phase 2)](./epic-9-homebrew-tap-distribution-phase-2.md)
     - [Story 9.1: Homebrew Tap Repository Setup](./epic-9-homebrew-tap-distribution-phase-2.md#story-91-homebrew-tap-repository-setup)
-    - [Story 9.2: Automated Homebrew Formula Update](./epic-9-homebrew-tap-distribution-phase-2.md#story-92-automated-homebrew-formula-update)
+    - [Story 9.2: Automated Homebrew Cask Update](./epic-9-homebrew-tap-distribution-phase-2.md#story-92-automated-homebrew-cask-update)
   - [Epic 10: Data Persistence & Historical Storage (Phase 3)](./epic-10-data-persistence-historical-storage-phase-3.md)
     - [Story 10.1: Database Manager & Schema Creation](./epic-10-data-persistence-historical-storage-phase-3.md#story-101-database-manager-schema-creation)
     - [Story 10.2: Historical Data Service & Poll Persistence](./epic-10-data-persistence-historical-storage-phase-3.md#story-102-historical-data-service-poll-persistence)

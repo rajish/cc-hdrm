@@ -18,29 +18,29 @@ So that users can install cc-hdrm via `brew install`.
 **And** the cask installs the cc-hdrm.app bundle to `/Applications`
 
 **Given** a user runs `brew tap {owner}/homebrew-tap && brew install --cask cc-hdrm`
-**When** Homebrew processes the formula
+**When** Homebrew processes the cask
 **Then** cc-hdrm is downloaded, extracted, and installed
 **And** the user can launch cc-hdrm from the installed location
 
 **Given** a user runs `brew upgrade cc-hdrm` after a new release
-**When** the formula has been updated with the new version and SHA256
+**When** the cask has been updated with the new version and SHA256
 **Then** the new version is downloaded and installed, replacing the old version
 
-## Story 9.2: Automated Homebrew Formula Update
+## Story 9.2: Automated Homebrew Cask Update
 
 As a project maintainer,
-I want the Homebrew formula to be updated automatically when a release is published,
-So that Homebrew users get new versions without manual formula maintenance.
+I want the Homebrew cask to be updated automatically when a release is published,
+So that Homebrew users get new versions without manual cask maintenance.
 
 **Acceptance Criteria:**
 
 **Given** the `release-publish.yml` workflow has created a GitHub Release with a ZIP asset
 **When** the Homebrew update step runs
 **Then** it computes the SHA256 of the uploaded ZIP asset
-**And** updates `Formula/cc-hdrm.rb` in the `{owner}/homebrew-tap` repository with the new version URL and SHA256
-**And** commits and pushes the formula update
+**And** updates `Casks/cc-hdrm.rb` in the `{owner}/homebrew-tap` repository with the new version URL and SHA256
+**And** commits and pushes the cask update
 
-**Given** the Homebrew formula update fails (e.g., push permission denied)
+**Given** the Homebrew cask update fails (e.g., push permission denied)
 **When** the step fails
-**Then** the GitHub Release is still published (formula update is non-blocking)
-**And** the maintainer is notified of the formula update failure
+**Then** the GitHub Release is still published (cask update is non-blocking)
+**And** the maintainer is notified of the cask update failure
