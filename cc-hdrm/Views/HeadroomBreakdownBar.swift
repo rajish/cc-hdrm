@@ -1,15 +1,19 @@
 import SwiftUI
 
-/// Two-band horizontal bar showing how much subscription money was used vs unused.
+/// Horizontal bar showing subscription usage breakdown.
 ///
-/// Segments (left-to-right):
-/// - **Used**: Solid fill, color derived from aggregate peak utilization via HeadroomState
-/// - **Unused**: Light/empty fill — money paid but not used
+/// Display modes:
+/// - **Dollar breakdown**: Used/unused dollar amounts with color-coded segments (known tier with price)
+/// - **Percentage-only**: Used/unused percentages without dollar amounts (custom limits, no price)
+/// - **Qualifier mode**: Percentage-only with data qualifier text (insufficient data for dollar proration)
+///
+/// Falls back to informational text when creditLimits is nil or resetEvents is empty.
 struct HeadroomBreakdownBar: View {
     let resetEvents: [ResetEvent]
     let creditLimits: CreditLimits?
     let headroomAnalysisService: any HeadroomAnalysisServiceProtocol
     let selectedTimeRange: TimeRange
+    var dataQualifier: String? = nil
 
     var body: some View {
         ZStack {
@@ -34,6 +38,8 @@ struct HeadroomBreakdownBar: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .accessibilityLabel("No reset events in this period")
+        } else if dataQualifier != nil {
+            qualifierContent
         } else {
             breakdownContent
         }
@@ -116,16 +122,45 @@ struct HeadroomBreakdownBar: View {
 
     @ViewBuilder
     private func percentageOnlyBreakdown(limits: CreditLimits) -> some View {
-        let summary = headroomAnalysisService.aggregateBreakdown(events: resetEvents)
-        let periodDays = SubscriptionValueCalculator.periodDays(for: selectedTimeRange, events: resetEvents)
-        let totalAvailable = Double(limits.sevenDayCredits) * (periodDays / 7.0)
-        let utilizationPercent = totalAvailable > 0 ? min(100.0, (summary.usedCredits / totalAvailable) * 100.0) : 0
+        let utilizationPercent = percentageOnlyUtilization(limits: limits)
+
+        percentageOnlyBarAndLegend(utilizationPercent: utilizationPercent)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Subscription usage: \(Int(utilizationPercent.rounded()))% utilization")
+    }
+
+    // MARK: - Qualifier Content (insufficient data for dollar proration)
+
+    @ViewBuilder
+    private var qualifierContent: some View {
+        if let limits = creditLimits, let qualifier = dataQualifier {
+            let utilizationPercent = percentageOnlyUtilization(limits: limits)
+
+            VStack(spacing: 4) {
+                Text(qualifier)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                percentageOnlyBarAndLegend(utilizationPercent: utilizationPercent)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(qualifier). Subscription usage: \(Int(utilizationPercent.rounded()))% utilization")
+        }
+    }
+
+    // MARK: - Shared Percentage Bar + Legend (no padding)
+
+    @ViewBuilder
+    private func percentageOnlyBarAndLegend(utilizationPercent: Double) -> some View {
         let usedFraction = utilizationPercent / 100.0
         let unusedFraction = 1.0 - usedFraction
         let usedColor = HeadroomState(from: utilizationPercent).swiftUIColor
 
         VStack(spacing: 6) {
-            // Stacked bar
             GeometryReader { geometry in
                 HStack(spacing: 0) {
                     if usedFraction > 0 {
@@ -147,13 +182,16 @@ struct HeadroomBreakdownBar: View {
             }
             .frame(height: 24)
 
-            // Legend
             percentageLegend(utilizationPercent: utilizationPercent, usedColor: usedColor)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Subscription usage: \(Int(utilizationPercent.rounded()))% utilization")
+    }
+
+    /// Computes utilization percentage for percentage-only display mode.
+    private func percentageOnlyUtilization(limits: CreditLimits) -> Double {
+        let summary = headroomAnalysisService.aggregateBreakdown(events: resetEvents)
+        let periodDays = SubscriptionValueCalculator.periodDays(for: selectedTimeRange, events: resetEvents)
+        let totalAvailable = Double(limits.sevenDayCredits) * (periodDays / 7.0)
+        return totalAvailable > 0 ? min(100.0, (summary.usedCredits / totalAvailable) * 100.0) : 0
     }
 
     // MARK: - Legends
