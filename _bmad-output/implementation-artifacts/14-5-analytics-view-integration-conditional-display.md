@@ -257,7 +257,7 @@ When `isQuiet` is true and data span >= 6h, the bar adds no value — the user's
 
 ### Git Intelligence (Recent Commits)
 
-```
+```text
 33558bd docs: address CodeRabbit review feedback across planning artifacts
 9fad73d docs: shard epics into individual files and update planning artifacts
 a94df74 feat: context-aware value summary with terminology refactor (Story 14.4)
