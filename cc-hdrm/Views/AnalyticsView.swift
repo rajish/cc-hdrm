@@ -7,7 +7,7 @@ import os
 /// - Title bar with "Usage Analytics" and close button
 /// - Controls row: TimeRangeSelector (left) + series toggles (right)
 /// - UsageChart (expands to fill available space)
-/// - HeadroomBreakdownBar (fixed 80px height)
+/// - Value section: conditional HeadroomBreakdownBar (80px) + ContextAwareValueSummary
 struct AnalyticsView: View {
     var onClose: () -> Void
     let historicalDataService: any HistoricalDataServiceProtocol
@@ -83,24 +83,83 @@ struct AnalyticsView: View {
                 isLoading: isLoading,
                 hasAnyHistoricalData: hasAnyHistoricalData
             )
-            HeadroomBreakdownBar(
-                resetEvents: resetEvents,
-                creditLimits: appState.creditLimits,
-                headroomAnalysisService: headroomAnalysisService,
-                selectedTimeRange: selectedTimeRange
-            )
-            ContextAwareValueSummary(
-                timeRange: selectedTimeRange,
-                resetEvents: resetEvents,
-                allTimeResetEvents: allTimeResetEvents,
-                creditLimits: appState.creditLimits,
-                headroomAnalysisService: headroomAnalysisService
-            )
+            valueSection
         }
         .padding()
         .task(id: selectedTimeRange) {
             await loadData()
         }
+    }
+
+    // MARK: - Value Section (Conditional Display)
+
+    @ViewBuilder
+    private var valueSection: some View {
+        let dataSpanHours = Self.computeDataSpanHours(resetEvents: resetEvents)
+
+        if !resetEvents.isEmpty {
+            if dataSpanHours < 6 {
+                // AC 3: bar shows qualifier + percentage-only
+                let n = max(1, Int(floor(dataSpanHours)))
+                HeadroomBreakdownBar(
+                    resetEvents: resetEvents,
+                    creditLimits: appState.creditLimits,
+                    headroomAnalysisService: headroomAnalysisService,
+                    selectedTimeRange: selectedTimeRange,
+                    dataQualifier: "\(n) \(n == 1 ? "hour" : "hours") of data in this view"
+                )
+            } else if !isQuietValueInsight {
+                // Normal: full bar (AC 1, 2)
+                HeadroomBreakdownBar(
+                    resetEvents: resetEvents,
+                    creditLimits: appState.creditLimits,
+                    headroomAnalysisService: headroomAnalysisService,
+                    selectedTimeRange: selectedTimeRange
+                )
+            }
+            // AC 5: quiet insight — no bar, falls through to summary only
+        }
+        // AC 4: empty events — no bar, summary only
+        // Summary always shown — adapts text via ValueInsightEngine
+        ContextAwareValueSummary(
+            timeRange: selectedTimeRange,
+            resetEvents: resetEvents,
+            allTimeResetEvents: allTimeResetEvents,
+            creditLimits: appState.creditLimits,
+            headroomAnalysisService: headroomAnalysisService
+        )
+    }
+
+    /// Computes the time span in hours between the first and last reset events.
+    /// Static for testability (same pattern as `fetchData`).
+    static func computeDataSpanHours(resetEvents: [ResetEvent]) -> Double {
+        guard let first = resetEvents.first, let last = resetEvents.last else { return 0 }
+        return Double(last.timestamp - first.timestamp) / 3_600_000.0
+    }
+
+    /// Whether the current value insight is quiet (unremarkable usage pattern).
+    private var isQuietValueInsight: Bool {
+        let subscriptionValue: SubscriptionValue?
+        if selectedTimeRange != .all, let limits = appState.creditLimits {
+            subscriptionValue = SubscriptionValueCalculator.calculate(
+                resetEvents: resetEvents,
+                creditLimits: limits,
+                timeRange: selectedTimeRange,
+                headroomAnalysisService: headroomAnalysisService
+            )
+        } else {
+            subscriptionValue = nil
+        }
+
+        let insight = ValueInsightEngine.computeInsight(
+            timeRange: selectedTimeRange,
+            subscriptionValue: subscriptionValue,
+            resetEvents: resetEvents,
+            allTimeResetEvents: allTimeResetEvents,
+            creditLimits: appState.creditLimits,
+            headroomAnalysisService: headroomAnalysisService
+        )
+        return insight.isQuiet
     }
 
     // MARK: - Data Loading

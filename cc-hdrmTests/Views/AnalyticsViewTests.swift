@@ -491,6 +491,188 @@ struct AnalyticsViewSeriesToggleTests {
     }
 }
 
+// MARK: - Conditional Display Tests (Story 14.5)
+
+@Suite("AnalyticsView Conditional Display Tests")
+@MainActor
+struct AnalyticsViewConditionalDisplayTests {
+
+    // MARK: - Helpers
+
+    /// Creates sample events spanning the given number of hours.
+    private func sampleEvents(count: Int = 3, spanHours: Double = 24) -> [ResetEvent] {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let totalSpanMs = Int64(spanHours * 3_600_000)
+        let stepMs = count > 1 ? totalSpanMs / Int64(count - 1) : 0
+        return (0..<count).map { i in
+            ResetEvent(
+                id: Int64(i + 1),
+                timestamp: nowMs - totalSpanMs + Int64(i) * stepMs,
+                fiveHourPeak: 50.0 + Double(i),
+                sevenDayUtil: 30.0 + Double(i),
+                tier: "default_claude_pro",
+                usedCredits: nil,
+                constrainedCredits: nil,
+                unusedCredits: nil
+            )
+        }
+    }
+
+    private func makeView(
+        appState: AppState = AppState(),
+        headroomAnalysisService: any HeadroomAnalysisServiceProtocol = {
+            let mock = MockHeadroomAnalysisService()
+            mock.mockPeriodSummary = PeriodSummary(
+                usedCredits: 52, constrainedCredits: 12, unusedCredits: 36,
+                resetCount: 1, avgPeakUtilization: 52.0,
+                usedPercent: 52, constrainedPercent: 12, unusedPercent: 36
+            )
+            return mock
+        }()
+    ) -> AnalyticsView {
+        AnalyticsView(
+            onClose: {},
+            historicalDataService: MockHistoricalDataService(),
+            appState: appState,
+            headroomAnalysisService: headroomAnalysisService
+        )
+    }
+
+    // MARK: - 4.1 computeDataSpanHours returns 0 for empty events
+
+    @Test("computeDataSpanHours returns 0 for empty events")
+    func dataSpanHoursEmptyEvents() {
+        let hours = AnalyticsView.computeDataSpanHours(resetEvents: [])
+        #expect(hours == 0)
+    }
+
+    // MARK: - 4.2 computeDataSpanHours returns correct hours for 3-hour span
+
+    @Test("computeDataSpanHours returns correct hours for events spanning 3 hours")
+    func dataSpanHoursThreeHours() {
+        let events = sampleEvents(count: 3, spanHours: 3.0)
+        let hours = AnalyticsView.computeDataSpanHours(resetEvents: events)
+        #expect(abs(hours - 3.0) < 0.01, "Should be approximately 3 hours")
+    }
+
+    // MARK: - 4.3 computeDataSpanHours returns 0 for single event
+
+    @Test("computeDataSpanHours returns 0 for single event (first == last)")
+    func dataSpanHoursSingleEvent() {
+        let events = sampleEvents(count: 1, spanHours: 0)
+        let hours = AnalyticsView.computeDataSpanHours(resetEvents: events)
+        #expect(hours == 0, "Single event has zero span")
+    }
+
+    // MARK: - 4.4 fetchData call counts unchanged (no regression)
+
+    @Test("fetchData call counts unchanged (no regression from conditional display)")
+    func fetchDataCallCountsUnchanged() async throws {
+        let mock = MockHistoricalDataService()
+
+        // .day range
+        _ = try await AnalyticsView.fetchData(for: .day, using: mock)
+        #expect(mock.getRecentPollsCallCount == 1)
+        #expect(mock.getResetEventsCallCount == 2)
+
+        // .week range
+        _ = try await AnalyticsView.fetchData(for: .week, using: mock)
+        #expect(mock.getRolledUpDataCallCount == 1)
+        #expect(mock.getResetEventsCallCount == 4)
+    }
+
+    // MARK: - 4.5 AnalyticsView renders with empty events (AC 4 path)
+
+    @Test("AnalyticsView renders without crashing with empty events (AC 4 path)")
+    func rendersWithEmptyEvents() {
+        let view = makeView()
+        // Default @State has resetEvents = [], exercising AC 4 path
+        let _ = view.body
+    }
+
+    // MARK: - 4.6 AnalyticsView renders with events spanning < 6 hours (AC 3 path)
+
+    @Test("computeDataSpanHours detects sub-6-hour span; view renders without crashing (AC 3 logic verified via HeadroomBreakdownBarTests)")
+    func rendersWithShortSpanEvents() {
+        // Verify computeDataSpanHours correctly identifies spans that trigger qualifier mode
+        let events = sampleEvents(count: 3, spanHours: 3.0)
+        let hours = AnalyticsView.computeDataSpanHours(resetEvents: events)
+        #expect(hours < 6, "Events spanning 3 hours should trigger AC 3 qualifier path")
+
+        // View renders without crashing (default @State has empty events;
+        // AC 3 qualifier rendering verified in HeadroomBreakdownBarTests)
+        let view = makeView()
+        let _ = view.body
+    }
+
+    // MARK: - 4.7 AnalyticsView renders with quiet insight data (AC 5 path)
+
+    @Test("ValueInsightEngine produces quiet insight for normal utilization; view renders without crashing (AC 5 logic)")
+    func rendersWithQuietInsightData() {
+        // Verify ValueInsightEngine correctly identifies quiet insights for AC 5 collapse logic.
+        // Events must span >= 7 days so periodDays isn't capped below nominal week range.
+        let events = sampleEvents(count: 10, spanHours: 168)
+        let mock = MockHeadroomAnalysisService()
+        mock.mockPeriodSummary = PeriodSummary(
+            usedCredits: 2_500_000, constrainedCredits: 500_000, unusedCredits: 2_000_000,
+            resetCount: 10, avgPeakUtilization: 50.0,
+            usedPercent: 50, constrainedPercent: 10, unusedPercent: 40
+        )
+
+        let insight = ValueInsightEngine.computeInsight(
+            timeRange: .week,
+            subscriptionValue: SubscriptionValueCalculator.calculate(
+                resetEvents: events,
+                creditLimits: RateLimitTier.pro.creditLimits,
+                timeRange: .week,
+                headroomAnalysisService: mock
+            ),
+            resetEvents: events,
+            allTimeResetEvents: events,
+            creditLimits: RateLimitTier.pro.creditLimits,
+            headroomAnalysisService: mock
+        )
+        #expect(insight.isQuiet == true, "50% utilization with no comparison history should be quiet")
+
+        // View renders without crashing
+        let view = makeView()
+        let _ = view.body
+    }
+
+    // MARK: - 4.8 AnalyticsView renders with notable insight data (normal path)
+
+    @Test("ValueInsightEngine produces notable insight for high utilization; view renders without crashing (normal path logic)")
+    func rendersWithNotableInsightData() {
+        // Verify ValueInsightEngine correctly identifies notable insights for normal display path
+        let events = sampleEvents(count: 10, spanHours: 48)
+        let mock = MockHeadroomAnalysisService()
+        mock.mockPeriodSummary = PeriodSummary(
+            usedCredits: 4_900_000, constrainedCredits: 50_000, unusedCredits: 50_000,
+            resetCount: 10, avgPeakUtilization: 98.0,
+            usedPercent: 98, constrainedPercent: 1, unusedPercent: 1
+        )
+
+        let insight = ValueInsightEngine.computeInsight(
+            timeRange: .week,
+            subscriptionValue: SubscriptionValueCalculator.calculate(
+                resetEvents: events,
+                creditLimits: RateLimitTier.pro.creditLimits,
+                timeRange: .week,
+                headroomAnalysisService: mock
+            ),
+            resetEvents: events,
+            allTimeResetEvents: events,
+            creditLimits: RateLimitTier.pro.creditLimits,
+            headroomAnalysisService: mock
+        )
+        #expect(insight.isQuiet == false, "98% utilization should be notable (not quiet)")
+
+        // View renders without crashing
+        let view = makeView()
+        let _ = view.body
+    }
+}
+
 @Suite("AnalyticsPanel Tests")
 @MainActor
 struct AnalyticsPanelTests {

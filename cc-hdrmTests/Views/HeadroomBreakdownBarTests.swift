@@ -33,14 +33,16 @@ struct HeadroomBreakdownBarTests {
         resetEvents: [ResetEvent] = [],
         creditLimits: CreditLimits? = RateLimitTier.pro.creditLimits,
         headroomAnalysisService: (any HeadroomAnalysisServiceProtocol)? = nil,
-        selectedTimeRange: TimeRange = .week
+        selectedTimeRange: TimeRange = .week,
+        dataQualifier: String? = nil
     ) -> HeadroomBreakdownBar {
         let service = headroomAnalysisService ?? makeMockService()
         return HeadroomBreakdownBar(
             resetEvents: resetEvents,
             creditLimits: creditLimits,
             headroomAnalysisService: service,
-            selectedTimeRange: selectedTimeRange
+            selectedTimeRange: selectedTimeRange,
+            dataQualifier: dataQualifier
         )
     }
 
@@ -286,5 +288,55 @@ struct HeadroomBreakdownBarTests {
     func creditLimitsDefaultNilPrice() {
         let limits = CreditLimits(fiveHourCredits: 100, sevenDayCredits: 909)
         #expect(limits.monthlyPrice == nil)
+    }
+
+    // MARK: - Qualifier mode (Story 14.5 AC 3)
+
+    @Test("dataQualifier nil renders normal dollar breakdown (no regression)")
+    func dataQualifierNilRendersNormalBreakdown() {
+        let mock = makeMockService()
+        let bar = makeBar(resetEvents: sampleEvents(), headroomAnalysisService: mock, dataQualifier: nil)
+        let _ = bar.body
+        // With nil dataQualifier, the bar takes the normal breakdownContent path.
+        // Pro tier has monthlyPrice -> SubscriptionValueCalculator.calculate() calls aggregateBreakdown once.
+        #expect(mock.aggregateBreakdownCallCount == 1, "Dollar breakdown calls aggregateBreakdown via SubscriptionValueCalculator")
+    }
+
+    @Test("dataQualifier set renders percentage-only mode (suppresses dollars)")
+    func dataQualifierSetRendersPercentageOnly() {
+        let mock = makeMockService()
+        let bar = makeBar(resetEvents: sampleEvents(), headroomAnalysisService: mock, dataQualifier: "3 hours of data in this view")
+        let _ = bar.body
+        // With dataQualifier set, the bar should go to qualifierContent which shows percentage-only.
+        // This confirms it renders without crashing.
+        #expect(mock.aggregateBreakdownCallCount == 1, "Qualifier mode should call aggregateBreakdown for percentage computation")
+    }
+
+    @Test("dataQualifier set calls aggregateBreakdown (percentage-only path)")
+    func dataQualifierCallsAggregateBreakdown() {
+        let events = sampleEvents(count: 5)
+        let mock = makeMockService()
+        let bar = makeBar(resetEvents: events, headroomAnalysisService: mock, dataQualifier: "5 hours of data in this view")
+        let _ = bar.body
+        #expect(mock.aggregateBreakdownCallCount == 1)
+        #expect(mock.lastEvents?.count == 5, "Should pass all events to aggregateBreakdown")
+    }
+
+    @Test("dataQualifier with nil creditLimits still shows unavailable message (creditLimits nil takes priority)")
+    func dataQualifierWithNilCreditLimits() {
+        let mock = makeMockService()
+        let bar = makeBar(resetEvents: sampleEvents(), creditLimits: nil, headroomAnalysisService: mock, dataQualifier: "3 hours of data in this view")
+        let _ = bar.body
+        // creditLimits == nil check happens before dataQualifier check
+        #expect(mock.aggregateBreakdownCallCount == 0, "Service should NOT be called when creditLimits is nil, even with dataQualifier set")
+    }
+
+    @Test("dataQualifier with empty events still shows no-events message (empty events takes priority)")
+    func dataQualifierWithEmptyEvents() {
+        let mock = makeMockService()
+        let bar = makeBar(resetEvents: [], headroomAnalysisService: mock, dataQualifier: "1 hour of data in this view")
+        let _ = bar.body
+        // resetEvents.isEmpty check happens before dataQualifier check
+        #expect(mock.aggregateBreakdownCallCount == 0, "Service should NOT be called when events are empty, even with dataQualifier set")
     }
 }

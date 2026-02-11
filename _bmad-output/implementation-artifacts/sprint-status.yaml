@@ -128,7 +128,7 @@ development_status:
   14-2-headroom-analysis-service: done
   14-3-headroom-breakdown-bar-component: done
   14-4-context-aware-value-summary-terminology-refactor: done  # Rewritten per sprint change proposal 2026-02-10
-  14-5-analytics-view-integration-conditional-display: backlog  # Rewritten per sprint change proposal 2026-02-10
+  14-5-analytics-view-integration-conditional-display: done  # Rewritten per sprint change proposal 2026-02-10
   epic-14-retrospective: optional
 
   epic-16: backlog  # Subscription Intelligence (Phase 4)
