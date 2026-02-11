@@ -46,7 +46,11 @@ struct SettingsView: View {
         _warningThreshold = State(initialValue: preferencesManager.warningThreshold)
         _criticalThreshold = State(initialValue: preferencesManager.criticalThreshold)
         _pollInterval = State(initialValue: preferencesManager.pollInterval)
-        _dataRetentionDays = State(initialValue: preferencesManager.dataRetentionDays)
+        // Snap to nearest valid picker option so the Picker always has a matching tag
+        let rawRetention = preferencesManager.dataRetentionDays
+        let validDays = Self.retentionOptions.map(\.days)
+        let snapped = validDays.min(by: { abs($0 - rawRetention) < abs($1 - rawRetention) }) ?? rawRetention
+        _dataRetentionDays = State(initialValue: snapped)
         // AC #3: Initialize from SMAppService reality, not stored preference
         _launchAtLogin = State(initialValue: launchAtLoginService.isEnabled)
     }

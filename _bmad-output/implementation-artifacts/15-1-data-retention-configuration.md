@@ -25,7 +25,7 @@ so that I can balance storage usage with analytical depth.
 
 3. **Given** Alex clicks "Clear History"
    **When** confirmation dialog appears and Alex confirms
-   **Then** all tables are truncated (usage_polls, usage_rollups, reset_events)
+   **Then** all tables are truncated (usage_polls, usage_rollups, reset_events, rollup_metadata)
    **And** the database is vacuumed to reclaim space
    **And** sparkline and analytics show empty state until new data is collected
 

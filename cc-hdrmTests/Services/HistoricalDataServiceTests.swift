@@ -1010,7 +1010,7 @@ struct HistoricalDataServiceTests {
         #expect(events.count == 1)
     }
 
-    @Test("clearAllData empties all three data tables")
+    @Test("clearAllData empties all four data tables")
     func clearAllDataEmptiesAllTables() async throws {
         let (dbManager, path) = makeManager()
         defer { cleanup(manager: dbManager, path: path) }
@@ -1094,7 +1094,7 @@ struct HistoricalDataServiceTests {
             sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util, seven_day_util, five_hour_resets_at, seven_day_resets_at) VALUES (\(now - Int64(i) * 30000), \(Double(i)), \(Double(i) * 0.5), \(now + 18000000), \(now + 604800000))", nil, nil, &errorMessage)
         }
         for i in 0..<500 {
-            sqlite3_exec(connection, "INSERT INTO reset_events (timestamp, five_hour_peak, seven_day_peak) VALUES (\(now - Int64(i) * 60000), \(Double(i)), \(Double(i) * 0.3))", nil, nil, &errorMessage)
+            sqlite3_exec(connection, "INSERT INTO reset_events (timestamp, five_hour_peak, seven_day_util) VALUES (\(now - Int64(i) * 60000), \(Double(i)), \(Double(i) * 0.3))", nil, nil, &errorMessage)
         }
 
         let sizeBefore = try await service.getDatabaseSize()
