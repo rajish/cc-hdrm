@@ -21,6 +21,7 @@ final class PreferencesManager: PreferencesManagerProtocol {
         static let customFiveHourCredits = "com.cc-hdrm.customFiveHourCredits"
         static let customSevenDayCredits = "com.cc-hdrm.customSevenDayCredits"
         static let customMonthlyPrice = "com.cc-hdrm.customMonthlyPrice"
+        static let billingCycleDay = "com.cc-hdrm.billingCycleDay"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -194,6 +195,24 @@ final class PreferencesManager: PreferencesManagerProtocol {
         }
     }
 
+    // MARK: - Billing Cycle Day
+
+    var billingCycleDay: Int? {
+        get {
+            let value = defaults.integer(forKey: Keys.billingCycleDay)
+            return (value >= 1 && value <= 28) ? value : nil
+        }
+        set {
+            if let newValue {
+                let clamped = min(max(newValue, 1), 28)
+                Self.logger.info("Billing cycle day changed to \(clamped)")
+                defaults.set(clamped, forKey: Keys.billingCycleDay)
+            } else {
+                defaults.removeObject(forKey: Keys.billingCycleDay)
+            }
+        }
+    }
+
     // MARK: - Reset
 
     func resetToDefaults() {
@@ -207,5 +226,6 @@ final class PreferencesManager: PreferencesManagerProtocol {
         defaults.removeObject(forKey: Keys.customFiveHourCredits)
         defaults.removeObject(forKey: Keys.customSevenDayCredits)
         defaults.removeObject(forKey: Keys.customMonthlyPrice)
+        defaults.removeObject(forKey: Keys.billingCycleDay)
     }
 }

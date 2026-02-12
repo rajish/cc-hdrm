@@ -28,5 +28,9 @@ protocol PreferencesManagerProtocol: AnyObject {
     /// User-configured monthly subscription price for custom credit limits. Nil if unset.
     var customMonthlyPrice: Double? { get set }
 
+    /// User-configured billing cycle day (1-28). Nil if unset.
+    /// When set, tier recommendations and dollar summaries align to billing cycle boundaries.
+    var billingCycleDay: Int? { get set }
+
     func resetToDefaults()
 }
