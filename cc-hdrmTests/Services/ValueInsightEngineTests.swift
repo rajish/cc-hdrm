@@ -50,7 +50,7 @@ struct ValueInsightEngineTests {
 
     // MARK: - 9.2: 24h insight with dollar value
 
-    @Test("24h insight with dollar value: 'Used $X of $Y today'")
+    @Test("24h insight with dollar value and high utilization: cautious tone")
     func dayInsightWithDollars() {
         let mock = makeMockService()
         let events = makeEvents(count: 2, spanDays: 1)
@@ -72,14 +72,17 @@ struct ValueInsightEngineTests {
             headroomAnalysisService: mock
         )
 
-        #expect(insight.text.hasPrefix("Used $"))
-        #expect(insight.text.contains(" of $"))
-        #expect(insight.text.hasSuffix(" today"))
+        // High utilization (100% — usedCredits exceed daily prorated limit) → cautious tone
+        #expect(insight.text.contains("Close to today's limit"))
+        #expect(insight.text.contains("$"))
+        #expect(insight.isQuiet == false)
+        #expect(insight.preciseDetail != nil)
+        #expect(insight.preciseDetail?.contains("utilization") == true)
     }
 
     // MARK: - 9.3: 24h insight percentage-only
 
-    @Test("24h insight percentage-only: 'Z% utilization today'")
+    @Test("24h insight percentage-only: natural language description")
     func dayInsightPercentageOnly() {
         let mock = makeMockService()
         let events = makeEvents(count: 2, spanDays: 1)
@@ -94,12 +97,14 @@ struct ValueInsightEngineTests {
             headroomAnalysisService: mock
         )
 
-        #expect(insight.text.contains("% utilization today"))
+        // Falls back to aggregateBreakdown (52% usedPercent) → neutral NL text
+        #expect(insight.text.contains("of today's capacity"))
+        #expect(insight.preciseDetail?.contains("utilization today") == true)
     }
 
     // MARK: - 9.4: 7d insight above average
 
-    @Test("7d insight above average: 'X% above your typical week'")
+    @Test("7d insight above average: natural language comparison")
     func weekInsightAboveAverage() {
         // Mock returns high usedCredits for small batches (week) and low for large batches (all-time)
         let mock = MockHeadroomAnalysisService()
@@ -132,14 +137,15 @@ struct ValueInsightEngineTests {
             headroomAnalysisService: mock
         )
 
-        // Week util (~90%) >> all-time util (~0.8%) → large positive diff
-        #expect(insight.text.contains("above your typical week"))
+        // Week util (~90%) >> all-time util (~0.8%) → NL comparison
+        #expect(insight.text.hasPrefix("This week:"))
         #expect(insight.isQuiet == false)
+        #expect(insight.preciseDetail?.contains("above") == true)
     }
 
     // MARK: - 9.5: 7d insight below average
 
-    @Test("7d insight below average: 'X% below your typical week'")
+    @Test("7d insight below average: natural language comparison")
     func weekInsightBelowAverage() {
         // Mock returns low usedCredits for small batches (week) and high for large batches (all-time)
         let mock = MockHeadroomAnalysisService()
@@ -172,9 +178,10 @@ struct ValueInsightEngineTests {
             headroomAnalysisService: mock
         )
 
-        // Week util (~20%) << all-time util (~77.8%) → large negative diff
-        #expect(insight.text.contains("below your typical week"))
+        // Week util (~20%) << all-time util (~77.8%) → NL comparison
+        #expect(insight.text.hasPrefix("This week:"))
         #expect(insight.isQuiet == false)
+        #expect(insight.preciseDetail?.contains("below") == true)
     }
 
     // MARK: - 9.6: 7d insight near average
@@ -235,7 +242,7 @@ struct ValueInsightEngineTests {
 
     // MARK: - 9.8: 30d insight with dollar value
 
-    @Test("30d insight with dollar value and utilization percentage")
+    @Test("30d insight with dollar value: tone-appropriate display")
     func monthInsightWithDollars() {
         let mock = makeMockService()
         let events = makeEvents(count: 10, spanDays: 30)
@@ -256,14 +263,15 @@ struct ValueInsightEngineTests {
             headroomAnalysisService: mock
         )
 
-        #expect(insight.text.hasPrefix("Used $"))
-        #expect(insight.text.contains("this month"))
-        #expect(insight.text.contains("%"))
+        // Dollar values present in text, tone depends on utilization
+        #expect(insight.text.contains("$"))
+        #expect(insight.preciseDetail != nil)
+        #expect(insight.preciseDetail?.contains("this month") == true)
     }
 
     // MARK: - 9.9: 30d insight percentage-only
 
-    @Test("30d insight percentage-only (nil monthlyPrice)")
+    @Test("30d insight percentage-only (nil monthlyPrice): natural language")
     func monthInsightPercentageOnly() {
         let mock = makeMockService(utilizationUsedPercent: 45)
         let events = makeEvents(count: 10, spanDays: 30)
@@ -279,8 +287,9 @@ struct ValueInsightEngineTests {
             headroomAnalysisService: mock
         )
 
-        // Falls back to aggregateBreakdown's usedPercent
-        #expect(insight.text.contains("% utilization this month"))
+        // Falls back to aggregateBreakdown's usedPercent (45%) → "roughly half" NL
+        #expect(insight.text.contains("of this month's capacity"))
+        #expect(insight.preciseDetail?.contains("utilization this month") == true)
     }
 
     // MARK: - 9.10: All insight with trending up
@@ -516,6 +525,475 @@ struct ValueInsightEngineTests {
     func valueInsightSendable() {
         let insight = ValueInsight(text: "test", isQuiet: false)
         let _: any Sendable = insight
+    }
+
+    @Test("ValueInsight default priority is .summary")
+    func valueInsightDefaultPriority() {
+        let insight = ValueInsight(text: "test", isQuiet: true)
+        #expect(insight.priority == .summary)
+        #expect(insight.preciseDetail == nil)
+    }
+
+    // MARK: - computeInsights (Story 16.5)
+
+    @Test("computeInsights returns usage insight when no findings or recommendation")
+    func computeInsightsUsageOnly() {
+        let mock = makeMockService()
+        let events = makeEvents(count: 5, spanDays: 30)
+
+        let insights = ValueInsightEngine.computeInsights(
+            timeRange: .month,
+            subscriptionValue: nil,
+            resetEvents: events,
+            allTimeResetEvents: events,
+            creditLimits: proLimits,
+            headroomAnalysisService: mock
+        )
+
+        #expect(insights.count == 1)
+        #expect(insights.first?.priority == .summary)
+    }
+
+    @Test("computeInsights includes pattern findings at highest priority")
+    func computeInsightsWithPatternFindings() {
+        let mock = makeMockService()
+        let events = makeEvents(count: 5, spanDays: 30)
+        let findings: [PatternFinding] = [
+            .forgottenSubscription(weeks: 3, avgUtilization: 2.5, monthlyCost: 200)
+        ]
+
+        let insights = ValueInsightEngine.computeInsights(
+            timeRange: .month,
+            subscriptionValue: nil,
+            resetEvents: events,
+            allTimeResetEvents: events,
+            creditLimits: proLimits,
+            headroomAnalysisService: mock,
+            patternFindings: findings
+        )
+
+        #expect(insights.count == 2)
+        #expect(insights.first?.priority == .patternFinding)
+        #expect(insights.first?.text.contains("5%") == true)
+    }
+
+    @Test("computeInsights includes tier recommendation between findings and summary")
+    func computeInsightsWithTierRecommendation() {
+        let mock = makeMockService()
+        let events = makeEvents(count: 5, spanDays: 30)
+        let recommendation = TierRecommendation.downgrade(
+            currentTier: .max5x,
+            currentMonthlyCost: 200,
+            recommendedTier: .pro,
+            recommendedMonthlyCost: 20,
+            monthlySavings: 180,
+            weeksOfData: 8
+        )
+
+        let insights = ValueInsightEngine.computeInsights(
+            timeRange: .month,
+            subscriptionValue: nil,
+            resetEvents: events,
+            allTimeResetEvents: events,
+            creditLimits: proLimits,
+            headroomAnalysisService: mock,
+            tierRecommendation: recommendation
+        )
+
+        #expect(insights.count == 2)
+        #expect(insights.first?.priority == .tierRecommendation)
+    }
+
+    @Test("computeInsights sorts by priority descending")
+    func computeInsightsSortOrder() {
+        let mock = makeMockService()
+        let events = makeEvents(count: 5, spanDays: 30)
+        let findings: [PatternFinding] = [
+            .usageDecay(currentUtil: 30, threeMonthAgoUtil: 70)
+        ]
+        let recommendation = TierRecommendation.downgrade(
+            currentTier: .max5x,
+            currentMonthlyCost: 200,
+            recommendedTier: .pro,
+            recommendedMonthlyCost: 20,
+            monthlySavings: 180,
+            weeksOfData: 8
+        )
+
+        let insights = ValueInsightEngine.computeInsights(
+            timeRange: .month,
+            subscriptionValue: nil,
+            resetEvents: events,
+            allTimeResetEvents: events,
+            creditLimits: proLimits,
+            headroomAnalysisService: mock,
+            patternFindings: findings,
+            tierRecommendation: recommendation
+        )
+
+        #expect(insights.count == 3)
+        #expect(insights[0].priority == .patternFinding)
+        #expect(insights[1].priority == .tierRecommendation)
+        #expect(insights[2].priority == .summary)
+    }
+
+    @Test("computeInsights skips .goodFit recommendation")
+    func computeInsightsSkipsGoodFit() {
+        let mock = makeMockService()
+        let events = makeEvents(count: 5, spanDays: 30)
+        let recommendation = TierRecommendation.goodFit(tier: .pro, headroomPercent: 45)
+
+        let insights = ValueInsightEngine.computeInsights(
+            timeRange: .month,
+            subscriptionValue: nil,
+            resetEvents: events,
+            allTimeResetEvents: events,
+            creditLimits: proLimits,
+            headroomAnalysisService: mock,
+            tierRecommendation: recommendation
+        )
+
+        // Should only have the summary, not the goodFit
+        #expect(insights.count == 1)
+        #expect(insights.first?.priority == .summary)
+    }
+
+    // MARK: - insightFromPatternFinding
+
+    @Test("insightFromPatternFinding produces .patternFinding priority")
+    func patternFindingConversion() {
+        let finding = PatternFinding.chronicOverpaying(
+            currentTier: "Max 5x", recommendedTier: "Pro", monthlySavings: 180
+        )
+        let insight = ValueInsightEngine.insightFromPatternFinding(finding)
+
+        #expect(insight.priority == .patternFinding)
+        #expect(insight.isQuiet == false)
+        #expect(insight.text == finding.summary)
+        #expect(insight.preciseDetail == finding.title)
+    }
+
+    // MARK: - insightFromTierRecommendation
+
+    @Test("insightFromTierRecommendation produces .tierRecommendation priority for downgrade")
+    func tierRecommendationDowngradeConversion() {
+        let recommendation = TierRecommendation.downgrade(
+            currentTier: .max5x,
+            currentMonthlyCost: 200,
+            recommendedTier: .pro,
+            recommendedMonthlyCost: 20,
+            monthlySavings: 180,
+            weeksOfData: 8
+        )
+        let insight = ValueInsightEngine.insightFromTierRecommendation(recommendation)
+
+        #expect(insight != nil)
+        #expect(insight?.priority == .tierRecommendation)
+        #expect(insight?.isQuiet == false)
+    }
+
+    @Test("insightFromTierRecommendation returns nil for .goodFit")
+    func tierRecommendationGoodFitReturnsNil() {
+        let recommendation = TierRecommendation.goodFit(tier: .pro, headroomPercent: 45)
+        let insight = ValueInsightEngine.insightFromTierRecommendation(recommendation)
+
+        #expect(insight == nil)
+    }
+
+    // MARK: - preciseDetail population (Story 16.5)
+
+    @Test("preciseDetail is populated for day dollar insight")
+    func preciseDetailDayDollar() {
+        let mock = makeMockService()
+        let events = makeEvents(count: 2, spanDays: 1)
+
+        let value = SubscriptionValueCalculator.calculate(
+            resetEvents: events,
+            creditLimits: proLimits,
+            timeRange: .day,
+            headroomAnalysisService: mock
+        )
+
+        let insight = ValueInsightEngine.computeInsight(
+            timeRange: .day,
+            subscriptionValue: value,
+            resetEvents: events,
+            allTimeResetEvents: events,
+            creditLimits: proLimits,
+            headroomAnalysisService: mock
+        )
+
+        #expect(insight.preciseDetail != nil)
+        #expect(insight.preciseDetail?.contains("$") == true)
+        #expect(insight.preciseDetail?.contains("utilization") == true)
+    }
+
+    @Test("preciseDetail is populated for week comparison insight")
+    func preciseDetailWeekComparison() {
+        let mock = MockHeadroomAnalysisService()
+        mock.aggregateBreakdownHandler = { events in
+            let usedCredits: Double = events.count <= 10 ? 4_500_000 : 500_000
+            return PeriodSummary(
+                usedCredits: usedCredits, constrainedCredits: 0,
+                unusedCredits: max(0, 5_000_000 - usedCredits),
+                resetCount: events.count, avgPeakUtilization: 90.0,
+                usedPercent: 90, constrainedPercent: 0, unusedPercent: 10
+            )
+        }
+
+        let weekEvents = makeEvents(count: 5, spanDays: 7)
+        let allTimeEvents = makeEvents(count: 30, spanDays: 90)
+
+        let insight = ValueInsightEngine.computeInsight(
+            timeRange: .week,
+            subscriptionValue: SubscriptionValueCalculator.calculate(
+                resetEvents: weekEvents,
+                creditLimits: proLimits,
+                timeRange: .week,
+                headroomAnalysisService: mock
+            ),
+            resetEvents: weekEvents,
+            allTimeResetEvents: allTimeEvents,
+            creditLimits: proLimits,
+            headroomAnalysisService: mock
+        )
+
+        #expect(insight.preciseDetail != nil)
+        #expect(insight.preciseDetail?.contains("average weekly utilization") == true)
+    }
+
+    @Test("preciseDetail is populated for all-time insight")
+    func preciseDetailAllTime() {
+        let mock = makeMockService()
+        let events = makeEvents(count: 30, spanDays: 120)
+
+        let insight = ValueInsightEngine.computeInsight(
+            timeRange: .all,
+            subscriptionValue: nil,
+            resetEvents: events,
+            allTimeResetEvents: events,
+            creditLimits: proLimits,
+            headroomAnalysisService: mock
+        )
+
+        #expect(insight.preciseDetail != nil)
+        #expect(insight.preciseDetail?.contains("Avg monthly utilization:") == true)
+        #expect(insight.preciseDetail?.contains("%") == true)
+    }
+
+    @Test("preciseDetail for pattern finding is the finding title")
+    func preciseDetailPatternFinding() {
+        let finding = PatternFinding.forgottenSubscription(weeks: 3, avgUtilization: 2.5, monthlyCost: 200)
+        let insight = ValueInsightEngine.insightFromPatternFinding(finding)
+
+        #expect(insight.preciseDetail == finding.title)
+    }
+
+    @Test("preciseDetail for tier recommendation includes summary and context")
+    func preciseDetailTierRecommendation() {
+        let recommendation = TierRecommendation.downgrade(
+            currentTier: .max5x,
+            currentMonthlyCost: 200,
+            recommendedTier: .pro,
+            recommendedMonthlyCost: 20,
+            monthlySavings: 180,
+            weeksOfData: 8
+        )
+        let insight = ValueInsightEngine.insightFromTierRecommendation(recommendation)
+
+        #expect(insight?.preciseDetail != nil)
+        #expect(insight?.preciseDetail?.contains("Based on") == true)
+    }
+
+    // MARK: - Tone matching (Story 16.5)
+
+    @Test("High utilization (>80%) produces cautious tone text")
+    func toneMatchingHighUtilization() {
+        // Mock with very high usage → >80% utilization for day range
+        let mock = makeMockService(usedCredits: 4_000_000)
+        let events = makeEvents(count: 2, spanDays: 1)
+
+        let value = SubscriptionValueCalculator.calculate(
+            resetEvents: events,
+            creditLimits: proLimits,
+            timeRange: .day,
+            headroomAnalysisService: mock
+        )
+
+        let insight = ValueInsightEngine.computeInsight(
+            timeRange: .day,
+            subscriptionValue: value,
+            resetEvents: events,
+            allTimeResetEvents: events,
+            creditLimits: proLimits,
+            headroomAnalysisService: mock
+        )
+
+        // Cautious tone: "Close to..." or "Running close to..."
+        #expect(insight.text.contains("Close to") || insight.text.contains("Running close to"))
+        #expect(insight.isQuiet == false)
+    }
+
+    @Test("Low utilization (<20%) with dollars produces reassuring tone text")
+    func toneMatchingLowUtilizationDollar() {
+        // Mock with very low usage → <20% utilization
+        let mock = makeMockService(usedCredits: 50_000)
+        let events = makeEvents(count: 2, spanDays: 30)
+
+        let value = SubscriptionValueCalculator.calculate(
+            resetEvents: events,
+            creditLimits: proLimits,
+            timeRange: .month,
+            headroomAnalysisService: mock
+        )
+
+        let insight = ValueInsightEngine.computeInsight(
+            timeRange: .month,
+            subscriptionValue: value,
+            resetEvents: events,
+            allTimeResetEvents: events,
+            creditLimits: proLimits,
+            headroomAnalysisService: mock
+        )
+
+        // Reassuring tone: "Plenty of room"
+        #expect(insight.text.contains("Plenty of room") || insight.text.contains("Light usage"))
+        #expect(insight.isQuiet == false)
+    }
+
+    @Test("Low utilization (<20%) percentage-only produces reassuring tone text")
+    func toneMatchingLowUtilizationPercentage() {
+        let mock = makeMockService(utilizationUsedPercent: 10)
+        let events = makeEvents(count: 2, spanDays: 1)
+        let customLimits = CreditLimits(fiveHourCredits: 550_000, sevenDayCredits: 5_000_000)
+
+        let insight = ValueInsightEngine.computeInsight(
+            timeRange: .day,
+            subscriptionValue: nil,
+            resetEvents: events,
+            allTimeResetEvents: events,
+            creditLimits: customLimits,
+            headroomAnalysisService: mock
+        )
+
+        // Reassuring tone for percentage path
+        #expect(insight.text.contains("Light usage"))
+        #expect(insight.isQuiet == false)
+        #expect(insight.preciseDetail?.contains("10%") == true)
+    }
+
+    @Test("Neutral utilization (20-80%) produces natural language text, not raw percentage")
+    func toneMatchingNeutralUtilization() {
+        let mock = makeMockService(utilizationUsedPercent: 52)
+        let events = makeEvents(count: 2, spanDays: 1)
+        let customLimits = CreditLimits(fiveHourCredits: 550_000, sevenDayCredits: 5_000_000)
+
+        let insight = ValueInsightEngine.computeInsight(
+            timeRange: .day,
+            subscriptionValue: nil,
+            resetEvents: events,
+            allTimeResetEvents: events,
+            creditLimits: customLimits,
+            headroomAnalysisService: mock
+        )
+
+        // Neutral tone: NL text, no raw percentage in main text
+        #expect(insight.text.contains("of today's capacity"))
+        #expect(!insight.text.contains("52%"))
+        #expect(insight.isQuiet == true)
+        #expect(insight.preciseDetail?.contains("52%") == true)
+    }
+
+    @Test("Pattern findings use matter-of-fact tone (existing summary text)")
+    func toneMatchingPatternFinding() {
+        let finding = PatternFinding.usageDecay(currentUtil: 30, threeMonthAgoUtil: 70)
+        let insight = ValueInsightEngine.insightFromPatternFinding(finding)
+
+        // Pattern findings use direct, factual summary text
+        #expect(insight.text.contains("declined"))
+        #expect(insight.isQuiet == false)
+    }
+
+    @Test("Week deviation insight gets .usageDeviation priority")
+    func weekDeviationPriority() {
+        let mock = MockHeadroomAnalysisService()
+        mock.aggregateBreakdownHandler = { events in
+            let usedCredits: Double = events.count <= 10 ? 4_500_000 : 500_000
+            return PeriodSummary(
+                usedCredits: usedCredits, constrainedCredits: 0,
+                unusedCredits: max(0, 5_000_000 - usedCredits),
+                resetCount: events.count, avgPeakUtilization: 90.0,
+                usedPercent: 90, constrainedPercent: 0, unusedPercent: 10
+            )
+        }
+
+        let weekEvents = makeEvents(count: 5, spanDays: 7)
+        let allTimeEvents = makeEvents(count: 30, spanDays: 90)
+
+        let insight = ValueInsightEngine.computeInsight(
+            timeRange: .week,
+            subscriptionValue: SubscriptionValueCalculator.calculate(
+                resetEvents: weekEvents,
+                creditLimits: proLimits,
+                timeRange: .week,
+                headroomAnalysisService: mock
+            ),
+            resetEvents: weekEvents,
+            allTimeResetEvents: allTimeEvents,
+            creditLimits: proLimits,
+            headroomAnalysisService: mock
+        )
+
+        // Notable deviation from baseline gets .usageDeviation priority
+        #expect(insight.priority == .usageDeviation)
+        #expect(insight.text.hasPrefix("This week:"))
+    }
+
+    @Test("Removing a finding promotes the next insight to primary position")
+    func dismissPromotesNextInsight() {
+        let mock = makeMockService()
+        let events = makeEvents(count: 5, spanDays: 30)
+        let findings: [PatternFinding] = [
+            .forgottenSubscription(weeks: 3, avgUtilization: 2.5, monthlyCost: 200),
+            .usageDecay(currentUtil: 30, threeMonthAgoUtil: 70)
+        ]
+
+        // With both findings: first finding is primary
+        let insightsBefore = ValueInsightEngine.computeInsights(
+            timeRange: .month,
+            subscriptionValue: nil,
+            resetEvents: events,
+            allTimeResetEvents: events,
+            creditLimits: proLimits,
+            headroomAnalysisService: mock,
+            patternFindings: findings
+        )
+        let primaryBefore = insightsBefore.first!
+
+        // Dismiss first finding: second finding promotes to primary
+        let insightsAfter = ValueInsightEngine.computeInsights(
+            timeRange: .month,
+            subscriptionValue: nil,
+            resetEvents: events,
+            allTimeResetEvents: events,
+            creditLimits: proLimits,
+            headroomAnalysisService: mock,
+            patternFindings: [findings[1]]
+        )
+        let primaryAfter = insightsAfter.first!
+
+        #expect(primaryBefore.text != primaryAfter.text)
+        #expect(primaryAfter.text == findings[1].summary)
+        #expect(primaryAfter.priority == .patternFinding)
+    }
+
+    // MARK: - InsightPriority ordering
+
+    @Test("InsightPriority ordering: patternFinding > tierRecommendation > usageDeviation > summary")
+    func priorityOrdering() {
+        #expect(InsightPriority.patternFinding > InsightPriority.tierRecommendation)
+        #expect(InsightPriority.tierRecommendation > InsightPriority.usageDeviation)
+        #expect(InsightPriority.usageDeviation > InsightPriority.summary)
     }
 
     // MARK: - computeMonthlyUtilizations

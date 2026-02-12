@@ -1,11 +1,39 @@
 import Foundation
 
+/// Priority level for insight display ordering.
+/// Higher-priority insights are shown first in the InsightStack.
+enum InsightPriority: Int, Sendable, Comparable {
+    /// Active pattern findings (forgotten subscription, chronic mismatch) — highest priority.
+    case patternFinding = 3
+    /// Tier recommendation (actionable downgrade/upgrade) — high priority.
+    case tierRecommendation = 2
+    /// Notable usage deviation from personal baseline — medium priority.
+    case usageDeviation = 1
+    /// Default subscription value summary — fallback.
+    case summary = 0
+
+    static func < (lhs: InsightPriority, rhs: InsightPriority) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+}
+
 /// Result of computing a context-aware insight for the analytics summary.
 struct ValueInsight: Sendable, Equatable {
     /// Display text for the insight
     let text: String
     /// true = muted styling, single quiet line (nothing notable)
     let isQuiet: Bool
+    /// Priority for ordering in InsightStack. Defaults to `.summary`.
+    let priority: InsightPriority
+    /// Precise detail for hover tooltip and VoiceOver (e.g., "76.2% of $200 monthly limit").
+    let preciseDetail: String?
+
+    init(text: String, isQuiet: Bool, priority: InsightPriority = .summary, preciseDetail: String? = nil) {
+        self.text = text
+        self.isQuiet = isQuiet
+        self.priority = priority
+        self.preciseDetail = preciseDetail
+    }
 }
 
 /// Pure computation of context-aware value insights by time range.
@@ -57,13 +85,27 @@ enum ValueInsightEngine {
         if let value = subscriptionValue {
             let used = SubscriptionValueCalculator.formatDollars(value.usedDollars)
             let total = SubscriptionValueCalculator.formatDollars(value.periodPrice)
-            let text = "Used \(used) of \(total) today"
-            return ValueInsight(text: text, isQuiet: isQuietUtilization(value.utilizationPercent))
+            let util = value.utilizationPercent
+            let precise = "\(used) of \(total) (\(formatPercent(util)) utilization)"
+
+            if util > 80 {
+                return ValueInsight(text: "Close to today's limit — \(used) of \(total) used", isQuiet: false, preciseDetail: precise)
+            } else if util < 20 {
+                return ValueInsight(text: "Plenty of room — \(used) of \(total) used today", isQuiet: false, preciseDetail: precise)
+            }
+            return ValueInsight(text: "Used \(used) of \(total) today", isQuiet: isQuietUtilization(util), preciseDetail: precise)
         }
 
         let util = computeUtilization(resetEvents: resetEvents, creditLimits: creditLimits, timeRange: .day, headroomAnalysisService: headroomAnalysisService)
         if let pct = util {
-            return ValueInsight(text: "\(formatPercent(pct)) utilization today", isQuiet: isQuietUtilization(pct))
+            let precise = "\(formatPercent(pct)) utilization today"
+            if pct > 80 {
+                return ValueInsight(text: "Running close to today's limit", isQuiet: false, preciseDetail: precise)
+            } else if pct < 20 {
+                return ValueInsight(text: "Light usage today", isQuiet: false, preciseDetail: precise)
+            }
+            let nl = NaturalLanguageFormatter.formatPercentNatural(pct)
+            return ValueInsight(text: "\(capitalizeFirst(nl)) of today's capacity", isQuiet: isQuietUtilization(pct), preciseDetail: precise)
         }
 
         return ValueInsight(text: "Usage data available", isQuiet: true)
@@ -94,10 +136,12 @@ enum ValueInsightEngine {
                    let currentUtil = subscriptionValue?.utilizationPercent ?? computeUtilization(resetEvents: resetEvents, creditLimits: creditLimits, timeRange: .week, headroomAnalysisService: headroomAnalysisService) {
                     let diff = currentUtil - allTimeUtil
                     if abs(diff) >= 5.0 {
+                        let comparison = NaturalLanguageFormatter.formatComparisonNatural(current: currentUtil, baseline: allTimeUtil)
                         let direction = diff > 0 ? "above" : "below"
-                        return ValueInsight(text: "\(formatPercent(abs(diff))) \(direction) your typical week", isQuiet: false)
+                        let precise = "\(formatPercent(abs(diff))) \(direction) average weekly utilization"
+                        return ValueInsight(text: "This week: \(comparison)", isQuiet: false, priority: .usageDeviation, preciseDetail: precise)
                     }
-                    return ValueInsight(text: "Normal usage", isQuiet: true)
+                    return ValueInsight(text: "Normal usage", isQuiet: true, preciseDetail: "\(formatPercent(currentUtil)) utilization this week")
                 }
             }
         }
@@ -106,12 +150,27 @@ enum ValueInsightEngine {
         if let value = subscriptionValue {
             let used = SubscriptionValueCalculator.formatDollars(value.usedDollars)
             let total = SubscriptionValueCalculator.formatDollars(value.periodPrice)
-            return ValueInsight(text: "Used \(used) of \(total) this week", isQuiet: isQuietUtilization(value.utilizationPercent))
+            let util = value.utilizationPercent
+            let precise = "\(used) of \(total) (\(formatPercent(util)) utilization)"
+
+            if util > 80 {
+                return ValueInsight(text: "Close to this week's limit — \(used) of \(total) used", isQuiet: false, preciseDetail: precise)
+            } else if util < 20 {
+                return ValueInsight(text: "Plenty of room — \(used) of \(total) used this week", isQuiet: false, preciseDetail: precise)
+            }
+            return ValueInsight(text: "Used \(used) of \(total) this week", isQuiet: isQuietUtilization(util), preciseDetail: precise)
         }
 
         let util = computeUtilization(resetEvents: resetEvents, creditLimits: creditLimits, timeRange: .week, headroomAnalysisService: headroomAnalysisService)
         if let pct = util {
-            return ValueInsight(text: "\(formatPercent(pct)) utilization this week", isQuiet: isQuietUtilization(pct))
+            let precise = "\(formatPercent(pct)) utilization this week"
+            if pct > 80 {
+                return ValueInsight(text: "Running close to this week's limit", isQuiet: false, preciseDetail: precise)
+            } else if pct < 20 {
+                return ValueInsight(text: "Light usage this week", isQuiet: false, preciseDetail: precise)
+            }
+            let nl = NaturalLanguageFormatter.formatPercentNatural(pct)
+            return ValueInsight(text: "\(capitalizeFirst(nl)) of this week's capacity", isQuiet: isQuietUtilization(pct), preciseDetail: precise)
         }
 
         return ValueInsight(text: "Usage data available", isQuiet: true)
@@ -128,14 +187,29 @@ enum ValueInsightEngine {
         if let value = subscriptionValue {
             let used = SubscriptionValueCalculator.formatDollars(value.usedDollars)
             let total = SubscriptionValueCalculator.formatDollars(value.periodPrice)
-            let pct = formatPercent(value.utilizationPercent)
-            let text = "Used \(used) of \(total) this month (\(pct))"
-            return ValueInsight(text: text, isQuiet: isQuietUtilization(value.utilizationPercent))
+            let util = value.utilizationPercent
+            let precise = "Used \(used) of \(total) this month (\(formatPercent(util)))"
+
+            if util > 80 {
+                return ValueInsight(text: "Close to this month's limit — \(used) of \(total) used", isQuiet: false, preciseDetail: precise)
+            } else if util < 20 {
+                return ValueInsight(text: "Plenty of room — \(used) of \(total) used this month", isQuiet: false, preciseDetail: precise)
+            }
+            let nl = NaturalLanguageFormatter.formatPercentNatural(util)
+            let text = "Used \(used) of \(total) this month (\(nl))"
+            return ValueInsight(text: text, isQuiet: isQuietUtilization(util), preciseDetail: precise)
         }
 
         let util = computeUtilization(resetEvents: resetEvents, creditLimits: creditLimits, timeRange: .month, headroomAnalysisService: headroomAnalysisService)
         if let pct = util {
-            return ValueInsight(text: "\(formatPercent(pct)) utilization this month", isQuiet: isQuietUtilization(pct))
+            let precise = "\(formatPercent(pct)) utilization this month"
+            if pct > 80 {
+                return ValueInsight(text: "Running close to this month's limit", isQuiet: false, preciseDetail: precise)
+            } else if pct < 20 {
+                return ValueInsight(text: "Light usage this month", isQuiet: false, preciseDetail: precise)
+            }
+            let nl = NaturalLanguageFormatter.formatPercentNatural(pct)
+            return ValueInsight(text: "\(capitalizeFirst(nl)) of this month's capacity", isQuiet: isQuietUtilization(pct), preciseDetail: precise)
         }
 
         return ValueInsight(text: "Usage data available", isQuiet: true)
@@ -152,7 +226,14 @@ enum ValueInsightEngine {
             // Percentage-only mode: compute average utilization from aggregate
             let summary = headroomAnalysisService.aggregateBreakdown(events: resetEvents)
             let pct = summary.usedPercent
-            return ValueInsight(text: "Avg utilization: \(formatPercent(pct))", isQuiet: isQuietUtilization(pct))
+            let precise = "Avg utilization: \(formatPercent(pct))"
+            if pct > 80 {
+                return ValueInsight(text: "High average utilization", isQuiet: false, preciseDetail: precise)
+            } else if pct < 20 {
+                return ValueInsight(text: "Light overall usage", isQuiet: false, preciseDetail: precise)
+            }
+            let nl = NaturalLanguageFormatter.formatPercentNatural(pct)
+            return ValueInsight(text: "Avg utilization: \(nl)", isQuiet: isQuietUtilization(pct), preciseDetail: precise)
         }
 
         let monthlyUtilizations = computeMonthlyUtilizations(
@@ -166,8 +247,17 @@ enum ValueInsightEngine {
         }
 
         let avgUtil = monthlyUtilizations.reduce(0, +) / Double(monthlyUtilizations.count)
-        var text = "Avg monthly utilization: \(formatPercent(avgUtil))"
+        let nl = NaturalLanguageFormatter.formatPercentNatural(avgUtil)
+        var text: String
+        if avgUtil > 80 {
+            text = "High average monthly utilization"
+        } else if avgUtil < 20 {
+            text = "Light average monthly usage"
+        } else {
+            text = "Avg monthly utilization: \(nl)"
+        }
         var isQuiet = isQuietUtilization(avgUtil)
+        var preciseText = "Avg monthly utilization: \(formatPercent(avgUtil))"
 
         // Trend detection: compare last 3 completed months.
         // Exclude the current (potentially partial) month to avoid spurious trends.
@@ -193,14 +283,16 @@ enum ValueInsightEngine {
 
             if allRising {
                 text += ", trending up"
+                preciseText += ", trending up"
                 isQuiet = false
             } else if allFalling {
                 text += ", trending down"
+                preciseText += ", trending down"
                 isQuiet = false
             }
         }
 
-        return ValueInsight(text: text, isQuiet: isQuiet)
+        return ValueInsight(text: text, isQuiet: isQuiet, preciseDetail: preciseText)
     }
 
     // MARK: - Helpers
@@ -279,5 +371,84 @@ enum ValueInsightEngine {
     /// Formats a percentage for display (e.g., "52%").
     private static func formatPercent(_ value: Double) -> String {
         String(format: "%.0f%%", value)
+    }
+
+    /// Capitalizes the first character of a string.
+    private static func capitalizeFirst(_ s: String) -> String {
+        guard let first = s.first else { return s }
+        return first.uppercased() + s.dropFirst()
+    }
+
+    // MARK: - Multi-Insight API (Story 16.5)
+
+    /// Computes all available insights for the current context, sorted by priority (highest first).
+    /// Pattern findings and tier recommendations are converted to ValueInsight entries
+    /// alongside the time-range-specific usage insight.
+    static func computeInsights(
+        timeRange: TimeRange,
+        subscriptionValue: SubscriptionValue?,
+        resetEvents: [ResetEvent],
+        allTimeResetEvents: [ResetEvent],
+        creditLimits: CreditLimits?,
+        headroomAnalysisService: any HeadroomAnalysisServiceProtocol,
+        patternFindings: [PatternFinding] = [],
+        tierRecommendation: TierRecommendation? = nil
+    ) -> [ValueInsight] {
+        var insights: [ValueInsight] = []
+
+        // Pattern findings → highest priority
+        for finding in patternFindings {
+            insights.append(insightFromPatternFinding(finding))
+        }
+
+        // Tier recommendation → high priority (only actionable ones)
+        if let recommendation = tierRecommendation {
+            if let insight = insightFromTierRecommendation(recommendation) {
+                insights.append(insight)
+            }
+        }
+
+        // Usage insight → summary priority
+        let usageInsight = computeInsight(
+            timeRange: timeRange,
+            subscriptionValue: subscriptionValue,
+            resetEvents: resetEvents,
+            allTimeResetEvents: allTimeResetEvents,
+            creditLimits: creditLimits,
+            headroomAnalysisService: headroomAnalysisService
+        )
+        insights.append(usageInsight)
+
+        // Sort by priority descending (highest first), stable order within same priority
+        insights.sort { $0.priority > $1.priority }
+
+        return insights
+    }
+
+    /// Converts a PatternFinding into a ValueInsight with `.patternFinding` priority.
+    static func insightFromPatternFinding(_ finding: PatternFinding) -> ValueInsight {
+        ValueInsight(
+            text: finding.summary,
+            isQuiet: false,
+            priority: .patternFinding,
+            preciseDetail: finding.title
+        )
+    }
+
+    /// Converts a TierRecommendation into a ValueInsight with `.tierRecommendation` priority.
+    /// Returns nil for `.goodFit` (not actionable, no insight needed).
+    static func insightFromTierRecommendation(_ recommendation: TierRecommendation) -> ValueInsight? {
+        guard recommendation.isActionable else { return nil }
+
+        let text = TierRecommendationCard.buildSummary(for: recommendation)
+        let context = TierRecommendationCard.buildContext(for: recommendation)
+        let detail = context.map { "\(text). \($0)" } ?? text
+
+        return ValueInsight(
+            text: text,
+            isQuiet: false,
+            priority: .tierRecommendation,
+            preciseDetail: detail
+        )
     }
 }
