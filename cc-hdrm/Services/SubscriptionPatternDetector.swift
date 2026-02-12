@@ -319,14 +319,13 @@ final class SubscriptionPatternDetector: SubscriptionPatternDetectorProtocol, @u
             monthlyAvg.append((key, avg))
         }
 
-        guard monthlyAvg.count >= Self.usageDecayMinMonths else {
-            Self.logger.debug("Usage decay: insufficient data (\(monthlyAvg.count) months < \(Self.usageDecayMinMonths))")
+        guard monthlyAvg.count >= Self.usageDecayMinMonths + 1 else {
+            Self.logger.debug("Usage decay: insufficient data (\(monthlyAvg.count) months < \(Self.usageDecayMinMonths + 1))")
             return nil
         }
 
         // Check for consecutive decline in most recent months
         let recent = Array(monthlyAvg.suffix(Self.usageDecayMinMonths + 1))
-        guard recent.count > Self.usageDecayMinMonths else { return nil }
 
         var isDecaying = true
         for i in 1..<recent.count {
