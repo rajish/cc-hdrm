@@ -190,4 +190,66 @@ struct GaugeIconTests {
         #expect(promotedData != nil)
         #expect(baseData != promotedData, "Promoted overlay should produce different pixel data than no overlay")
     }
+
+    // MARK: - Extra Usage Gauge Tests (Story 17.1)
+
+    @Test("makeExtraUsage returns non-nil 18x18 NSImage")
+    func extraUsageGaugeReturnsValidImage() {
+        let image = GaugeIcon.makeExtraUsage(remainingFraction: 0.7, utilization: 0.3)
+        #expect(image.size.width == 18)
+        #expect(image.size.height == 18)
+        #expect(image.isTemplate == false)
+    }
+
+    @Test("extraUsageAngle: remainingFraction=1.0 produces angle at pi (left)")
+    func extraUsageAngleFullBalance() {
+        let angle = GaugeIcon.extraUsageAngle(for: 1.0)
+        #expect(abs(angle - Double.pi) < 0.001, "Full balance should be at pi (left)")
+    }
+
+    @Test("extraUsageAngle: remainingFraction=0.0 produces angle at 0 (right)")
+    func extraUsageAngleDepleted() {
+        let angle = GaugeIcon.extraUsageAngle(for: 0.0)
+        #expect(abs(angle - 0) < 0.001, "Depleted should be at 0 (right)")
+    }
+
+    @Test("extraUsageAngle: remainingFraction=0.5 produces angle at pi/2 (up)")
+    func extraUsageAngleHalfBalance() {
+        let angle = GaugeIcon.extraUsageAngle(for: 0.5)
+        #expect(abs(angle - Double.pi / 2) < 0.001, "Half balance should be at pi/2 (up)")
+    }
+
+    @Test("makeExtraUsageNoLimit returns non-nil 18x18 NSImage")
+    func extraUsageNoLimitReturnsValidImage() {
+        let image = GaugeIcon.makeExtraUsageNoLimit(utilization: 0.5)
+        #expect(image.size.width == 18)
+        #expect(image.size.height == 18)
+        #expect(image.isTemplate == false)
+    }
+
+    @Test("makeExtraUsage at remainingFraction=0.0 (fully depleted) renders fill arc")
+    func extraUsageFullyDepletedRendersFill() {
+        let depleted = GaugeIcon.makeExtraUsage(remainingFraction: 0.0, utilization: 1.0)
+        let trackOnly = GaugeIcon.makeExtraUsage(remainingFraction: 1.0, utilization: 0.0)
+
+        let depletedData = depleted.tiffRepresentation
+        let trackData = trackOnly.tiffRepresentation
+
+        #expect(depletedData != nil)
+        #expect(trackData != nil)
+        #expect(depletedData != trackData, "Fully depleted gauge should differ from full balance (fill arc should render)")
+    }
+
+    @Test("Extra usage gauge produces different pixel data than headroom gauge")
+    func extraUsageGaugeDiffersFromHeadroom() {
+        let headroomImage = GaugeIcon.make(headroomPercentage: 50, state: .caution, sevenDayOverlay: .none)
+        let extraImage = GaugeIcon.makeExtraUsage(remainingFraction: 0.5, utilization: 0.5)
+
+        let headroomData = headroomImage.tiffRepresentation
+        let extraData = extraImage.tiffRepresentation
+
+        #expect(headroomData != nil)
+        #expect(extraData != nil)
+        #expect(headroomData != extraData, "Extra usage gauge should differ from headroom gauge")
+    }
 }

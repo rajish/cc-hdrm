@@ -67,4 +67,70 @@ struct ColorHeadroomTests {
         let font = NSFont.menuBarFont(for: .normal)
         #expect(font.pointSize == NSFont.systemFontSize)
     }
+
+    // MARK: - Extra Usage Color Mapping Tests (Story 17.1)
+
+    @Test("extraUsageColor(for: 0.0) returns ExtraUsageCool color")
+    func extraUsageCoolColor() {
+        let color = NSColor.extraUsageColor(for: 0.0)
+        #expect(color != NSColor.clear, "0.0 utilization should return a non-clear color")
+        // Verify it's blue-ish (cool): blue component should be dominant
+        if let srgb = color.usingColorSpace(.sRGB) {
+            #expect(srgb.blueComponent > srgb.redComponent, "Cool color should have blue > red")
+        }
+    }
+
+    @Test("extraUsageColor(for: 0.6) returns ExtraUsageWarm color")
+    func extraUsageWarmColor() {
+        let color = NSColor.extraUsageColor(for: 0.6)
+        #expect(color != NSColor.clear, "0.6 utilization should return a non-clear color")
+        // Verify it's purple-ish (warm): blue > green
+        if let srgb = color.usingColorSpace(.sRGB) {
+            #expect(srgb.blueComponent > srgb.greenComponent, "Warm color should have blue > green")
+        }
+    }
+
+    @Test("extraUsageColor(for: 0.8) returns ExtraUsageHot color")
+    func extraUsageHotColor() {
+        let color = NSColor.extraUsageColor(for: 0.8)
+        #expect(color != NSColor.clear, "0.8 utilization should return a non-clear color")
+        // Verify it's magenta-ish (hot): red > green
+        if let srgb = color.usingColorSpace(.sRGB) {
+            #expect(srgb.redComponent > srgb.greenComponent, "Hot color should have red > green")
+        }
+    }
+
+    @Test("extraUsageColor(for: 0.95) returns ExtraUsageCritical color")
+    func extraUsageCriticalColor() {
+        let color = NSColor.extraUsageColor(for: 0.95)
+        #expect(color != NSColor.clear, "0.95 utilization should return a non-clear color")
+        // Verify it's red-ish (critical): red > blue and red > green
+        if let srgb = color.usingColorSpace(.sRGB) {
+            #expect(srgb.redComponent > srgb.greenComponent, "Critical color should have red > green")
+            #expect(srgb.redComponent > srgb.blueComponent, "Critical color should have red > blue")
+        }
+    }
+
+    @Test("extraUsageColor tiers are distinct from each other")
+    func extraUsageColorTiersDistinct() {
+        let cool = NSColor.extraUsageColor(for: 0.0)
+        let warm = NSColor.extraUsageColor(for: 0.6)
+        let hot = NSColor.extraUsageColor(for: 0.8)
+        let critical = NSColor.extraUsageColor(for: 0.95)
+
+        #expect(cool != warm, "Cool and warm should be different colors")
+        #expect(warm != hot, "Warm and hot should be different colors")
+        #expect(hot != critical, "Hot and critical should be different colors")
+    }
+
+    @Test("extraUsageMenuBarFont uses semibold below 0.75, bold at 0.75+")
+    func extraUsageFontWeights() {
+        let lowFont = NSFont.extraUsageMenuBarFont(for: 0.3)
+        let highFont = NSFont.extraUsageMenuBarFont(for: 0.8)
+        let expectedLow = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+        let expectedHigh = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .bold)
+
+        #expect(lowFont.fontName == expectedLow.fontName, "Below 0.75 should use semibold")
+        #expect(highFont.fontName == expectedHigh.fontName, "At 0.75+ should use bold")
+    }
 }

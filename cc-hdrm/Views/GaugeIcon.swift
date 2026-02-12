@@ -116,6 +116,46 @@ enum GaugeIcon {
         return Double.pi * (1.0 - p)
     }
 
+    // MARK: - Extra Usage Gauge (Story 17.1)
+
+    /// Calculates the needle angle for extra usage mode (reversed direction).
+    ///
+    /// - Parameter remainingFraction: Remaining balance fraction 0-1.
+    /// - Returns: Angle in radians where π = left (full balance), 0 = right (depleted).
+    static func extraUsageAngle(for remainingFraction: Double) -> Double {
+        let clamped = max(0, min(1, remainingFraction))
+        return Double.pi * clamped
+    }
+
+    /// Creates a gauge icon for extra usage mode with reversed needle direction.
+    ///
+    /// - Parameters:
+    ///   - remainingFraction: Remaining balance as fraction 0-1. 1.0 = full, 0.0 = depleted.
+    ///   - utilization: Extra usage utilization 0-1, determines color.
+    /// - Returns: An 18x18pt `NSImage` with `isTemplate = false`.
+    static func makeExtraUsage(remainingFraction: Double, utilization: Double) -> NSImage {
+        let image = NSImage(size: canvasSize, flipped: true) { _ in
+            drawExtraUsageGauge(remainingFraction: remainingFraction, utilization: utilization)
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+
+    /// Creates a gauge icon for extra usage mode when no monthly limit is set.
+    /// Fixed needle at midpoint, fill at 50%.
+    ///
+    /// - Parameter utilization: Extra usage utilization 0-1, determines color.
+    /// - Returns: An 18x18pt `NSImage` with `isTemplate = false`.
+    static func makeExtraUsageNoLimit(utilization: Double) -> NSImage {
+        let image = NSImage(size: canvasSize, flipped: true) { _ in
+            drawExtraUsageGauge(remainingFraction: 0.5, utilization: utilization)
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+
     // MARK: - Private Drawing
 
     /// Draws the gauge components: track arc, fill arc, needle, center dot.
@@ -259,6 +299,60 @@ enum GaugeIcon {
         let clampedY = max(Geometry.dotCenterY - textSize.height / 2, 0)
         let drawPoint = NSPoint(x: clampedX, y: clampedY)
         text.draw(at: drawPoint)
+    }
+
+    /// Draws the extra usage gauge with reversed needle and fill direction.
+    /// Fill sweeps from RIGHT (0°) toward LEFT, representing drained balance.
+    private static func drawExtraUsageGauge(remainingFraction: Double, utilization: Double) {
+        let cx = Geometry.centerX
+        let cy = Geometry.centerY
+        let radius = Geometry.arcRadius
+        let needleLength = Geometry.needleLength
+
+        let clamped = max(0, min(1, remainingFraction))
+        // Reversed: 1.0 (full) = pi (left), 0.0 (depleted) = 0 (right)
+        let theta = CGFloat.pi * clamped
+
+        let color = NSColor.extraUsageColor(for: utilization)
+
+        // 1. Track arc (full semicircle, 25% opacity)
+        drawTrackArc(cx: cx, cy: cy, radius: radius, color: color)
+
+        // 2. Fill arc from RIGHT (360°) toward needle — represents drained balance
+        let drainedFraction = 1.0 - clamped
+        if drainedFraction > 0 {
+            let fillPath = NSBezierPath()
+            if clamped == 0 {
+                // Fully depleted: fill entire semicircle (degenerate arc workaround)
+                fillPath.appendArc(
+                    withCenter: NSPoint(x: cx, y: cy),
+                    radius: radius,
+                    startAngle: 180,
+                    endAngle: 360,
+                    clockwise: false
+                )
+            } else {
+                let thetaDegrees = theta * 180.0 / CGFloat.pi
+                let startAngleDegrees = 360.0 - thetaDegrees
+                fillPath.appendArc(
+                    withCenter: NSPoint(x: cx, y: cy),
+                    radius: radius,
+                    startAngle: startAngleDegrees,
+                    endAngle: 360,
+                    clockwise: false
+                )
+            }
+            fillPath.lineWidth = Geometry.arcStrokeWidth
+            fillPath.lineCapStyle = .round
+            color.setStroke()
+            fillPath.stroke()
+        }
+
+        // 3. Needle
+        drawNeedle(cx: cx, cy: cy, length: needleLength, theta: theta, color: color)
+
+        // 4. Center dot
+        drawCenterDot(cx: cx, cy: cy, color: color)
     }
 
     /// Draws the disconnected X icon.
