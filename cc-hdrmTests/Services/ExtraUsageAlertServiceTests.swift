@@ -118,7 +118,7 @@ struct ExtraUsageAlertServiceTests {
         // After re-arm, 50% threshold should fire
         #expect(spy.addedRequests.count == 1)
         #expect(prefs.extraUsageFiredThresholds.contains(50))
-        #expect(prefs.extraUsageEnteredAlertFired == false || spy.addedRequests.count >= 1)
+        #expect(prefs.extraUsageEnteredAlertFired == false)
     }
 
     // MARK: - Entered Extra Usage (AC 3)

@@ -3,9 +3,8 @@ import UserNotifications
 import os
 
 /// Delivers macOS notifications for actionable subscription pattern findings.
-/// Only forgottenSubscription, chronicOverpaying, and chronicUnderpowering
-/// trigger notifications; other findings are display-only in the analytics view.
-/// Tracks a 30-day cooldown per finding type to prevent duplicate notifications.
+/// All findings except usageDecay trigger notifications. Tracks a 30-day
+/// cooldown per finding type to prevent duplicate notifications.
 @MainActor
 final class PatternNotificationService: PatternNotificationServiceProtocol {
     private let notificationCenter: any NotificationCenterProtocol

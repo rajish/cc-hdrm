@@ -118,8 +118,8 @@ final class ExtraUsageAlertService: ExtraUsageAlertServiceProtocol {
         usedCredits: Double?,
         monthlyLimit: Double?
     ) -> (title: String, body: String) {
-        let used = usedCredits ?? 0
-        let limit = monthlyLimit ?? 0
+        let used = max(0, usedCredits ?? 0)
+        let limit = max(0, monthlyLimit ?? 0)
 
         switch percent {
         case 50:
@@ -133,7 +133,7 @@ final class ExtraUsageAlertService: ExtraUsageAlertServiceProtocol {
                 "Extra usage at 75% \u{2014} \(Self.formatCurrency(used)) of \(Self.formatCurrency(limit)) spent this period"
             )
         case 90:
-            let remaining = limit - used
+            let remaining = max(0, limit - used)
             return (
                 "Extra usage alert",
                 "Extra usage at 90% \u{2014} \(Self.formatCurrency(remaining)) left before hitting your monthly limit"

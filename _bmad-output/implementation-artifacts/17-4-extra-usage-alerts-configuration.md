@@ -1,6 +1,6 @@
 # Story 17.4: Extra Usage Alerts & Configuration
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -636,3 +636,21 @@ N/A - all tests passed on first run after fixing the expected test breakage (ext
 - `cc-hdrmTests/Views/SettingsViewTests.swift`
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`
 - `_bmad-output/implementation-artifacts/17-4-extra-usage-alerts-configuration.md`
+
+## Senior Developer Review (AI)
+
+### Review Outcome: PASS
+
+All 7 Acceptance Criteria verified against implementation. All HIGH and MEDIUM issues fixed. 1157 tests pass.
+
+### Issues Found
+
+| Severity | Issue | Status |
+|----------|-------|--------|
+| MEDIUM | `thresholdNotificationText` 90% case can produce negative remaining balance when `usedCredits > monthlyLimit` | Fixed: clamped with `max(0, limit - used)` and defensive `max(0, ...)` on inputs |
+| MEDIUM | Weak assertion in `thresholdsRearmOnPeriodChange` test -- disjunction `(A == false \|\| B >= 1)` is always true when B already asserted as 1 | Fixed: replaced with direct `#expect(prefs.extraUsageEnteredAlertFired == false)` |
+| LOW | Stale doc comment on `PatternNotificationService` class -- listed only 3 notifiable types but now 5 are enabled | Fixed: updated to reflect current behavior |
+
+### Remaining Concerns (informational, not blocking)
+
+- None. Implementation is clean and well-structured.
