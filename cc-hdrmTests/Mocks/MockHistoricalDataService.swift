@@ -112,4 +112,9 @@ final class MockHistoricalDataService: HistoricalDataServiceProtocol, @unchecked
     func clearAllData() async throws {
         clearAllDataCallCount += 1
     }
+
+    var mockExtraUsagePerCycle: [String: Double] = [:]
+    func getExtraUsagePerCycle(billingCycleDay: Int?) async throws -> [String: Double] {
+        return mockExtraUsagePerCycle
+    }
 }

@@ -166,6 +166,10 @@ private final class PEMockHistoricalDataService: HistoricalDataServiceProtocol, 
     func clearAllData() async throws {
         // No-op for mock
     }
+
+    func getExtraUsagePerCycle(billingCycleDay: Int?) async throws -> [String: Double] {
+        return [:]
+    }
 }
 
 private struct PEMockAPIClient: APIClientProtocol {

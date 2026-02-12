@@ -23,7 +23,8 @@ enum CycleUtilizationCalculator {
         resetEvents: [ResetEvent],
         creditLimits: CreditLimits?,
         billingCycleDay: Int?,
-        headroomAnalysisService: any HeadroomAnalysisServiceProtocol
+        headroomAnalysisService: any HeadroomAnalysisServiceProtocol,
+        extraUsagePerCycle: [String: Double]? = nil
     ) -> [CycleUtilization] {
         guard !resetEvents.isEmpty else { return [] }
 
@@ -62,13 +63,17 @@ enum CycleUtilizationCalculator {
                 utilization = summary.usedPercent
             }
 
+            let cycleId = "\(group.key.year)-\(group.key.label)"
+            let extraSpend = extraUsagePerCycle?[cycleId]
+
             cycles.append(CycleUtilization(
                 label: group.key.label,
                 year: group.key.year,
                 utilizationPercent: utilization,
                 dollarValue: dollarValue,
                 isPartial: isPartial,
-                resetCount: group.events.count
+                resetCount: group.events.count,
+                extraUsageSpend: extraSpend
             ))
         }
 

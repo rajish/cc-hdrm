@@ -70,4 +70,10 @@ protocol HistoricalDataServiceProtocol: Sendable {
     /// and reclaims disk space via VACUUM.
     /// - Throws: Database errors (caller should handle gracefully)
     func clearAllData() async throws
+
+    /// Returns total extra usage spend per billing cycle.
+    /// Uses MAX(extra_usage_used_credits) per cycle since usedCredits is cumulative.
+    /// - Parameter billingCycleDay: User-configured billing day (1-28), nil for calendar month grouping
+    /// - Returns: Dictionary mapping cycle keys (e.g., "2026-Jan") to total extra usage spend
+    func getExtraUsagePerCycle(billingCycleDay: Int?) async throws -> [String: Double]
 }

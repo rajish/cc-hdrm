@@ -1515,6 +1515,78 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         return allRollups.sorted { $0.periodStart < $1.periodStart }
     }
 
+    // MARK: - Extra Usage Per Cycle Query (Story 17.3)
+
+    func getExtraUsagePerCycle(billingCycleDay: Int?) async throws -> [String: Double] {
+        guard databaseManager.isAvailable else {
+            Self.logger.debug("Database unavailable - returning empty extra usage per cycle")
+            return [:]
+        }
+
+        let connection = try databaseManager.getConnection()
+
+        let sql = """
+            SELECT timestamp, extra_usage_used_credits
+            FROM usage_polls
+            WHERE extra_usage_enabled = 1 AND extra_usage_used_credits IS NOT NULL
+            ORDER BY timestamp ASC
+            """
+
+        var statement: OpaquePointer?
+        defer {
+            if let statement = statement {
+                sqlite3_finalize(statement)
+            }
+        }
+
+        let prepareResult = sqlite3_prepare_v2(connection, sql, -1, &statement, nil)
+        guard prepareResult == SQLITE_OK else {
+            let errorMessage = String(cString: sqlite3_errmsg(connection))
+            Self.logger.error("Failed to prepare extra usage query: \(errorMessage, privacy: .public)")
+            throw AppError.databaseQueryFailed(underlying: SQLiteError.prepareFailed(code: prepareResult))
+        }
+
+        let calendar = Calendar.current
+        let monthAbbreviations: [String] = {
+            var cal = Calendar(identifier: .gregorian)
+            cal.locale = Locale(identifier: "en_US")
+            return cal.shortMonthSymbols
+        }()
+
+        // Collect max extra_usage_used_credits per cycle
+        var maxPerCycle: [String: Double] = [:]
+
+        while sqlite3_step(statement) == SQLITE_ROW {
+            let timestamp = sqlite3_column_int64(statement, 0)
+            let usedCredits = sqlite3_column_double(statement, 1)
+
+            let date = Date(timeIntervalSince1970: Double(timestamp) / 1000.0)
+            let components = calendar.dateComponents([.year, .month, .day], from: date)
+            guard let year = components.year, let month = components.month else { continue }
+
+            let cycleYear: Int
+            let cycleMonth: Int
+
+            if let billingDay = billingCycleDay, let day = components.day, day < billingDay {
+                if month == 1 {
+                    cycleYear = year - 1
+                    cycleMonth = 12
+                } else {
+                    cycleYear = year
+                    cycleMonth = month - 1
+                }
+            } else {
+                cycleYear = year
+                cycleMonth = month
+            }
+
+            let key = "\(cycleYear)-\(monthAbbreviations[cycleMonth - 1])"
+            maxPerCycle[key] = max(maxPerCycle[key] ?? 0, usedCredits)
+        }
+
+        return maxPerCycle
+    }
+
     // MARK: - Task 9: Prune Old Data
 
     /// Prunes data older than the retention period.
