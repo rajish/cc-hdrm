@@ -138,7 +138,7 @@ development_status:
 
   epic-16: in-progress  # Subscription Intelligence (Phase 4)
   16-1-slow-burn-pattern-detection-service: review
-  16-2-pattern-notification-analytics-display: backlog
+  16-2-pattern-notification-analytics-display: review
   16-3-tier-recommendation-service: done
   16-4-tier-recommendation-display-billing-cycle: backlog
   16-5-context-aware-insight-engine: backlog  # Future iteration
