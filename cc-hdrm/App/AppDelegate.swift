@@ -68,6 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Create PreferencesManager — shared across services for hot-reconfigurable reads
         let preferences = PreferencesManager()
         self.preferencesManager = preferences
+        state.updateBillingCycleDay(preferences.billingCycleDay)
 
         if launchAtLoginService == nil {
             launchAtLoginService = LaunchAtLoginService()

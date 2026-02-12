@@ -57,6 +57,10 @@ final class AppState {
     private(set) var extraUsageUsedCreditsCents: Int?
     private(set) var extraUsageUtilization: Double?
 
+    /// User-configured billing cycle day (1-28), nil if unset.
+    /// Mirrored from PreferencesManager so SwiftUI views can observe changes reactively.
+    private(set) var billingCycleDay: Int?
+
     /// Whether the analytics window is currently open.
     /// Updated by AnalyticsWindow on window open/close.
     private(set) var isAnalyticsWindowOpen: Bool = false
@@ -286,6 +290,12 @@ final class AppState {
     /// Called by AnalyticsWindow when window opens or closes.
     func setAnalyticsWindowOpen(_ open: Bool) {
         self.isAnalyticsWindowOpen = open
+    }
+
+    /// Updates the billing cycle day from preferences.
+    /// Called when the user changes the setting so SwiftUI views update reactively.
+    func updateBillingCycleDay(_ day: Int?) {
+        self.billingCycleDay = day
     }
 
     /// Sets `lastUpdated` to an arbitrary date. Test use only — not available in release builds.

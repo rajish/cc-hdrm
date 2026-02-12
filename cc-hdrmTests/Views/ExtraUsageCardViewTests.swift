@@ -13,8 +13,8 @@ struct ExtraUsageCardViewTests {
     func fullCardRendersWithSpendAndLimit() {
         let appState = AppState()
         appState.updateExtraUsage(enabled: true, monthlyLimit: 4300.0, usedCredits: 1561.0, utilization: 0.363)
+        appState.updateBillingCycleDay(1)
         let prefs = MockPreferencesManager()
-        prefs.billingCycleDay = 1
 
         let view = ExtraUsageCardView(appState: appState, preferencesManager: prefs)
         let controller = NSHostingController(rootView: view)
@@ -69,8 +69,8 @@ struct ExtraUsageCardViewTests {
     func noLimitModeRendersWithoutProgressBar() {
         let appState = AppState()
         appState.updateExtraUsage(enabled: true, monthlyLimit: nil, usedCredits: 1561.0, utilization: nil)
+        appState.updateBillingCycleDay(15)
         let prefs = MockPreferencesManager()
-        prefs.billingCycleDay = 15
 
         let view = ExtraUsageCardView(appState: appState, preferencesManager: prefs)
         let controller = NSHostingController(rootView: view)
@@ -178,8 +178,8 @@ struct ExtraUsageCardViewTests {
     func fullCardRendersWithAccessibility() {
         let appState = AppState()
         appState.updateExtraUsage(enabled: true, monthlyLimit: 4300.0, usedCredits: 1561.0, utilization: 0.363)
+        appState.updateBillingCycleDay(1)
         let prefs = MockPreferencesManager()
-        prefs.billingCycleDay = 1
 
         let view = ExtraUsageCardView(appState: appState, preferencesManager: prefs)
         let controller = NSHostingController(rootView: view)

@@ -102,7 +102,7 @@ struct ExtraUsageCardView: View {
 
     /// Resolved reset info, computed once and shared between display and accessibility label.
     private var resolvedResetInfo: ResetInfo {
-        if let day = preferencesManager.billingCycleDay {
+        if let day = appState.billingCycleDay {
             let resetDate = Self.nextResetDate(billingCycleDay: day)
             let formatted = Self.formatResetDate(resetDate)
             return ResetInfo(displayText: "Resets \(formatted)", accessibilityText: "resets \(formatted)")
