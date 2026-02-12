@@ -349,6 +349,74 @@ struct PreferencesManagerTests {
         #expect(manager.dataRetentionDays == PreferencesDefaults.dataRetentionDays)
     }
 
+    // MARK: - Extra Usage Alert Preferences (Story 17.4)
+
+    @Test("extraUsageAlertsEnabled defaults to true")
+    func extraUsageAlertsEnabledDefault() {
+        let (manager, _, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        #expect(manager.extraUsageAlertsEnabled == true)
+    }
+
+    @Test("extraUsageThreshold50Enabled defaults to true")
+    func extraUsageThreshold50Default() {
+        let (manager, _, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        #expect(manager.extraUsageThreshold50Enabled == true)
+    }
+
+    @Test("extraUsageAlertsEnabled set to false persists correctly")
+    func extraUsageAlertsDisabledPersists() {
+        let (manager, _, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        manager.extraUsageAlertsEnabled = false
+        #expect(manager.extraUsageAlertsEnabled == false)
+    }
+
+    @Test("extraUsageFiredThresholds round-trips through JSON encoding")
+    func extraUsageFiredThresholdsRoundTrip() {
+        let (manager, _, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        manager.extraUsageFiredThresholds = [50, 75]
+        #expect(manager.extraUsageFiredThresholds == [50, 75])
+    }
+
+    @Test("extraUsageEnteredAlertFired defaults to false")
+    func extraUsageEnteredAlertFiredDefault() {
+        let (manager, _, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        #expect(manager.extraUsageEnteredAlertFired == false)
+    }
+
+    @Test("extraUsageLastBillingPeriodKey defaults to nil")
+    func extraUsageLastBillingPeriodKeyDefault() {
+        let (manager, _, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        #expect(manager.extraUsageLastBillingPeriodKey == nil)
+    }
+
+    @Test("resetToDefaults clears all extra usage preferences")
+    func resetClearsExtraUsagePreferences() {
+        let (manager, _, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        manager.extraUsageAlertsEnabled = false
+        manager.extraUsageThreshold50Enabled = false
+        manager.extraUsageFiredThresholds = [50, 75, 90]
+        manager.extraUsageEnteredAlertFired = true
+        manager.extraUsageLastBillingPeriodKey = "2026-01"
+
+        manager.resetToDefaults()
+
+        #expect(manager.extraUsageAlertsEnabled == true)
+        #expect(manager.extraUsageThreshold50Enabled == true)
+        #expect(manager.extraUsageThreshold75Enabled == true)
+        #expect(manager.extraUsageThreshold90Enabled == true)
+        #expect(manager.extraUsageEnteredAlertEnabled == true)
+        #expect(manager.extraUsageFiredThresholds.isEmpty)
+        #expect(manager.extraUsageEnteredAlertFired == false)
+        #expect(manager.extraUsageLastBillingPeriodKey == nil)
+    }
+
     // MARK: - Protocol Conformance
 
     @Test("PreferencesManager conforms to PreferencesManagerProtocol")

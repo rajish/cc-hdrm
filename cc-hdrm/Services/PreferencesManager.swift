@@ -25,6 +25,14 @@ final class PreferencesManager: PreferencesManagerProtocol {
         static let patternNotificationCooldowns = "com.cc-hdrm.patternNotificationCooldowns"
         static let dismissedPatternFindings = "com.cc-hdrm.dismissedPatternFindings"
         static let dismissedTierRecommendation = "com.cc-hdrm.dismissedTierRecommendation"
+        static let extraUsageAlertsEnabled = "com.cc-hdrm.extraUsageAlertsEnabled"
+        static let extraUsageThreshold50Enabled = "com.cc-hdrm.extraUsageThreshold50Enabled"
+        static let extraUsageThreshold75Enabled = "com.cc-hdrm.extraUsageThreshold75Enabled"
+        static let extraUsageThreshold90Enabled = "com.cc-hdrm.extraUsageThreshold90Enabled"
+        static let extraUsageEnteredAlertEnabled = "com.cc-hdrm.extraUsageEnteredAlertEnabled"
+        static let extraUsageFiredThresholds = "com.cc-hdrm.extraUsageFiredThresholds"
+        static let extraUsageEnteredAlertFired = "com.cc-hdrm.extraUsageEnteredAlertFired"
+        static let extraUsageLastBillingPeriodKey = "com.cc-hdrm.extraUsageLastBillingPeriodKey"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -257,6 +265,65 @@ final class PreferencesManager: PreferencesManagerProtocol {
         }
     }
 
+    // MARK: - Extra Usage Alert Preferences
+
+    var extraUsageAlertsEnabled: Bool {
+        get { defaults.object(forKey: Keys.extraUsageAlertsEnabled) == nil ? PreferencesDefaults.extraUsageAlertsEnabled : defaults.bool(forKey: Keys.extraUsageAlertsEnabled) }
+        set {
+            Self.logger.info("Extra usage alerts enabled changed to \(newValue)")
+            defaults.set(newValue, forKey: Keys.extraUsageAlertsEnabled)
+        }
+    }
+
+    var extraUsageThreshold50Enabled: Bool {
+        get { defaults.object(forKey: Keys.extraUsageThreshold50Enabled) == nil ? PreferencesDefaults.extraUsageThreshold50Enabled : defaults.bool(forKey: Keys.extraUsageThreshold50Enabled) }
+        set { defaults.set(newValue, forKey: Keys.extraUsageThreshold50Enabled) }
+    }
+
+    var extraUsageThreshold75Enabled: Bool {
+        get { defaults.object(forKey: Keys.extraUsageThreshold75Enabled) == nil ? PreferencesDefaults.extraUsageThreshold75Enabled : defaults.bool(forKey: Keys.extraUsageThreshold75Enabled) }
+        set { defaults.set(newValue, forKey: Keys.extraUsageThreshold75Enabled) }
+    }
+
+    var extraUsageThreshold90Enabled: Bool {
+        get { defaults.object(forKey: Keys.extraUsageThreshold90Enabled) == nil ? PreferencesDefaults.extraUsageThreshold90Enabled : defaults.bool(forKey: Keys.extraUsageThreshold90Enabled) }
+        set { defaults.set(newValue, forKey: Keys.extraUsageThreshold90Enabled) }
+    }
+
+    var extraUsageEnteredAlertEnabled: Bool {
+        get { defaults.object(forKey: Keys.extraUsageEnteredAlertEnabled) == nil ? PreferencesDefaults.extraUsageEnteredAlertEnabled : defaults.bool(forKey: Keys.extraUsageEnteredAlertEnabled) }
+        set { defaults.set(newValue, forKey: Keys.extraUsageEnteredAlertEnabled) }
+    }
+
+    // MARK: - Extra Usage Threshold Tracking
+
+    var extraUsageFiredThresholds: Set<Int> {
+        get {
+            guard let data = defaults.data(forKey: Keys.extraUsageFiredThresholds) else { return [] }
+            return (try? JSONDecoder().decode(Set<Int>.self, from: data)) ?? []
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue) {
+                defaults.set(data, forKey: Keys.extraUsageFiredThresholds)
+            }
+        }
+    }
+
+    var extraUsageEnteredAlertFired: Bool {
+        get { defaults.bool(forKey: Keys.extraUsageEnteredAlertFired) }
+        set { defaults.set(newValue, forKey: Keys.extraUsageEnteredAlertFired) }
+    }
+
+    var extraUsageLastBillingPeriodKey: String? {
+        get { defaults.string(forKey: Keys.extraUsageLastBillingPeriodKey) }
+        set {
+            if let newValue {
+                defaults.set(newValue, forKey: Keys.extraUsageLastBillingPeriodKey)
+            } else {
+                defaults.removeObject(forKey: Keys.extraUsageLastBillingPeriodKey)
+            }
+        }
+    }
 
     // MARK: - Reset
 
@@ -275,5 +342,13 @@ final class PreferencesManager: PreferencesManagerProtocol {
         defaults.removeObject(forKey: Keys.patternNotificationCooldowns)
         defaults.removeObject(forKey: Keys.dismissedPatternFindings)
         defaults.removeObject(forKey: Keys.dismissedTierRecommendation)
+        defaults.removeObject(forKey: Keys.extraUsageAlertsEnabled)
+        defaults.removeObject(forKey: Keys.extraUsageThreshold50Enabled)
+        defaults.removeObject(forKey: Keys.extraUsageThreshold75Enabled)
+        defaults.removeObject(forKey: Keys.extraUsageThreshold90Enabled)
+        defaults.removeObject(forKey: Keys.extraUsageEnteredAlertEnabled)
+        defaults.removeObject(forKey: Keys.extraUsageFiredThresholds)
+        defaults.removeObject(forKey: Keys.extraUsageEnteredAlertFired)
+        defaults.removeObject(forKey: Keys.extraUsageLastBillingPeriodKey)
     }
 }

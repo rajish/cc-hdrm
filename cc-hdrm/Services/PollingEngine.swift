@@ -16,6 +16,7 @@ final class PollingEngine: PollingEngineProtocol {
     private let slopeCalculationService: (any SlopeCalculationServiceProtocol)?
     private let patternDetector: (any SubscriptionPatternDetectorProtocol)?
     private let patternNotificationService: (any PatternNotificationServiceProtocol)?
+    private let extraUsageAlertService: (any ExtraUsageAlertServiceProtocol)?
     private var pollingTask: Task<Void, Never>?
     private var sparklineRefreshTask: Task<Void, Never>?
 
@@ -34,7 +35,8 @@ final class PollingEngine: PollingEngineProtocol {
         historicalDataService: (any HistoricalDataServiceProtocol)? = nil,
         slopeCalculationService: (any SlopeCalculationServiceProtocol)? = nil,
         patternDetector: (any SubscriptionPatternDetectorProtocol)? = nil,
-        patternNotificationService: (any PatternNotificationServiceProtocol)? = nil
+        patternNotificationService: (any PatternNotificationServiceProtocol)? = nil,
+        extraUsageAlertService: (any ExtraUsageAlertServiceProtocol)? = nil
     ) {
         self.keychainService = keychainService
         self.tokenRefreshService = tokenRefreshService
@@ -46,6 +48,7 @@ final class PollingEngine: PollingEngineProtocol {
         self.slopeCalculationService = slopeCalculationService
         self.patternDetector = patternDetector
         self.patternNotificationService = patternNotificationService
+        self.extraUsageAlertService = extraUsageAlertService
     }
 
     func start() async {
@@ -175,6 +178,20 @@ final class PollingEngine: PollingEngineProtocol {
 
             appState.updateWindows(fiveHour: fiveHourState, sevenDay: sevenDayState)
             await notificationService?.evaluateThresholds(fiveHour: fiveHourState, sevenDay: sevenDayState)
+
+            // Evaluate extra usage threshold alerts
+            if let alertService = extraUsageAlertService {
+                let planExhausted = (fiveHourState?.headroomState == .exhausted) || (sevenDayState?.headroomState == .exhausted)
+                await alertService.evaluateExtraUsageThresholds(
+                    extraUsageEnabled: response.extraUsage?.isEnabled ?? false,
+                    utilization: response.extraUsage?.utilization,
+                    usedCredits: response.extraUsage?.usedCredits,
+                    monthlyLimit: response.extraUsage?.monthlyLimit,
+                    billingCycleDay: preferencesManager.billingCycleDay,
+                    planExhausted: planExhausted
+                )
+            }
+
             appState.updateConnectionStatus(.connected)
             appState.updateStatusMessage(nil)
 

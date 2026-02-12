@@ -3,9 +3,8 @@ import UserNotifications
 import os
 
 /// Delivers macOS notifications for actionable subscription pattern findings.
-/// Only forgottenSubscription, chronicOverpaying, and chronicUnderpowering
-/// trigger notifications; other findings are display-only in the analytics view.
-/// Tracks a 30-day cooldown per finding type to prevent duplicate notifications.
+/// All findings except usageDecay trigger notifications. Tracks a 30-day
+/// cooldown per finding type to prevent duplicate notifications.
 @MainActor
 final class PatternNotificationService: PatternNotificationServiceProtocol {
     private let notificationCenter: any NotificationCenterProtocol
@@ -55,9 +54,10 @@ final class PatternNotificationService: PatternNotificationServiceProtocol {
     /// Returns true if the finding type should trigger a macOS notification.
     private func isNotifiableType(_ finding: PatternFinding) -> Bool {
         switch finding {
-        case .forgottenSubscription, .chronicOverpaying, .chronicUnderpowering:
+        case .forgottenSubscription, .chronicOverpaying, .chronicUnderpowering,
+             .extraUsageOverflow, .persistentExtraUsage:
             return true
-        case .usageDecay, .extraUsageOverflow, .persistentExtraUsage:
+        case .usageDecay:
             return false
         }
     }
@@ -99,7 +99,12 @@ final class PatternNotificationService: PatternNotificationServiceProtocol {
             return "Your usage fits \(recommendedTier) \u{2014} you could save $\(Int(monthlySavings))/mo"
         case let .chronicUnderpowering(rateLimitCount, _, suggestedTier):
             return "You've been rate-limited \(rateLimitCount) times recently. \(suggestedTier) would cover your usage."
-        default:
+        case let .extraUsageOverflow(avgExtraSpend, recommendedTier, _):
+            return "You're averaging $\(String(format: "%.0f", avgExtraSpend))/mo in extra usage. Consider \(recommendedTier)."
+        case let .persistentExtraUsage(avgMonthlyExtra, basePrice, recommendedTier):
+            let pct = basePrice > 0 ? Int((avgMonthlyExtra / basePrice) * 100) : 0
+            return "Extra usage is \(pct)% of your base plan. \(recommendedTier) may save you money."
+        case .usageDecay:
             return finding.summary
         }
     }
