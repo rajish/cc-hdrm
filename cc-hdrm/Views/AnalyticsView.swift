@@ -7,12 +7,14 @@ import os
 /// - Title bar with "Usage Analytics" and close button
 /// - Controls row: TimeRangeSelector (left) + series toggles (right)
 /// - UsageChart (expands to fill available space)
-/// - Value section: conditional HeadroomBreakdownBar (80px) + ContextAwareValueSummary
+/// - Value section: conditional HeadroomBreakdownBar (80px) + TierRecommendationCard + ContextAwareValueSummary
 struct AnalyticsView: View {
     var onClose: () -> Void
     let historicalDataService: any HistoricalDataServiceProtocol
     let appState: AppState
     let headroomAnalysisService: any HeadroomAnalysisServiceProtocol
+    var tierRecommendationService: (any TierRecommendationServiceProtocol)?
+    var preferencesManager: (any PreferencesManagerProtocol)?
 
     /// Per-time-range toggle state for series visibility.
     /// Defaults both series to visible; stored as a simple value type for `@State` compatibility.
@@ -64,6 +66,7 @@ struct AnalyticsView: View {
     /// Set to true once any successful load returns data. Used to distinguish
     /// "no data yet" (fresh install) from "no data for this range".
     @State private var hasAnyHistoricalData: Bool = false
+    @State private var tierRecommendation: TierRecommendation?
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -88,6 +91,7 @@ struct AnalyticsView: View {
         .padding()
         .task(id: selectedTimeRange) {
             await loadData()
+            await loadTierRecommendation()
         }
     }
 
@@ -120,6 +124,8 @@ struct AnalyticsView: View {
             // AC 5: quiet insight — no bar, falls through to summary only
         }
         // AC 4: empty events — no bar, summary only
+        // Tier recommendation card (Story 16.4)
+        tierRecommendationCard
         // Summary always shown — adapts text via ValueInsightEngine
         ContextAwareValueSummary(
             timeRange: selectedTimeRange,
@@ -160,6 +166,36 @@ struct AnalyticsView: View {
             headroomAnalysisService: headroomAnalysisService
         )
         return insight.isQuiet
+    }
+
+    // MARK: - Tier Recommendation Card
+
+    @ViewBuilder
+    private var tierRecommendationCard: some View {
+        if let recommendation = tierRecommendation,
+           recommendation.isActionable,
+           preferencesManager?.dismissedTierRecommendation != recommendation.recommendationFingerprint {
+            TierRecommendationCard(
+                recommendation: recommendation,
+                onDismiss: {
+                    preferencesManager?.dismissedTierRecommendation = recommendation.recommendationFingerprint
+                    tierRecommendation = nil
+                }
+            )
+        }
+    }
+
+    // MARK: - Tier Recommendation Loading
+
+    private func loadTierRecommendation() async {
+        guard let service = tierRecommendationService else { return }
+        do {
+            tierRecommendation = try await service.recommendTier(for: selectedTimeRange)
+        } catch is CancellationError {
+            // Discarded — user switched time ranges
+        } catch {
+            Self.logger.error("Tier recommendation load failed: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Data Loading

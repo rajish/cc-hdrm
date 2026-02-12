@@ -13,6 +13,8 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
     private weak var appState: AppState?
     private var historicalDataService: (any HistoricalDataServiceProtocol)?
     private var headroomAnalysisService: (any HeadroomAnalysisServiceProtocol)?
+    private var tierRecommendationService: (any TierRecommendationServiceProtocol)?
+    private var preferencesManager: (any PreferencesManagerProtocol)?
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -23,12 +25,14 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
         super.init()
     }
 
-    /// Configure with AppState and HistoricalDataService references.
+    /// Configure with AppState and service references.
     /// Must be called during app initialization.
-    func configure(appState: AppState, historicalDataService: any HistoricalDataServiceProtocol, headroomAnalysisService: any HeadroomAnalysisServiceProtocol) {
+    func configure(appState: AppState, historicalDataService: any HistoricalDataServiceProtocol, headroomAnalysisService: any HeadroomAnalysisServiceProtocol, tierRecommendationService: (any TierRecommendationServiceProtocol)? = nil, preferencesManager: (any PreferencesManagerProtocol)? = nil) {
         self.appState = appState
         self.historicalDataService = historicalDataService
         self.headroomAnalysisService = headroomAnalysisService
+        self.tierRecommendationService = tierRecommendationService
+        self.preferencesManager = preferencesManager
     }
 
     /// Toggles the analytics window: opens if closed, brings to front if open.
@@ -95,7 +99,9 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
             },
             historicalDataService: historicalDataService,
             appState: appState,
-            headroomAnalysisService: headroomAnalysisService
+            headroomAnalysisService: headroomAnalysisService,
+            tierRecommendationService: tierRecommendationService,
+            preferencesManager: preferencesManager
         )
         panel.contentView = NSHostingView(rootView: contentView)
 
@@ -124,6 +130,8 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
         appState = nil
         historicalDataService = nil
         headroomAnalysisService = nil
+        tierRecommendationService = nil
+        preferencesManager = nil
     }
     #endif
 }

@@ -32,5 +32,9 @@ protocol PreferencesManagerProtocol: AnyObject {
     /// When set, tier recommendations and dollar summaries align to billing cycle boundaries.
     var billingCycleDay: Int? { get set }
 
+    /// Fingerprint of the last dismissed tier recommendation.
+    /// When the current recommendation fingerprint matches, the card stays dismissed.
+    var dismissedTierRecommendation: String? { get set }
+
     func resetToDefaults()
 }

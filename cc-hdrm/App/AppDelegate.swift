@@ -108,9 +108,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
 
-        // Configure AnalyticsWindow with AppState, HistoricalDataService, and HeadroomAnalysisService
+        // Configure AnalyticsWindow with AppState, services, and PreferencesManager
         if let histService = historicalDataServiceRef, let headroomService = headroomAnalysisServiceRef {
-            analyticsWindow?.configure(appState: state, historicalDataService: histService, headroomAnalysisService: headroomService)
+            let tierRecommendationService = TierRecommendationService(
+                historicalDataService: histService,
+                preferencesManager: preferences
+            )
+            analyticsWindow?.configure(
+                appState: state,
+                historicalDataService: histService,
+                headroomAnalysisService: headroomService,
+                tierRecommendationService: tierRecommendationService,
+                preferencesManager: preferences
+            )
         }
 
         // Configure NSPopover with SwiftUI content (after services created so historicalDataService is available)

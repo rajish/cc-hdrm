@@ -22,6 +22,7 @@ final class PreferencesManager: PreferencesManagerProtocol {
         static let customSevenDayCredits = "com.cc-hdrm.customSevenDayCredits"
         static let customMonthlyPrice = "com.cc-hdrm.customMonthlyPrice"
         static let billingCycleDay = "com.cc-hdrm.billingCycleDay"
+        static let dismissedTierRecommendation = "com.cc-hdrm.dismissedTierRecommendation"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -213,6 +214,21 @@ final class PreferencesManager: PreferencesManagerProtocol {
         }
     }
 
+    // MARK: - Dismissed Tier Recommendation
+
+    var dismissedTierRecommendation: String? {
+        get {
+            defaults.string(forKey: Keys.dismissedTierRecommendation)
+        }
+        set {
+            if let newValue {
+                defaults.set(newValue, forKey: Keys.dismissedTierRecommendation)
+            } else {
+                defaults.removeObject(forKey: Keys.dismissedTierRecommendation)
+            }
+        }
+    }
+
     // MARK: - Reset
 
     func resetToDefaults() {
@@ -227,5 +243,6 @@ final class PreferencesManager: PreferencesManagerProtocol {
         defaults.removeObject(forKey: Keys.customSevenDayCredits)
         defaults.removeObject(forKey: Keys.customMonthlyPrice)
         defaults.removeObject(forKey: Keys.billingCycleDay)
+        defaults.removeObject(forKey: Keys.dismissedTierRecommendation)
     }
 }

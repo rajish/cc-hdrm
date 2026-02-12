@@ -13,6 +13,7 @@ final class MockPreferencesManager: PreferencesManagerProtocol {
     var customSevenDayCredits: Int?
     var customMonthlyPrice: Double?
     var billingCycleDay: Int?
+    var dismissedTierRecommendation: String?
     var resetToDefaultsCallCount = 0
 
     func resetToDefaults() {
@@ -27,5 +28,6 @@ final class MockPreferencesManager: PreferencesManagerProtocol {
         customSevenDayCredits = nil
         customMonthlyPrice = nil
         billingCycleDay = nil
+        dismissedTierRecommendation = nil
     }
 }
