@@ -63,10 +63,13 @@ struct CycleOverCycleBar: View {
                             hoveredCycle = nil
                         }
                     }
-                    .overlay(alignment: .top) {
-                        tooltipView
-                    }
             }
+        }
+        .overlay(alignment: .top) {
+            tooltipView
+                .fixedSize()
+                .offset(y: -4)
+                .allowsHitTesting(false)
         }
     }
 

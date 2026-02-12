@@ -517,7 +517,7 @@ enum ValueInsightEngine {
             if declinePercent > 30.0 {
                 let monthName = NaturalLanguageFormatter.monthName(for: monthNumber(from: peakCycle.label))
                 let monthRef = NaturalLanguageFormatter.formatMonthReference(monthName: monthName, year: peakCycle.year)
-                let nl = NaturalLanguageFormatter.formatPercentNatural(decline)
+                let nl = NaturalLanguageFormatter.formatPercentNatural(declinePercent)
                 anchors.append(ValueInsight(
                     text: "Usage down \(nl) from your peak in \(monthRef)",
                     isQuiet: false,
@@ -532,7 +532,9 @@ enum ValueInsightEngine {
 
     /// Converts a short month abbreviation to a month number (1-12).
     private static func monthNumber(from abbreviation: String) -> Int {
-        let symbols = Calendar.current.shortMonthSymbols
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = Locale(identifier: "en_US")
+        let symbols = calendar.shortMonthSymbols
         if let index = symbols.firstIndex(of: abbreviation) {
             return index + 1
         }

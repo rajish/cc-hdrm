@@ -5,7 +5,11 @@ import Foundation
 /// computes utilization per group, and returns chronologically sorted results.
 enum CycleUtilizationCalculator {
 
-    private static let monthAbbreviations = Calendar.current.shortMonthSymbols
+    private static let monthAbbreviations: [String] = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = Locale(identifier: "en_US")
+        return calendar.shortMonthSymbols
+    }()
 
     /// Computes per-cycle utilization from reset events.
     ///
