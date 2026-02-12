@@ -336,7 +336,11 @@ final class TierRecommendationService: TierRecommendationServiceProtocol, @unche
         guard monthlyExtraUsage > 0 else { return nil }
         let currentBase = currentTier.monthlyPrice
         let savings = currentMonthlyCost - recommendedTier.monthlyPrice
-        return "On \(currentTier.displayName) ($\(Int(currentBase))/mo) you paid ~$\(Int(monthlyExtraUsage)) in extra usage ($\(Int(currentMonthlyCost)) total) — \(recommendedTier.displayName) ($\(Int(recommendedTier.monthlyPrice))/mo) would have covered you and saved $\(Int(savings))"
+        if savings > 0 {
+            return "On \(currentTier.displayName) ($\(Int(currentBase))/mo) you paid ~$\(Int(monthlyExtraUsage)) in extra usage ($\(Int(currentMonthlyCost)) total) — \(recommendedTier.displayName) ($\(Int(recommendedTier.monthlyPrice))/mo) would have covered you and saved $\(Int(savings))"
+        } else {
+            return "On \(currentTier.displayName) ($\(Int(currentBase))/mo) you paid ~$\(Int(monthlyExtraUsage)) in extra usage — \(recommendedTier.displayName) ($\(Int(recommendedTier.monthlyPrice))/mo) would eliminate rate limits"
+        }
     }
 }
 
