@@ -69,6 +69,7 @@ struct AnalyticsView: View {
     @State private var hasAnyHistoricalData: Bool = false
     @State private var patternFindings: [PatternFinding] = []
     @State private var tierRecommendation: TierRecommendation?
+    @State private var cycleUtilizations: [CycleUtilization] = []
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -106,6 +107,7 @@ struct AnalyticsView: View {
     private var valueSection: some View {
         let dataSpanHours = Self.computeDataSpanHours(resetEvents: resetEvents)
         let usageInsight = computeUsageInsight()
+        let benchmarkAnchors = ValueInsightEngine.computeBenchmarkAnchors(cycles: cycleUtilizations)
 
         if !resetEvents.isEmpty {
             if dataSpanHours < 6 {
@@ -129,6 +131,8 @@ struct AnalyticsView: View {
             }
             // AC 5: quiet insight — no bar, falls through to summary only
         }
+        // Cycle-over-cycle trend bar (Story 16.6) — only for .month and .all
+        CycleOverCycleBar(cycles: cycleUtilizations, timeRange: selectedTimeRange)
         // Pattern finding cards (between bar and summary)
         patternFindingCards
 
@@ -136,7 +140,7 @@ struct AnalyticsView: View {
         // Tier recommendation card (Story 16.4)
         tierRecommendationCard
         // Usage insight summary (Story 16.5) — replaces ContextAwareValueSummary
-        InsightStack(insights: [usageInsight])
+        InsightStack(insights: ([usageInsight] + benchmarkAnchors).sorted { $0.priority > $1.priority })
     }
 
     /// Computes the time span in hours between the first and last reset events.
@@ -253,6 +257,14 @@ struct AnalyticsView: View {
             if !hasAnyHistoricalData && (chartData.count + rollupData.count) > 0 {
                 hasAnyHistoricalData = true
             }
+
+            // Compute cycle utilizations for cycle-over-cycle bar (Story 16.6)
+            cycleUtilizations = CycleUtilizationCalculator.computeCycles(
+                resetEvents: result.allTimeResetEvents,
+                creditLimits: appState.creditLimits,
+                billingCycleDay: preferencesManager?.billingCycleDay,
+                headroomAnalysisService: headroomAnalysisService
+            )
         } catch is CancellationError {
             // Task was cancelled by a newer time-range switch — discard silently
         } catch {
