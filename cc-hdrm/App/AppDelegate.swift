@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UserNotifications
 import os
 
 @MainActor
@@ -96,6 +97,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let slopeService = SlopeCalculationService()
             self.slopeCalculationService = slopeService
 
+            // Create SubscriptionPatternDetector for slow-burn pattern analysis
+            let patternDetector = SubscriptionPatternDetector(
+                historicalDataService: historicalDataService,
+                preferencesManager: preferences
+            )
+
+            // Create PatternNotificationService for pattern-based macOS notifications
+            let patternNotifService = PatternNotificationService(
+                notificationCenter: UNUserNotificationCenter.current(),
+                preferencesManager: preferences,
+                notificationService: notificationService!
+            )
+
             pollingEngine = PollingEngine(
                 keychainService: KeychainService(),
                 tokenRefreshService: TokenRefreshService(),
@@ -104,13 +118,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 notificationService: notificationService,
                 preferencesManager: preferences,
                 historicalDataService: historicalDataService,
-                slopeCalculationService: slopeService
+                slopeCalculationService: slopeService,
+                patternDetector: patternDetector,
+                patternNotificationService: patternNotifService
             )
         }
 
-        // Configure AnalyticsWindow with AppState, HistoricalDataService, and HeadroomAnalysisService
+        // Configure AnalyticsWindow with AppState, HistoricalDataService, HeadroomAnalysisService, and pattern detection
         if let histService = historicalDataServiceRef, let headroomService = headroomAnalysisServiceRef {
-            analyticsWindow?.configure(appState: state, historicalDataService: histService, headroomAnalysisService: headroomService)
+            let analyticsPatternDetector = SubscriptionPatternDetector(
+                historicalDataService: histService,
+                preferencesManager: preferences
+            )
+            analyticsWindow?.configure(
+                appState: state,
+                historicalDataService: histService,
+                headroomAnalysisService: headroomService,
+                patternDetector: analyticsPatternDetector,
+                preferencesManager: preferences
+            )
         }
 
         // Configure NSPopover with SwiftUI content (after services created so historicalDataService is available)

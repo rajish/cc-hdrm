@@ -13,6 +13,8 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
     private weak var appState: AppState?
     private var historicalDataService: (any HistoricalDataServiceProtocol)?
     private var headroomAnalysisService: (any HeadroomAnalysisServiceProtocol)?
+    private var patternDetector: (any SubscriptionPatternDetectorProtocol)?
+    private var preferencesManager: (any PreferencesManagerProtocol)?
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -25,10 +27,18 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
 
     /// Configure with AppState and HistoricalDataService references.
     /// Must be called during app initialization.
-    func configure(appState: AppState, historicalDataService: any HistoricalDataServiceProtocol, headroomAnalysisService: any HeadroomAnalysisServiceProtocol) {
+    func configure(
+        appState: AppState,
+        historicalDataService: any HistoricalDataServiceProtocol,
+        headroomAnalysisService: any HeadroomAnalysisServiceProtocol,
+        patternDetector: (any SubscriptionPatternDetectorProtocol)? = nil,
+        preferencesManager: (any PreferencesManagerProtocol)? = nil
+    ) {
         self.appState = appState
         self.historicalDataService = historicalDataService
         self.headroomAnalysisService = headroomAnalysisService
+        self.patternDetector = patternDetector
+        self.preferencesManager = preferencesManager
     }
 
     /// Toggles the analytics window: opens if closed, brings to front if open.
@@ -95,7 +105,9 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
             },
             historicalDataService: historicalDataService,
             appState: appState,
-            headroomAnalysisService: headroomAnalysisService
+            headroomAnalysisService: headroomAnalysisService,
+            patternDetector: patternDetector,
+            preferencesManager: preferencesManager
         )
         panel.contentView = NSHostingView(rootView: contentView)
 
@@ -124,6 +136,8 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
         appState = nil
         historicalDataService = nil
         headroomAnalysisService = nil
+        patternDetector = nil
+        preferencesManager = nil
     }
     #endif
 }

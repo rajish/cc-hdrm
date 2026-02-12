@@ -22,6 +22,8 @@ final class PreferencesManager: PreferencesManagerProtocol {
         static let customSevenDayCredits = "com.cc-hdrm.customSevenDayCredits"
         static let customMonthlyPrice = "com.cc-hdrm.customMonthlyPrice"
         static let billingCycleDay = "com.cc-hdrm.billingCycleDay"
+        static let patternNotificationCooldowns = "com.cc-hdrm.patternNotificationCooldowns"
+        static let dismissedPatternFindings = "com.cc-hdrm.dismissedPatternFindings"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -213,6 +215,32 @@ final class PreferencesManager: PreferencesManagerProtocol {
         }
     }
 
+    // MARK: - Pattern Notification Cooldowns
+
+    var patternNotificationCooldowns: [String: Date] {
+        get {
+            guard let data = defaults.data(forKey: Keys.patternNotificationCooldowns) else { return [:] }
+            return (try? JSONDecoder().decode([String: Date].self, from: data)) ?? [:]
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue) {
+                defaults.set(data, forKey: Keys.patternNotificationCooldowns)
+            }
+        }
+    }
+
+    // MARK: - Dismissed Pattern Findings
+
+    var dismissedPatternFindings: Set<String> {
+        get {
+            let array = defaults.stringArray(forKey: Keys.dismissedPatternFindings) ?? []
+            return Set(array)
+        }
+        set {
+            defaults.set(Array(newValue), forKey: Keys.dismissedPatternFindings)
+        }
+    }
+
     // MARK: - Reset
 
     func resetToDefaults() {
@@ -227,5 +255,7 @@ final class PreferencesManager: PreferencesManagerProtocol {
         defaults.removeObject(forKey: Keys.customSevenDayCredits)
         defaults.removeObject(forKey: Keys.customMonthlyPrice)
         defaults.removeObject(forKey: Keys.billingCycleDay)
+        defaults.removeObject(forKey: Keys.patternNotificationCooldowns)
+        defaults.removeObject(forKey: Keys.dismissedPatternFindings)
     }
 }

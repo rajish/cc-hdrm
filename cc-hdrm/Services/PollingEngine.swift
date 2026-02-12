@@ -14,6 +14,8 @@ final class PollingEngine: PollingEngineProtocol {
     private let preferencesManager: any PreferencesManagerProtocol
     private let historicalDataService: (any HistoricalDataServiceProtocol)?
     private let slopeCalculationService: (any SlopeCalculationServiceProtocol)?
+    private let patternDetector: (any SubscriptionPatternDetectorProtocol)?
+    private let patternNotificationService: (any PatternNotificationServiceProtocol)?
     private var pollingTask: Task<Void, Never>?
     private var sparklineRefreshTask: Task<Void, Never>?
 
@@ -30,7 +32,9 @@ final class PollingEngine: PollingEngineProtocol {
         notificationService: (any NotificationServiceProtocol)? = nil,
         preferencesManager: any PreferencesManagerProtocol = PreferencesManager(),
         historicalDataService: (any HistoricalDataServiceProtocol)? = nil,
-        slopeCalculationService: (any SlopeCalculationServiceProtocol)? = nil
+        slopeCalculationService: (any SlopeCalculationServiceProtocol)? = nil,
+        patternDetector: (any SubscriptionPatternDetectorProtocol)? = nil,
+        patternNotificationService: (any PatternNotificationServiceProtocol)? = nil
     ) {
         self.keychainService = keychainService
         self.tokenRefreshService = tokenRefreshService
@@ -40,6 +44,8 @@ final class PollingEngine: PollingEngineProtocol {
         self.preferencesManager = preferencesManager
         self.historicalDataService = historicalDataService
         self.slopeCalculationService = slopeCalculationService
+        self.patternDetector = patternDetector
+        self.patternNotificationService = patternNotificationService
     }
 
     func start() async {
@@ -161,14 +167,26 @@ final class PollingEngine: PollingEngineProtocol {
             appState.updateStatusMessage(nil)
 
             // Persist to database asynchronously (fire-and-forget, does not block UI)
-            // Pass tier for reset event recording
+            // Pass tier for reset event recording, then run pattern analysis
             let tier = credentials.rateLimitTier
-            Task {
+            Task { [patternDetector, patternNotificationService] in
                 do {
                     try await historicalDataService?.persistPoll(response, tier: tier)
                 } catch {
                     Self.logger.error("Failed to persist poll data: \(error.localizedDescription)")
                     // Continue without retrying - data for this cycle is lost
+                }
+
+                // Run pattern analysis after persistence (non-blocking)
+                if let detector = patternDetector, let notifier = patternNotificationService {
+                    do {
+                        let findings = try await detector.analyzePatterns()
+                        if !findings.isEmpty {
+                            await notifier.processFindings(findings)
+                        }
+                    } catch {
+                        Self.logger.error("Pattern analysis failed: \(error.localizedDescription)")
+                    }
                 }
             }
 
