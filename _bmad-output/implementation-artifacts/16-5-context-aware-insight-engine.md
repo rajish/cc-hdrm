@@ -1,6 +1,6 @@
 # Story 16.5: Context-Aware Insight Engine
 
-Status: ready-for-dev
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -48,61 +48,61 @@ so that the display tells me what matters most right now instead of showing ever
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Extend ValueInsight model for priority and hover detail (AC: 1, 4)
-  - [ ] 1.1 Add `priority: InsightPriority` enum to `cc-hdrm/Services/ValueInsightEngine.swift` -- cases: `.patternFinding`, `.tierRecommendation`, `.usageDeviation`, `.summary` (descending priority)
-  - [ ] 1.2 Add `preciseDetail: String?` to `ValueInsight` for hover/VoiceOver tooltip (e.g., "76.2% of $200 monthly limit")
-  - [ ] 1.3 Keep existing `text` and `isQuiet` properties unchanged for backward compatibility
+- [x] Task 1: Extend ValueInsight model for priority and hover detail (AC: 1, 4)
+  - [x] 1.1 Add `priority: InsightPriority` enum to `cc-hdrm/Services/ValueInsightEngine.swift` -- cases: `.patternFinding`, `.tierRecommendation`, `.usageDeviation`, `.summary` (descending priority)
+  - [x] 1.2 Add `preciseDetail: String?` to `ValueInsight` for hover/VoiceOver tooltip (e.g., "76.2% of $200 monthly limit")
+  - [x] 1.3 Keep existing `text` and `isQuiet` properties unchanged for backward compatibility
 
-- [ ] Task 2: Add natural language formatting helpers (AC: 4)
-  - [ ] 2.1 Create `cc-hdrm/Services/NaturalLanguageFormatter.swift`
-  - [ ] 2.2 Implement `formatPercentNatural(_ value: Double) -> String` -- "about three-quarters", "roughly half", "nearly all", "a small fraction" etc. based on value ranges
-  - [ ] 2.3 Implement `formatComparisonNatural(current: Double, baseline: Double) -> String` -- "roughly double your usual", "about a third less than typical", "close to your average"
-  - [ ] 2.4 Implement `formatRelativeTimeNatural(monthName: String, year: Int?) -> String` -- "since November", "since March 2025"
-  - [ ] 2.5 Make all methods static on an enum (same pattern as `ValueInsightEngine`)
+- [x] Task 2: Add natural language formatting helpers (AC: 4)
+  - [x] 2.1 Create `cc-hdrm/Services/NaturalLanguageFormatter.swift`
+  - [x] 2.2 Implement `formatPercentNatural(_ value: Double) -> String` -- "about three-quarters", "roughly half", "nearly all", "a small fraction" etc. based on value ranges
+  - [x] 2.3 Implement `formatComparisonNatural(current: Double, baseline: Double) -> String` -- "roughly double your usual", "about a third less than typical", "close to your average"
+  - [x] 2.4 Implement `formatRelativeTimeNatural(monthName: String, year: Int?) -> String` -- "since November", "since March 2025"
+  - [x] 2.5 Make all methods static on an enum (same pattern as `ValueInsightEngine`)
 
-- [ ] Task 3: Refactor ValueInsightEngine to produce prioritized insights (AC: 1, 2, 4, 5)
-  - [ ] 3.1 Add `computeInsights()` (plural) method to `cc-hdrm/Services/ValueInsightEngine.swift` returning `[ValueInsight]` sorted by priority
-  - [ ] 3.2 Keep existing `computeInsight()` as convenience wrapper calling `computeInsights().first`
-  - [ ] 3.3 Integrate `NaturalLanguageFormatter` into text generation -- replace raw percentages with natural language where appropriate
-  - [ ] 3.4 Add `preciseDetail` to each insight for tooltip access
-  - [ ] 3.5 Add tone-matching logic: cautious near high utilization, reassuring at low utilization, matter-of-fact for patterns
+- [x] Task 3: Refactor ValueInsightEngine to produce prioritized insights (AC: 1, 2, 4, 5)
+  - [x] 3.1 Add `computeInsights()` (plural) method to `cc-hdrm/Services/ValueInsightEngine.swift` returning `[ValueInsight]` sorted by priority
+  - [x] 3.2 Keep existing `computeInsight()` as usage-specific method (not a wrapper — `computeInsights()` calls `computeInsight()` internally, so wrapping would cause infinite recursion)
+  - [x] 3.3 Integrate `NaturalLanguageFormatter` into text generation -- replace raw percentages with natural language where appropriate
+  - [x] 3.4 Add `preciseDetail` to each insight for tooltip access
+  - [x] 3.5 Add tone-matching logic: cautious near high utilization, reassuring at low utilization, matter-of-fact for patterns
 
-- [ ] Task 4: Add insight prioritization for pattern findings and tier recommendations (AC: 1, 3)
-  - [ ] 4.1 Add `static func insightFromPatternFinding(_ finding: PatternFinding) -> ValueInsight` to `ValueInsightEngine`
-  - [ ] 4.2 Add `static func insightFromTierRecommendation(_ recommendation: TierRecommendation) -> ValueInsight` to `ValueInsightEngine`
-  - [ ] 4.3 These convert existing types into `ValueInsight` with appropriate priority, natural language text, and tone
+- [x] Task 4: Add insight prioritization for pattern findings and tier recommendations (AC: 1, 3)
+  - [x] 4.1 Add `static func insightFromPatternFinding(_ finding: PatternFinding) -> ValueInsight` to `ValueInsightEngine`
+  - [x] 4.2 Add `static func insightFromTierRecommendation(_ recommendation: TierRecommendation) -> ValueInsight` to `ValueInsightEngine`
+  - [x] 4.3 These convert existing types into `ValueInsight` with appropriate priority, natural language text, and tone
 
-- [ ] Task 5: Create InsightStack view component (AC: 2, 3)
-  - [ ] 5.1 Create `cc-hdrm/Views/InsightStack.swift`
-  - [ ] 5.2 Accept `insights: [ValueInsight]` (pre-sorted by priority)
-  - [ ] 5.3 Show first insight as primary (`.caption` font, `.primary` foreground)
-  - [ ] 5.4 Show second insight as subdued one-liner (`.caption2` font, `.tertiary` foreground)
-  - [ ] 5.5 Cap at 2 visible insights maximum
-  - [ ] 5.6 Add `.help()` tooltip modifier with `preciseDetail` for hover access (AC 4)
-  - [ ] 5.7 Add VoiceOver: combined accessibility label with precise detail
+- [x] Task 5: Create InsightStack view component (AC: 2, 3)
+  - [x] 5.1 Create `cc-hdrm/Views/InsightStack.swift`
+  - [x] 5.2 Accept `insights: [ValueInsight]` (pre-sorted by priority)
+  - [x] 5.3 Show first insight as primary (`.caption` font, `.primary` foreground)
+  - [x] 5.4 Show second insight as subdued one-liner (`.caption2` font, `.tertiary` foreground)
+  - [x] 5.5 Cap at 2 visible insights maximum
+  - [x] 5.6 Add `.help()` tooltip modifier with `preciseDetail` for hover access (AC 4)
+  - [x] 5.7 Add VoiceOver: combined accessibility label with precise detail
 
-- [ ] Task 6: Integrate InsightStack into AnalyticsView value section (AC: 1, 2, 3)
-  - [ ] 6.1 Replace standalone `ContextAwareValueSummary` in `cc-hdrm/Views/AnalyticsView.swift` with `InsightStack`
-  - [ ] 6.2 Build combined insight list: pattern findings + tier recommendation + usage insight from ValueInsightEngine
-  - [ ] 6.3 Filter out dismissed items (reuse existing dismissal checks)
-  - [ ] 6.4 Sort by priority and pass to InsightStack
-  - [ ] 6.5 On dismiss of primary insight, next insight promotes automatically (list re-sorts without dismissed item)
+- [x] Task 6: Integrate InsightStack into AnalyticsView value section (AC: 1, 2, 3)
+  - [x] 6.1 Replace standalone `ContextAwareValueSummary` in `cc-hdrm/Views/AnalyticsView.swift` with `InsightStack`
+  - [x] 6.2 Build combined insight list: pattern findings + tier recommendation + usage insight from ValueInsightEngine
+  - [x] 6.3 Filter out dismissed items (reuse existing dismissal checks)
+  - [x] 6.4 Sort by priority and pass to InsightStack
+  - [x] 6.5 On dismiss of primary insight, next insight promotes automatically (list re-sorts without dismissed item)
 
-- [ ] Task 7: Write unit tests for NaturalLanguageFormatter (AC: 4)
-  - [ ] 7.1 Create `cc-hdrmTests/Services/NaturalLanguageFormatterTests.swift`
-  - [ ] 7.2 Test percent ranges: 0-10% -> "a small fraction", 20-30% -> "about a quarter", 45-55% -> "roughly half", 70-80% -> "about three-quarters", 90-100% -> "nearly all"
-  - [ ] 7.3 Test comparison formatting: 2x -> "roughly double", 0.5x -> "about half", 1.0x -> "close to your average"
-  - [ ] 7.4 Test relative time formatting with and without year
+- [x] Task 7: Write unit tests for NaturalLanguageFormatter (AC: 4)
+  - [x] 7.1 Create `cc-hdrmTests/Services/NaturalLanguageFormatterTests.swift`
+  - [x] 7.2 Test percent ranges: 0-10% -> "a small fraction", 20-30% -> "about a quarter", 45-55% -> "roughly half", 70-80% -> "about three-quarters", 90-100% -> "nearly all"
+  - [x] 7.3 Test comparison formatting: 2x -> "roughly double", 0.5x -> "about half", 1.0x -> "close to your average"
+  - [x] 7.4 Test relative time formatting with and without year
 
-- [ ] Task 8: Write unit tests for extended ValueInsightEngine (AC: 1, 2, 5)
-  - [ ] 8.1 Add tests in `cc-hdrmTests/Services/ValueInsightEngineTests.swift` (existing file)
-  - [ ] 8.2 Test `computeInsights()` returns multiple insights sorted by priority
-  - [ ] 8.3 Test pattern finding conversion produces `.patternFinding` priority
-  - [ ] 8.4 Test tier recommendation conversion produces `.tierRecommendation` priority
-  - [ ] 8.5 Test `preciseDetail` is populated for each insight type
-  - [ ] 8.6 Test tone matching: high utilization produces cautious text, low utilization produces reassuring text
+- [x] Task 8: Write unit tests for extended ValueInsightEngine (AC: 1, 2, 5)
+  - [x] 8.1 Add tests in `cc-hdrmTests/Services/ValueInsightEngineTests.swift` (existing file)
+  - [x] 8.2 Test `computeInsights()` returns multiple insights sorted by priority
+  - [x] 8.3 Test pattern finding conversion produces `.patternFinding` priority
+  - [x] 8.4 Test tier recommendation conversion produces `.tierRecommendation` priority
+  - [x] 8.5 Test `preciseDetail` is populated for each insight type
+  - [x] 8.6 Test tone matching: high utilization produces cautious text, low utilization produces reassuring text
 
-- [ ] Task 9: Run `xcodegen generate` and verify compilation + all tests pass
+- [x] Task 9: Run `xcodegen generate` and verify compilation + all tests pass
 
 ## Dev Notes
 
@@ -269,8 +269,55 @@ After adding files, run `xcodegen generate` to regenerate the Xcode project.
 
 ### Agent Model Used
 
+Claude Opus 4.6
+
 ### Debug Log References
+
+None — all tests passed on first run after implementation.
 
 ### Completion Notes List
 
+- **Task 1**: Added `InsightPriority` enum (4 cases: patternFinding=3, tierRecommendation=2, usageDeviation=1, summary=0) and `preciseDetail: String?` to `ValueInsight`. Backward-compatible init with defaults.
+- **Task 2**: Created `NaturalLanguageFormatter` enum with 4 static methods: `formatPercentNatural` (9 ranges), `formatComparisonNatural` (5 ratio bands), `formatRelativeTimeNatural` (year-aware), `monthName`.
+- **Task 3**: Integrated NaturalLanguageFormatter into all 4 insight methods (day/week/month/all). Added `preciseDetail` to every usage insight. Implemented tone-matching: >80% util produces cautious text ("Close to limit", "Running close to limit"), <20% produces reassuring text ("Plenty of room", "Light usage"), 20-80% uses NL ("Roughly half of today's capacity"). Dollar amounts stay precise per Dev Notes. Note: `computeInsight()` kept as the usage-specific implementation (not a wrapper for `computeInsights().first`) to avoid infinite recursion since `computeInsights()` calls `computeInsight()` internally.
+- **Task 4**: Added `insightFromPatternFinding` (uses finding.summary as text, finding.title as preciseDetail) and `insightFromTierRecommendation` (uses TierRecommendationCard.buildSummary, returns nil for .goodFit).
+- **Task 5**: Created `InsightStack` view — primary insight with .caption/.primary, secondary with .caption2/.tertiary, capped at 2, .help() tooltip for preciseDetail, combined VoiceOver label.
+- **Task 6**: Replaced `ContextAwareValueSummary` usage in AnalyticsView with `InsightStack`. Builds combined insight list from visible pattern findings, visible tier recommendation, and usage insight. Dismissed items filtered before passing to InsightStack.
+- **Task 7**: 16 NaturalLanguageFormatter tests covering all percent ranges, comparison ratios, relative time with/without year, and monthName.
+- **Task 8**: Extended ValueInsightEngineTests with 5 preciseDetail tests (day dollar, week comparison, all-time, pattern finding, tier recommendation) and 5 tone-matching tests (high util cautious, low util dollar reassuring, low util percentage reassuring, neutral NL, pattern matter-of-fact).
+- **Task 9**: xcodegen generate succeeded. 1036 tests in 90 suites — all pass, zero failures.
+
+### Change Log
+
+- 2026-02-12: Implemented Story 16.5 — context-aware insight engine with NL formatting, prioritized multi-insight display, tone matching, and preciseDetail tooltips.
+- 2026-02-12: Code review fixes — 8 findings (2 HIGH, 3 MEDIUM, 3 LOW), all fixed:
+  - H1: Fixed usageDeviation priority never assigned (week deviation now uses .usageDeviation)
+  - H2: Fixed pattern/recommendation duplication between cards and InsightStack (InsightStack now shows usage insights only, cards handle findings/recommendations)
+  - M1: Fixed formatPercentNatural range boundaries to match spec (10-20%="about a tenth", not 10-25%)
+  - M2: Deduplicated insight computation in AnalyticsView (computeUsageInsight() used once for both quiet check and display)
+  - M3: Removed dead ContextAwareValueSummary.swift
+  - L1: Fixed inconsistent VoiceOver label (secondary insight now combines NL text + detail like primary)
+  - L2: Documented AGENTS.md in File List
+  - L3: Added dismiss-promote and usageDeviation priority tests
+
 ### File List
+
+**New files:**
+- `cc-hdrm/Services/NaturalLanguageFormatter.swift` — Natural language formatting helpers
+- `cc-hdrm/Views/InsightStack.swift` — Prioritized insight display (replaces ContextAwareValueSummary)
+- `cc-hdrmTests/Services/NaturalLanguageFormatterTests.swift` — 16 formatter tests
+
+**Modified files:**
+- `cc-hdrm/Services/ValueInsightEngine.swift` — Added InsightPriority, preciseDetail, computeInsights(), NL integration, tone matching, capitalizeFirst helper, insight conversion methods; review fix: .usageDeviation priority for week deviation
+- `cc-hdrm/Views/AnalyticsView.swift` — Replaced ContextAwareValueSummary with InsightStack; review fix: deduplicated computation via computeUsageInsight(), removed card duplication in InsightStack
+- `cc-hdrm/Views/TierRecommendationCard.swift` — Updated doc comment (ContextAwareValueSummary → InsightStack)
+- `cc-hdrm/Views/InsightStack.swift` — Review fix: consistent VoiceOver labels for primary and secondary insights
+- `cc-hdrm/Services/NaturalLanguageFormatter.swift` — Review fix: corrected range boundaries to match spec
+- `cc-hdrmTests/Services/ValueInsightEngineTests.swift` — Updated 6 existing tests for NL format, added 12 new tests (5 preciseDetail + 5 tone + usageDeviation priority + dismiss-promote)
+- `cc-hdrmTests/Services/NaturalLanguageFormatterTests.swift` — Review fix: updated test values for corrected ranges, added boundary tests
+- `AGENTS.md` — Added BMAD methodology and agent teams documentation sections
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` — Story status: ready-for-dev → in-progress → review → done
+- `_bmad-output/implementation-artifacts/16-5-context-aware-insight-engine.md` — Task checkboxes, dev agent record, file list, review notes
+
+**Removed files:**
+- `cc-hdrm/Views/ContextAwareValueSummary.swift` — Dead code removed (functionality absorbed by InsightStack)

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Compact card displaying a tier recommendation in the analytics value section.
-/// Appears between the HeadroomBreakdownBar and ContextAwareValueSummary.
+/// Appears between the HeadroomBreakdownBar and InsightStack.
 /// Dismissible — writes fingerprint to PreferencesManager so it stays hidden
 /// until the recommendation changes (different tiers or direction).
 struct TierRecommendationCard: View {

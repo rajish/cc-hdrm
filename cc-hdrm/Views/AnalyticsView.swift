@@ -7,7 +7,7 @@ import os
 /// - Title bar with "Usage Analytics" and close button
 /// - Controls row: TimeRangeSelector (left) + series toggles (right)
 /// - UsageChart (expands to fill available space)
-/// - Value section: conditional HeadroomBreakdownBar (80px) + TierRecommendationCard + ContextAwareValueSummary
+/// - Value section: conditional HeadroomBreakdownBar (80px) + TierRecommendationCard + InsightStack
 struct AnalyticsView: View {
     var onClose: () -> Void
     let historicalDataService: any HistoricalDataServiceProtocol
@@ -105,6 +105,7 @@ struct AnalyticsView: View {
     @ViewBuilder
     private var valueSection: some View {
         let dataSpanHours = Self.computeDataSpanHours(resetEvents: resetEvents)
+        let usageInsight = computeUsageInsight()
 
         if !resetEvents.isEmpty {
             if dataSpanHours < 6 {
@@ -117,7 +118,7 @@ struct AnalyticsView: View {
                     selectedTimeRange: selectedTimeRange,
                     dataQualifier: "\(n) \(n == 1 ? "hour" : "hours") of data in this view"
                 )
-            } else if !isQuietValueInsight {
+            } else if !usageInsight.isQuiet {
                 // Normal: full bar (AC 1, 2)
                 HeadroomBreakdownBar(
                     resetEvents: resetEvents,
@@ -134,14 +135,8 @@ struct AnalyticsView: View {
         // AC 4: empty events — no bar, summary only
         // Tier recommendation card (Story 16.4)
         tierRecommendationCard
-        // Summary always shown — adapts text via ValueInsightEngine
-        ContextAwareValueSummary(
-            timeRange: selectedTimeRange,
-            resetEvents: resetEvents,
-            allTimeResetEvents: allTimeResetEvents,
-            creditLimits: appState.creditLimits,
-            headroomAnalysisService: headroomAnalysisService
-        )
+        // Usage insight summary (Story 16.5) — replaces ContextAwareValueSummary
+        InsightStack(insights: [usageInsight])
     }
 
     /// Computes the time span in hours between the first and last reset events.
@@ -151,8 +146,9 @@ struct AnalyticsView: View {
         return Double(last.timestamp - first.timestamp) / 3_600_000.0
     }
 
-    /// Whether the current value insight is quiet (unremarkable usage pattern).
-    private var isQuietValueInsight: Bool {
+    /// Computes the usage insight for the current time range. Used by both
+    /// the bar visibility check (quiet detection) and InsightStack display.
+    private func computeUsageInsight() -> ValueInsight {
         let subscriptionValue: SubscriptionValue?
         if selectedTimeRange != .all, let limits = appState.creditLimits {
             subscriptionValue = SubscriptionValueCalculator.calculate(
@@ -165,7 +161,7 @@ struct AnalyticsView: View {
             subscriptionValue = nil
         }
 
-        let insight = ValueInsightEngine.computeInsight(
+        return ValueInsightEngine.computeInsight(
             timeRange: selectedTimeRange,
             subscriptionValue: subscriptionValue,
             resetEvents: resetEvents,
@@ -173,7 +169,6 @@ struct AnalyticsView: View {
             creditLimits: appState.creditLimits,
             headroomAnalysisService: headroomAnalysisService
         )
-        return insight.isQuiet
     }
 
     // MARK: - Pattern Findings

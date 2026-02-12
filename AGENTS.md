@@ -58,6 +58,37 @@ gh pr edit N --title "[patch] feat: my feature"
 gh pr merge N --squash
 ```
 
+## BMAD Methodology — Story Lifecycle
+
+This project follows the **BMAD workflow** for all feature development. The story lifecycle is:
+
+1. **Create Story** (`/bmad-bmm-create-story`) — SM creates the story file in `_bmad-output/implementation-artifacts/{epic}-{story}-{slug}.md`
+2. **Implement Story** (`/bmad-bmm-dev-story`) — Dev implements all tasks, writes tests, updates the story file per acceptance criteria
+3. **Code Review** (`/bmad-bmm-code-review`) — Adversarial senior dev review that finds specific problems; auto-fix with user approval
+4. **PR + CI + CodeRabbit** — Create PR, wait for CI and CodeRabbit review, address findings
+5. **Merge** — Squash-merge to master
+6. **Next Story** — Repeat from step 1
+
+**NEVER skip the BMAD workflows.** Each step has a dedicated workflow that enforces templates, instructions, and validation checklists. Do NOT perform these steps manually — hand-rolled output bypasses quality gates and produces artifacts missing critical context.
+
+- **`/bmad-bmm-create-story`** — Enforces the story template and runs the validation checklist. Do NOT manually write story files; they will lack structure, dev context, and disaster-prevention checks.
+- **`/bmad-bmm-dev-story`** — Guides implementation against acceptance criteria, enforces task completion tracking, and updates the story file. Do NOT just start coding from the story file without running this workflow.
+- **`/bmad-bmm-code-review`** — Runs an adversarial review that must find specific problems. Do NOT substitute a casual self-review or skip this step before creating a PR.
+
+**Key files:**
+- Sprint status: `_bmad-output/implementation-artifacts/sprint-status.yaml` — shared resource, each branch should only update its own story status
+- Story files: `_bmad-output/implementation-artifacts/{epic}-{story}-{slug}.md`
+- BMAD config: `_bmad/bmm/config.yaml`
+
+## Agent Teams — Coordination Rules
+
+When running parallel agent teams, follow these rules to avoid destructive conflicts:
+
+- **Always use git worktrees.** Agents sharing one working directory causes file deletion, branch conflicts, and unrecoverable state. Create worktrees at sibling paths (e.g., `../cc-hdrm-track-a`, `../cc-hdrm-track-b`).
+- **Single-task assignments only.** Agents will blow through task dependency gates unless given single-task assignments with explicit "go idle when done" instructions. Do not give agents multi-task autonomy across review gates.
+- **Use `shutdown_request` to halt agents.** Agents often ignore stop/hold messages if they are mid-turn. Use `shutdown_request` instead of plain messages for reliable halting.
+- **Sprint status is a shared resource.** Each branch should only update its own story's status in `sprint-status.yaml` to avoid merge conflicts.
+
 ## Pull Request & Commit Messages — GitHub Reference Prevention
 
 **NEVER** use `#` followed by a number in PR titles, descriptions, or commit messages. GitHub automatically converts `#N` into links to issues/PRs, which creates confusing cross-references.
