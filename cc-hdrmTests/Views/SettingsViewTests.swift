@@ -101,6 +101,39 @@ struct SettingsViewTests {
     }
 }
 
+@Suite("SettingsView Extra Usage Alerts Tests (Story 17.4)")
+@MainActor
+struct SettingsViewExtraUsageTests {
+
+    @Test("SettingsView renders without crash when appState has extraUsageEnabled true")
+    func rendersWithExtraUsageEnabled() {
+        let mock = MockPreferencesManager()
+        let mockLaunch = MockLaunchAtLoginService()
+        let appState = AppState()
+        appState.updateExtraUsage(enabled: true, monthlyLimit: 100.0, usedCredits: 50.0, utilization: 0.5)
+        let view = SettingsView(preferencesManager: mock, launchAtLoginService: mockLaunch, appState: appState)
+        _ = view.body
+    }
+
+    @Test("SettingsView renders without crash when appState has extraUsageEnabled false")
+    func rendersWithExtraUsageDisabled() {
+        let mock = MockPreferencesManager()
+        let mockLaunch = MockLaunchAtLoginService()
+        let appState = AppState()
+        appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
+        let view = SettingsView(preferencesManager: mock, launchAtLoginService: mockLaunch, appState: appState)
+        _ = view.body
+    }
+
+    @Test("SettingsView renders without crash when appState is nil (backward compatibility)")
+    func rendersWithNilAppState() {
+        let mock = MockPreferencesManager()
+        let mockLaunch = MockLaunchAtLoginService()
+        let view = SettingsView(preferencesManager: mock, launchAtLoginService: mockLaunch, appState: nil)
+        _ = view.body
+    }
+}
+
 @Suite("SettingsView Advanced Section Tests (Story 15.2)")
 @MainActor
 struct SettingsViewAdvancedTests {

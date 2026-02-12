@@ -28,7 +28,7 @@ struct PopoverFooterView: View {
             Spacer()
 
             // Right: gear menu (AC #3)
-            GearMenuView(preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, historicalDataService: historicalDataService, onThresholdChange: onThresholdChange, onClearHistory: onClearHistory)
+            GearMenuView(preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, historicalDataService: historicalDataService, appState: appState, onThresholdChange: onThresholdChange, onClearHistory: onClearHistory)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)

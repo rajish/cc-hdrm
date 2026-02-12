@@ -111,6 +111,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 notificationService: notificationService!
             )
 
+            // Create ExtraUsageAlertService for extra usage threshold notifications
+            let extraUsageAlertService = ExtraUsageAlertService(
+                notificationCenter: UNUserNotificationCenter.current(),
+                notificationService: notificationService!,
+                preferencesManager: preferences
+            )
+
             pollingEngine = PollingEngine(
                 keychainService: KeychainService(),
                 tokenRefreshService: TokenRefreshService(),
@@ -121,7 +128,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 historicalDataService: historicalDataService,
                 slopeCalculationService: slopeService,
                 patternDetector: patternDetector,
-                patternNotificationService: patternNotifService
+                patternNotificationService: patternNotifService,
+                extraUsageAlertService: extraUsageAlertService
             )
         }
 

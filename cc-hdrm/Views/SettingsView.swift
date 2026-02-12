@@ -6,6 +6,7 @@ struct SettingsView: View {
     let preferencesManager: PreferencesManagerProtocol
     let launchAtLoginService: LaunchAtLoginServiceProtocol
     let historicalDataService: (any HistoricalDataServiceProtocol)?
+    let appState: AppState?
     var onDone: (() -> Void)?
     var onThresholdChange: (() -> Void)?
     var onClearHistory: (() -> Void)?
@@ -25,6 +26,11 @@ struct SettingsView: View {
     @State private var fiveHourError: String?
     @State private var sevenDayError: String?
     @State private var billingCycleDay: Int
+    @State private var extraUsageAlertsEnabled: Bool
+    @State private var extraUsageThreshold50: Bool
+    @State private var extraUsageThreshold75: Bool
+    @State private var extraUsageThreshold90: Bool
+    @State private var extraUsageEnteredAlert: Bool
 
     /// Discrete poll interval options per AC #2.
     private static let pollIntervalOptions: [TimeInterval] = [10, 15, 30, 60, 120, 300]
@@ -45,10 +51,11 @@ struct SettingsView: View {
     /// Warning threshold for database size (500 MB).
     private static let databaseSizeWarningThreshold: Int64 = 524_288_000
 
-    init(preferencesManager: PreferencesManagerProtocol, launchAtLoginService: LaunchAtLoginServiceProtocol, historicalDataService: (any HistoricalDataServiceProtocol)? = nil, onDone: (() -> Void)? = nil, onThresholdChange: (() -> Void)? = nil, onClearHistory: (() -> Void)? = nil) {
+    init(preferencesManager: PreferencesManagerProtocol, launchAtLoginService: LaunchAtLoginServiceProtocol, historicalDataService: (any HistoricalDataServiceProtocol)? = nil, appState: AppState? = nil, onDone: (() -> Void)? = nil, onThresholdChange: (() -> Void)? = nil, onClearHistory: (() -> Void)? = nil) {
         self.preferencesManager = preferencesManager
         self.launchAtLoginService = launchAtLoginService
         self.historicalDataService = historicalDataService
+        self.appState = appState
         self.onDone = onDone
         self.onThresholdChange = onThresholdChange
         self.onClearHistory = onClearHistory
@@ -65,6 +72,11 @@ struct SettingsView: View {
         _customFiveHourText = State(initialValue: preferencesManager.customFiveHourCredits.map(String.init) ?? "")
         _customSevenDayText = State(initialValue: preferencesManager.customSevenDayCredits.map(String.init) ?? "")
         _billingCycleDay = State(initialValue: preferencesManager.billingCycleDay ?? 0)
+        _extraUsageAlertsEnabled = State(initialValue: preferencesManager.extraUsageAlertsEnabled)
+        _extraUsageThreshold50 = State(initialValue: preferencesManager.extraUsageThreshold50Enabled)
+        _extraUsageThreshold75 = State(initialValue: preferencesManager.extraUsageThreshold75Enabled)
+        _extraUsageThreshold90 = State(initialValue: preferencesManager.extraUsageThreshold90Enabled)
+        _extraUsageEnteredAlert = State(initialValue: preferencesManager.extraUsageEnteredAlertEnabled)
     }
 
     var body: some View {
@@ -117,6 +129,57 @@ struct SettingsView: View {
                     onThresholdChange?()
                 }
                 .accessibilityLabel("Critical notification threshold, \(Int(criticalThreshold)) percent")
+            }
+
+            // Extra Usage Alerts subsection (Story 17.4)
+            if let appState, appState.extraUsageEnabled {
+                Divider()
+
+                Text("Extra Usage Alerts")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Toggle("Extra usage alerts", isOn: $extraUsageAlertsEnabled)
+                    .onChange(of: extraUsageAlertsEnabled) { _, newValue in
+                        preferencesManager.extraUsageAlertsEnabled = newValue
+                    }
+                    .accessibilityLabel("Extra usage alerts master toggle, \(extraUsageAlertsEnabled ? "on" : "off")")
+
+                Toggle("Alert at 50%", isOn: $extraUsageThreshold50)
+                    .padding(.leading, 16)
+                    .disabled(!extraUsageAlertsEnabled)
+                    .onChange(of: extraUsageThreshold50) { _, newValue in
+                        preferencesManager.extraUsageThreshold50Enabled = newValue
+                    }
+                    .accessibilityLabel("Alert at 50 percent threshold, \(extraUsageThreshold50 ? "on" : "off")")
+
+                Toggle("Alert at 75%", isOn: $extraUsageThreshold75)
+                    .padding(.leading, 16)
+                    .disabled(!extraUsageAlertsEnabled)
+                    .onChange(of: extraUsageThreshold75) { _, newValue in
+                        preferencesManager.extraUsageThreshold75Enabled = newValue
+                    }
+                    .accessibilityLabel("Alert at 75 percent threshold, \(extraUsageThreshold75 ? "on" : "off")")
+
+                Toggle("Alert at 90%", isOn: $extraUsageThreshold90)
+                    .padding(.leading, 16)
+                    .disabled(!extraUsageAlertsEnabled)
+                    .onChange(of: extraUsageThreshold90) { _, newValue in
+                        preferencesManager.extraUsageThreshold90Enabled = newValue
+                    }
+                    .accessibilityLabel("Alert at 90 percent threshold, \(extraUsageThreshold90 ? "on" : "off")")
+
+                Toggle("Entered extra usage", isOn: $extraUsageEnteredAlert)
+                    .padding(.leading, 16)
+                    .disabled(!extraUsageAlertsEnabled)
+                    .onChange(of: extraUsageEnteredAlert) { _, newValue in
+                        preferencesManager.extraUsageEnteredAlertEnabled = newValue
+                    }
+                    .accessibilityLabel("Entered extra usage alert, \(extraUsageEnteredAlert ? "on" : "off")")
+
+                Text("Get notified when your extra usage spending crosses these thresholds")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             // Poll interval picker (AC #2: 10s, 15s, 30s, 60s, 120s, 300s)
@@ -337,6 +400,11 @@ struct SettingsView: View {
                     fiveHourError = nil
                     sevenDayError = nil
                     billingCycleDay = 0
+                    extraUsageAlertsEnabled = preferencesManager.extraUsageAlertsEnabled
+                    extraUsageThreshold50 = preferencesManager.extraUsageThreshold50Enabled
+                    extraUsageThreshold75 = preferencesManager.extraUsageThreshold75Enabled
+                    extraUsageThreshold90 = preferencesManager.extraUsageThreshold90Enabled
+                    extraUsageEnteredAlert = preferencesManager.extraUsageEnteredAlertEnabled
                     showAdvanced = false
                     onThresholdChange?()
                 }

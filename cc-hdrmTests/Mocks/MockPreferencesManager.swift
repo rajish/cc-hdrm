@@ -16,6 +16,14 @@ final class MockPreferencesManager: PreferencesManagerProtocol {
     var patternNotificationCooldowns: [String: Date] = [:]
     var dismissedPatternFindings: Set<String> = []
     var dismissedTierRecommendation: String?
+    var extraUsageAlertsEnabled: Bool = PreferencesDefaults.extraUsageAlertsEnabled
+    var extraUsageThreshold50Enabled: Bool = PreferencesDefaults.extraUsageThreshold50Enabled
+    var extraUsageThreshold75Enabled: Bool = PreferencesDefaults.extraUsageThreshold75Enabled
+    var extraUsageThreshold90Enabled: Bool = PreferencesDefaults.extraUsageThreshold90Enabled
+    var extraUsageEnteredAlertEnabled: Bool = PreferencesDefaults.extraUsageEnteredAlertEnabled
+    var extraUsageFiredThresholds: Set<Int> = []
+    var extraUsageEnteredAlertFired: Bool = false
+    var extraUsageLastBillingPeriodKey: String?
     var resetToDefaultsCallCount = 0
 
     func resetToDefaults() {
@@ -33,5 +41,13 @@ final class MockPreferencesManager: PreferencesManagerProtocol {
         patternNotificationCooldowns = [:]
         dismissedPatternFindings = []
         dismissedTierRecommendation = nil
+        extraUsageAlertsEnabled = PreferencesDefaults.extraUsageAlertsEnabled
+        extraUsageThreshold50Enabled = PreferencesDefaults.extraUsageThreshold50Enabled
+        extraUsageThreshold75Enabled = PreferencesDefaults.extraUsageThreshold75Enabled
+        extraUsageThreshold90Enabled = PreferencesDefaults.extraUsageThreshold90Enabled
+        extraUsageEnteredAlertEnabled = PreferencesDefaults.extraUsageEnteredAlertEnabled
+        extraUsageFiredThresholds = []
+        extraUsageEnteredAlertFired = false
+        extraUsageLastBillingPeriodKey = nil
     }
 }
