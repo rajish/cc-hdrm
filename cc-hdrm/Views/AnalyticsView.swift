@@ -7,13 +7,14 @@ import os
 /// - Title bar with "Usage Analytics" and close button
 /// - Controls row: TimeRangeSelector (left) + series toggles (right)
 /// - UsageChart (expands to fill available space)
-/// - Value section: conditional HeadroomBreakdownBar (80px) + ContextAwareValueSummary
+/// - Value section: conditional HeadroomBreakdownBar (80px) + TierRecommendationCard + ContextAwareValueSummary
 struct AnalyticsView: View {
     var onClose: () -> Void
     let historicalDataService: any HistoricalDataServiceProtocol
     let appState: AppState
     let headroomAnalysisService: any HeadroomAnalysisServiceProtocol
     var patternDetector: (any SubscriptionPatternDetectorProtocol)?
+    var tierRecommendationService: (any TierRecommendationServiceProtocol)?
     var preferencesManager: (any PreferencesManagerProtocol)?
 
     /// Per-time-range toggle state for series visibility.
@@ -67,6 +68,7 @@ struct AnalyticsView: View {
     /// "no data yet" (fresh install) from "no data for this range".
     @State private var hasAnyHistoricalData: Bool = false
     @State private var patternFindings: [PatternFinding] = []
+    @State private var tierRecommendation: TierRecommendation?
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -91,6 +93,7 @@ struct AnalyticsView: View {
         .padding()
         .task(id: selectedTimeRange) {
             await loadData()
+            await loadTierRecommendation()
         }
         .task {
             await loadPatternFindings()
@@ -129,6 +132,8 @@ struct AnalyticsView: View {
         patternFindingCards
 
         // AC 4: empty events — no bar, summary only
+        // Tier recommendation card (Story 16.4)
+        tierRecommendationCard
         // Summary always shown — adapts text via ValueInsightEngine
         ContextAwareValueSummary(
             timeRange: selectedTimeRange,
@@ -201,6 +206,37 @@ struct AnalyticsView: View {
         // Remove from local state to update UI immediately
         patternFindings.removeAll { $0.cooldownKey == finding.cooldownKey }
     }
+
+    // MARK: - Tier Recommendation Card
+
+    @ViewBuilder
+    private var tierRecommendationCard: some View {
+        if let recommendation = tierRecommendation,
+           recommendation.isActionable,
+           preferencesManager?.dismissedTierRecommendation != recommendation.recommendationFingerprint {
+            TierRecommendationCard(
+                recommendation: recommendation,
+                onDismiss: {
+                    preferencesManager?.dismissedTierRecommendation = recommendation.recommendationFingerprint
+                    tierRecommendation = nil
+                }
+            )
+        }
+    }
+
+    // MARK: - Tier Recommendation Loading
+
+    private func loadTierRecommendation() async {
+        guard let service = tierRecommendationService else { return }
+        do {
+            tierRecommendation = try await service.recommendTier(for: selectedTimeRange)
+        } catch is CancellationError {
+            // Discarded — user switched time ranges
+        } catch {
+            Self.logger.error("Tier recommendation load failed: \(error.localizedDescription)")
+        }
+    }
+
 
     // MARK: - Data Loading
 

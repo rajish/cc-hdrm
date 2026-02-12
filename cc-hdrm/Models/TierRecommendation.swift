@@ -29,4 +29,26 @@ enum TierRecommendation: Sendable, Equatable {
         tier: RateLimitTier,
         headroomPercent: Double
     )
+
+    /// Stable identifier for dismissal tracking.
+    /// Changes when the recommendation type or involved tiers change,
+    /// causing a dismissed card to re-appear.
+    var recommendationFingerprint: String {
+        switch self {
+        case .downgrade(let currentTier, _, let recommendedTier, _, _, _):
+            return "downgrade-\(currentTier.rawValue)-\(recommendedTier.rawValue)"
+        case .upgrade(let currentTier, _, let recommendedTier, _, _, _):
+            return "upgrade-\(currentTier.rawValue)-\(recommendedTier.rawValue)"
+        case .goodFit(let tier, _):
+            return "goodFit-\(tier.rawValue)"
+        }
+    }
+
+    /// Whether this recommendation is actionable (should display a card).
+    var isActionable: Bool {
+        switch self {
+        case .downgrade, .upgrade: return true
+        case .goodFit: return false
+        }
+    }
 }

@@ -15,6 +15,7 @@ final class MockPreferencesManager: PreferencesManagerProtocol {
     var billingCycleDay: Int?
     var patternNotificationCooldowns: [String: Date] = [:]
     var dismissedPatternFindings: Set<String> = []
+    var dismissedTierRecommendation: String?
     var resetToDefaultsCallCount = 0
 
     func resetToDefaults() {
@@ -31,5 +32,6 @@ final class MockPreferencesManager: PreferencesManagerProtocol {
         billingCycleDay = nil
         patternNotificationCooldowns = [:]
         dismissedPatternFindings = []
+        dismissedTierRecommendation = nil
     }
 }

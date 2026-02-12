@@ -24,6 +24,7 @@ struct SettingsView: View {
     @State private var customSevenDayText: String
     @State private var fiveHourError: String?
     @State private var sevenDayError: String?
+    @State private var billingCycleDay: Int
 
     /// Discrete poll interval options per AC #2.
     private static let pollIntervalOptions: [TimeInterval] = [10, 15, 30, 60, 120, 300]
@@ -37,6 +38,9 @@ struct SettingsView: View {
         ("2 years", 730),
         ("5 years", 1825),
     ]
+
+    /// Billing cycle day options: 0 = "Not set", 1-28 = specific day.
+    private static let billingCycleDayOptions: [Int] = [0] + Array(1...28)
 
     /// Warning threshold for database size (500 MB).
     private static let databaseSizeWarningThreshold: Int64 = 524_288_000
@@ -60,6 +64,7 @@ struct SettingsView: View {
         _launchAtLogin = State(initialValue: launchAtLoginService.isEnabled)
         _customFiveHourText = State(initialValue: preferencesManager.customFiveHourCredits.map(String.init) ?? "")
         _customSevenDayText = State(initialValue: preferencesManager.customSevenDayCredits.map(String.init) ?? "")
+        _billingCycleDay = State(initialValue: preferencesManager.billingCycleDay ?? 0)
     }
 
     var body: some View {
@@ -279,6 +284,34 @@ struct SettingsView: View {
                         .foregroundStyle(.red)
                         .accessibilityLabel("Validation error: \(error)")
                 }
+
+                Divider()
+                    .padding(.vertical, 4)
+
+                Text("Billing cycle alignment for tier recommendations")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack {
+                    Text("Billing cycle day")
+                    Spacer()
+                    Picker("Billing cycle day", selection: $billingCycleDay) {
+                        Text("Not set").tag(0)
+                        ForEach(1...28, id: \.self) { day in
+                            Text("\(day)").tag(day)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 80)
+                    .onChange(of: billingCycleDay) { _, newValue in
+                        guard !isUpdating else { return }
+                        isUpdating = true
+                        preferencesManager.billingCycleDay = newValue == 0 ? nil : newValue
+                        billingCycleDay = preferencesManager.billingCycleDay ?? 0
+                        isUpdating = false
+                    }
+                    .accessibilityLabel("Billing cycle day, \(billingCycleDay == 0 ? "not set" : "day \(billingCycleDay)")")
+                }
             } label: {
                 Text("Advanced")
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -303,6 +336,7 @@ struct SettingsView: View {
                     customSevenDayText = ""
                     fiveHourError = nil
                     sevenDayError = nil
+                    billingCycleDay = 0
                     showAdvanced = false
                     onThresholdChange?()
                 }
