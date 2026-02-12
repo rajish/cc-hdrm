@@ -35,6 +35,15 @@ enum RateLimitTier: String, CaseIterable, Sendable {
         }
     }
 
+    /// Human-readable tier name for display in findings and recommendations.
+    var displayName: String {
+        switch self {
+        case .pro: return "Pro"
+        case .max5x: return "Max 5x"
+        case .max20x: return "Max 20x"
+        }
+    }
+
     /// Convenience to produce a `CreditLimits` value from this tier.
     var creditLimits: CreditLimits {
         CreditLimits(fiveHourCredits: fiveHourCredits, sevenDayCredits: sevenDayCredits, monthlyPrice: monthlyPrice)
