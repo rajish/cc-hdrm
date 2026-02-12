@@ -435,7 +435,10 @@ final class SubscriptionPatternDetector: SubscriptionPatternDetectorProtocol, @u
             .filter { $0.monthlyPrice > currentTier.monthlyPrice }
             .sorted { $0.monthlyPrice < $1.monthlyPrice }
 
-        let recommendedTier = higherTiers.first ?? currentTier
+        guard let recommendedTier = higherTiers.first else {
+            // Already on highest tier, no upgrade to recommend
+            return nil
+        }
 
         Self.logger.info("Persistent extra usage detected: avg $\(String(format: "%.0f", avgMonthlyExtra))/mo vs $\(basePrice) base")
         return .persistentExtraUsage(
