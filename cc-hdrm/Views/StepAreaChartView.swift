@@ -527,7 +527,7 @@ private struct StaticChartContent: View {
                 )
                 .symbolSize(30)
                 .foregroundStyle(Color.extraUsageCool.opacity(0.8))
-                .accessibilityLabel("Extra usage active: \(String(format: "$%.2f", point.extraUsageUsedCredits ?? 0)) spent this period")
+                .accessibilityLabel("Extra usage active: \(AppState.formatCents(Int((point.extraUsageUsedCredits ?? 0).rounded()))) spent this period")
             }
 
             // Reset boundaries — orange so they're visually distinct from grey grid lines

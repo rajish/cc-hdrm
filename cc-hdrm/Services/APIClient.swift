@@ -61,6 +61,12 @@ struct APIClient: APIClientProtocol, @unchecked Sendable {
         }
 
         do {
+            // DEBUG: Log raw extra_usage JSON to discover all API fields (remove after investigation)
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let extraUsage = json["extra_usage"] {
+                Self.logger.info("Raw extra_usage JSON: \(String(describing: extraUsage), privacy: .public)")
+            }
+
             let decoded = try JSONDecoder().decode(UsageResponse.self, from: data)
             Self.logger.info("Usage data parsed successfully")
             return decoded

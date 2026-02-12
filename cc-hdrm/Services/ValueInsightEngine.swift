@@ -469,10 +469,10 @@ enum ValueInsightEngine {
         let count = overflowCycles.count
         let avgSpend = totalSpend / Double(count)
 
-        let text = String(format: "Extra usage: $%.2f across %d month%@ (avg $%.2f/month)",
-                          totalSpend, count, count == 1 ? "" : "s", avgSpend)
-        let precise = String(format: "Total extra spend: $%.2f over %d cycle%@, average $%.2f per overflow month",
-                             totalSpend, count, count == 1 ? "" : "s", avgSpend)
+        let totalText = AppState.formatCents(Int(totalSpend.rounded()))
+        let avgText = AppState.formatCents(Int(avgSpend.rounded()))
+        let text = "Extra usage: \(totalText) across \(count) month\(count == 1 ? "" : "s") (avg \(avgText)/month)"
+        let precise = "Total extra spend: \(totalText) over \(count) cycle\(count == 1 ? "" : "s"), average \(avgText) per overflow month"
 
         return [ValueInsight(
             text: text,

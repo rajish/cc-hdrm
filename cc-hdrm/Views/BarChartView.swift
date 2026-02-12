@@ -565,7 +565,7 @@ private struct BarHoverOverlayContent: View {
 
             // Extra usage indicator (Story 17.3)
             if let spend = point.extraUsageSpend, spend > 0 {
-                Text(String(format: "Extra: $%.2f", spend))
+                Text("Extra: \(AppState.formatCents(Int(spend.rounded())))")
                     .font(.caption2)
                     .foregroundStyle(Color.extraUsageCool)
             }

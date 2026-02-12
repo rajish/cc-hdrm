@@ -720,7 +720,7 @@ struct AppStateTests {
     func extraUsageInactiveWhenNoExhausted() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
-        state.updateExtraUsage(enabled: true, monthlyLimit: 100.0, usedCredits: 15.0, utilization: 0.15)
+        state.updateExtraUsage(enabled: true, monthlyLimit: 10000.0, usedCredits: 1500.0, utilization: 0.15)
         state.updateWindows(
             fiveHour: WindowState(utilization: 50.0, resetsAt: nil),
             sevenDay: WindowState(utilization: 70.0, resetsAt: nil)
@@ -741,21 +741,20 @@ struct AppStateTests {
         #expect(state.isExtraUsageActive == false)
     }
 
-    @Test("extraUsageRemainingBalance computes correctly")
+    @Test("extraUsageRemainingBalanceCents computes correctly")
     @MainActor
     func extraUsageRemainingBalanceComputation() {
         let state = AppState()
-        state.updateExtraUsage(enabled: true, monthlyLimit: 100.0, usedCredits: 27.39, utilization: 0.2739)
-        #expect(state.extraUsageRemainingBalance != nil)
-        #expect(abs(state.extraUsageRemainingBalance! - 72.61) < 0.01)
+        state.updateExtraUsage(enabled: true, monthlyLimit: 10000.0, usedCredits: 2739.0, utilization: 0.2739)
+        #expect(state.extraUsageRemainingBalanceCents == 7261)
     }
 
-    @Test("extraUsageRemainingBalance returns nil when limit is nil")
+    @Test("extraUsageRemainingBalanceCents returns nil when limit is nil")
     @MainActor
     func extraUsageRemainingBalanceNilWithoutLimit() {
         let state = AppState()
-        state.updateExtraUsage(enabled: true, monthlyLimit: nil, usedCredits: 15.0, utilization: nil)
-        #expect(state.extraUsageRemainingBalance == nil)
+        state.updateExtraUsage(enabled: true, monthlyLimit: nil, usedCredits: 1500.0, utilization: nil)
+        #expect(state.extraUsageRemainingBalanceCents == nil)
     }
 
     @Test("menuBarText returns currency format when extra usage active with known limit")
@@ -763,7 +762,7 @@ struct AppStateTests {
     func menuBarTextExtraUsageCurrency() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
-        state.updateExtraUsage(enabled: true, monthlyLimit: 100.0, usedCredits: 72.61, utilization: 0.7261)
+        state.updateExtraUsage(enabled: true, monthlyLimit: 10000.0, usedCredits: 7261.0, utilization: 0.7261)
         state.updateWindows(
             fiveHour: WindowState(utilization: 100.0, resetsAt: nil),
             sevenDay: WindowState(utilization: 70.0, resetsAt: nil)
@@ -776,7 +775,7 @@ struct AppStateTests {
     func menuBarTextExtraUsageSpent() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
-        state.updateExtraUsage(enabled: true, monthlyLimit: nil, usedCredits: 15.61, utilization: nil)
+        state.updateExtraUsage(enabled: true, monthlyLimit: nil, usedCredits: 1561.0, utilization: nil)
         state.updateWindows(
             fiveHour: WindowState(utilization: 100.0, resetsAt: nil),
             sevenDay: WindowState(utilization: 70.0, resetsAt: nil)
@@ -789,7 +788,7 @@ struct AppStateTests {
     func menuBarTextNormalWhenExtraUsageInactive() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
-        state.updateExtraUsage(enabled: true, monthlyLimit: 100.0, usedCredits: 15.0, utilization: 0.15)
+        state.updateExtraUsage(enabled: true, monthlyLimit: 10000.0, usedCredits: 1500.0, utilization: 0.15)
         state.updateWindows(
             fiveHour: WindowState(utilization: 50.0, resetsAt: nil),
             sevenDay: WindowState(utilization: 70.0, resetsAt: nil)
@@ -801,14 +800,14 @@ struct AppStateTests {
     @MainActor
     func updateExtraUsageClearsValues() {
         let state = AppState()
-        state.updateExtraUsage(enabled: true, monthlyLimit: 100.0, usedCredits: 50.0, utilization: 0.5)
+        state.updateExtraUsage(enabled: true, monthlyLimit: 10000.0, usedCredits: 5000.0, utilization: 0.5)
         #expect(state.extraUsageEnabled == true)
-        #expect(state.extraUsageMonthlyLimit == 100.0)
+        #expect(state.extraUsageMonthlyLimitCents == 10000)
 
         state.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
         #expect(state.extraUsageEnabled == false)
-        #expect(state.extraUsageMonthlyLimit == nil)
-        #expect(state.extraUsageUsedCredits == nil)
+        #expect(state.extraUsageMonthlyLimitCents == nil)
+        #expect(state.extraUsageUsedCreditsCents == nil)
         #expect(state.extraUsageUtilization == nil)
     }
 
@@ -817,8 +816,8 @@ struct AppStateTests {
     func menuBarTextNegativeRemainingBalance() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
-        // usedCredits exceeds monthlyLimit
-        state.updateExtraUsage(enabled: true, monthlyLimit: 100.0, usedCredits: 105.23, utilization: 1.0523)
+        // usedCredits exceeds monthlyLimit (in cents)
+        state.updateExtraUsage(enabled: true, monthlyLimit: 10000.0, usedCredits: 10523.0, utilization: 1.0523)
         state.updateWindows(
             fiveHour: WindowState(utilization: 100.0, resetsAt: nil),
             sevenDay: WindowState(utilization: 70.0, resetsAt: nil)

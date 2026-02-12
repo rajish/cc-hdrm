@@ -51,8 +51,10 @@ final class AppState {
 
     // MARK: - Extra Usage State (Story 17.1)
     private(set) var extraUsageEnabled: Bool = false
-    private(set) var extraUsageMonthlyLimit: Double?
-    private(set) var extraUsageUsedCredits: Double?
+    /// Monthly extra usage limit in cents. Use `formatCents(_:)` for display.
+    private(set) var extraUsageMonthlyLimitCents: Int?
+    /// Extra usage spent this period in cents. Use `formatCents(_:)` for display.
+    private(set) var extraUsageUsedCreditsCents: Int?
     private(set) var extraUsageUtilization: Double?
 
     /// Whether the analytics window is currently open.
@@ -161,22 +163,29 @@ final class AppState {
         return fiveHourExhausted || sevenDayExhausted
     }
 
-    /// Remaining prepaid extra usage balance. Nil when monthly limit or used credits unknown.
-    var extraUsageRemainingBalance: Double? {
-        guard let limit = extraUsageMonthlyLimit, let used = extraUsageUsedCredits else { return nil }
+    /// Remaining prepaid extra usage balance in cents. Nil when monthly limit or used credits unknown.
+    var extraUsageRemainingBalanceCents: Int? {
+        guard let limit = extraUsageMonthlyLimitCents, let used = extraUsageUsedCreditsCents else { return nil }
         return limit - used
+    }
+
+    /// Formats a cent amount as a currency string using integer math (no floating-point).
+    /// Example: `formatCents(1561)` → `"$15.61"`, `formatCents(-300)` → `"-$3.00"`.
+    nonisolated static func formatCents(_ cents: Int, symbol: String = "$") -> String {
+        let absCents = abs(cents)
+        let dollars = absCents / 100
+        let remainder = absCents % 100
+        let prefix = cents < 0 ? "-" : ""
+        return String(format: "%@%@%d.%02d", prefix, symbol, dollars, remainder)
     }
 
     /// Menu bar text for extra usage mode. Returns formatted currency when active, nil otherwise.
     var menuBarExtraUsageText: String? {
         guard isExtraUsageActive else { return nil }
-        if let remaining = extraUsageRemainingBalance {
-            if remaining < 0 {
-                return String(format: "-$%.2f", abs(remaining))
-            }
-            return String(format: "$%.2f", remaining)
-        } else if let used = extraUsageUsedCredits {
-            return String(format: "$%.2f spent", used)
+        if let remaining = extraUsageRemainingBalanceCents {
+            return Self.formatCents(remaining)
+        } else if let used = extraUsageUsedCreditsCents {
+            return "\(Self.formatCents(used)) spent"
         }
         return "$0.00"
     }
@@ -259,10 +268,11 @@ final class AppState {
     }
 
     /// Updates extra usage billing state from API data.
+    /// Monetary values from the API arrive as Double (cents). Converted to Int at this boundary.
     func updateExtraUsage(enabled: Bool, monthlyLimit: Double?, usedCredits: Double?, utilization: Double?) {
         self.extraUsageEnabled = enabled
-        self.extraUsageMonthlyLimit = monthlyLimit
-        self.extraUsageUsedCredits = usedCredits
+        self.extraUsageMonthlyLimitCents = monthlyLimit.map { Int($0.rounded()) }
+        self.extraUsageUsedCreditsCents = usedCredits.map { Int($0.rounded()) }
         self.extraUsageUtilization = utilization
     }
 

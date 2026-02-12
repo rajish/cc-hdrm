@@ -28,7 +28,7 @@ struct CycleOverCycleBarTests {
 
     @Test("CycleOverCycleBar renders without crash with extra usage spend")
     func rendersWithExtraUsage() {
-        let cycles = makeCycles(extraUsage: [nil, 5.50, 12.75, nil])
+        let cycles = makeCycles(extraUsage: [nil, 550.0, 1275.0, nil])
         let view = CycleOverCycleBar(cycles: cycles, timeRange: .all)
         let _ = view.body
     }
@@ -42,7 +42,7 @@ struct CycleOverCycleBarTests {
 
     @Test("CycleOverCycleBar renders without crash when all cycles have extra usage")
     func rendersWithAllExtraUsage() {
-        let cycles = makeCycles(extraUsage: [3.0, 5.50, 12.75, 8.00])
+        let cycles = makeCycles(extraUsage: [300.0, 550.0, 1275.0, 800.0])
         let view = CycleOverCycleBar(cycles: cycles, timeRange: .all)
         let _ = view.body
     }
@@ -58,7 +58,7 @@ struct CycleOverCycleBarTests {
             dollarValue: 12.0,
             isPartial: false,
             resetCount: 5,
-            extraUsageSpend: 8.50
+            extraUsageSpend: 850.0
         )
         let bar = CycleOverCycleBar(cycles: [cycle, cycle, cycle], timeRange: .all)
         // The accessibility label method is private, but we test via rendering
@@ -67,7 +67,7 @@ struct CycleOverCycleBarTests {
 
     @Test("CycleOverCycleBar hidden for .week time range even with extra usage")
     func hiddenForWeekRange() {
-        let cycles = makeCycles(extraUsage: [3.0, 5.0, 12.0, 8.0])
+        let cycles = makeCycles(extraUsage: [300.0, 500.0, 1200.0, 800.0])
         let view = CycleOverCycleBar(cycles: cycles, timeRange: .week)
         // View body should not render the chart (shouldRender is false)
         let _ = view.body
@@ -76,8 +76,8 @@ struct CycleOverCycleBarTests {
     @Test("CycleOverCycleBar hidden with fewer than 3 cycles even with extra usage")
     func hiddenForInsufficientCycles() {
         let cycles = [
-            CycleUtilization(label: "Jan", year: 2026, utilizationPercent: 60, dollarValue: 12, isPartial: false, resetCount: 5, extraUsageSpend: 10.0),
-            CycleUtilization(label: "Feb", year: 2026, utilizationPercent: 40, dollarValue: 8, isPartial: true, resetCount: 3, extraUsageSpend: 5.0),
+            CycleUtilization(label: "Jan", year: 2026, utilizationPercent: 60, dollarValue: 12, isPartial: false, resetCount: 5, extraUsageSpend: 1000.0),
+            CycleUtilization(label: "Feb", year: 2026, utilizationPercent: 40, dollarValue: 8, isPartial: true, resetCount: 3, extraUsageSpend: 500.0),
         ]
         let view = CycleOverCycleBar(cycles: cycles, timeRange: .all)
         let _ = view.body

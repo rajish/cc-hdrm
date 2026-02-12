@@ -74,6 +74,10 @@ final class ExtraUsageAlertService: ExtraUsageAlertServiceProtocol {
         let utilizationPercent = utilization * 100.0
         var firedThresholds = preferencesManager.extraUsageFiredThresholds
 
+        // Convert raw API cents (Double) to Int once for notification text
+        let usedCents = Int((usedCredits ?? 0).rounded())
+        let limitCents = Int((monthlyLimit ?? 0).rounded())
+
         for (percent, toggleKeyPath) in thresholds {
             guard preferencesManager[keyPath: toggleKeyPath] else { continue }
             guard utilizationPercent >= Double(percent) else { continue }
@@ -81,8 +85,8 @@ final class ExtraUsageAlertService: ExtraUsageAlertServiceProtocol {
 
             let (title, body) = thresholdNotificationText(
                 percent: percent,
-                usedCredits: usedCredits,
-                monthlyLimit: monthlyLimit
+                usedCents: usedCents,
+                limitCents: limitCents
             )
             await deliverNotification(
                 title: title,
@@ -115,36 +119,42 @@ final class ExtraUsageAlertService: ExtraUsageAlertServiceProtocol {
 
     private func thresholdNotificationText(
         percent: Int,
-        usedCredits: Double?,
-        monthlyLimit: Double?
+        usedCents: Int,
+        limitCents: Int
     ) -> (title: String, body: String) {
-        let used = max(0, usedCredits ?? 0)
-        let limit = max(0, monthlyLimit ?? 0)
+        let usedText = Self.formatCents(max(0, usedCents))
+        let limitText = Self.formatCents(max(0, limitCents))
 
         switch percent {
         case 50:
             return (
                 "Extra usage update",
-                "You've used half your extra usage budget (\(Self.formatCurrency(used)) of \(Self.formatCurrency(limit)))"
+                "You've used half your extra usage budget (\(usedText) of \(limitText))"
             )
         case 75:
             return (
                 "Extra usage warning",
-                "Extra usage at 75% \u{2014} \(Self.formatCurrency(used)) of \(Self.formatCurrency(limit)) spent this period"
+                "Extra usage at 75% \u{2014} \(usedText) of \(limitText) spent this period"
             )
         case 90:
-            let remaining = max(0, limit - used)
+            let remainingCents = max(0, limitCents - usedCents)
             return (
                 "Extra usage alert",
-                "Extra usage at 90% \u{2014} \(Self.formatCurrency(remaining)) left before hitting your monthly limit"
+                "Extra usage at 90% \u{2014} \(Self.formatCents(remainingCents)) left before hitting your monthly limit"
             )
         default:
             return ("Extra usage alert", "Extra usage at \(percent)%")
         }
     }
 
-    private static func formatCurrency(_ amount: Double) -> String {
-        String(format: "$%.2f", amount)
+    /// Formats a cent amount as a currency string using integer math (no floating-point rounding).
+    /// Example: `formatCents(1561)` → `"$15.61"`.
+    static func formatCents(_ cents: Int, symbol: String = "$") -> String {
+        let absCents = abs(cents)
+        let dollars = absCents / 100
+        let remainder = absCents % 100
+        let prefix = cents < 0 ? "-" : ""
+        return String(format: "%@%@%d.%02d", prefix, symbol, dollars, remainder)
     }
 
     // MARK: - Notification Delivery

@@ -1030,28 +1030,28 @@ struct ValueInsightEngineTests {
     func extraUsageInsightsWithData() {
         let cycles = [
             CycleUtilization(label: "Sep", year: 2025, utilizationPercent: 50, dollarValue: 10, isPartial: false, resetCount: 3),
-            CycleUtilization(label: "Oct", year: 2025, utilizationPercent: 80, dollarValue: 16, isPartial: false, resetCount: 5, extraUsageSpend: 12.50),
-            CycleUtilization(label: "Nov", year: 2025, utilizationPercent: 90, dollarValue: 18, isPartial: false, resetCount: 6, extraUsageSpend: 25.00),
+            CycleUtilization(label: "Oct", year: 2025, utilizationPercent: 80, dollarValue: 16, isPartial: false, resetCount: 5, extraUsageSpend: 1250.0),
+            CycleUtilization(label: "Nov", year: 2025, utilizationPercent: 90, dollarValue: 18, isPartial: false, resetCount: 6, extraUsageSpend: 2500.0),
             CycleUtilization(label: "Dec", year: 2025, utilizationPercent: 60, dollarValue: 12, isPartial: false, resetCount: 4),
-            CycleUtilization(label: "Jan", year: 2026, utilizationPercent: 85, dollarValue: 17, isPartial: true, resetCount: 3, extraUsageSpend: 8.75),
+            CycleUtilization(label: "Jan", year: 2026, utilizationPercent: 85, dollarValue: 17, isPartial: true, resetCount: 3, extraUsageSpend: 875.0),
         ]
         let insights = ValueInsightEngine.computeExtraUsageInsights(cycles: cycles)
         #expect(insights.count == 1)
 
         let insight = insights[0]
-        // Total: 12.50 + 25.00 + 8.75 = 46.25
+        // Total: 1250 + 2500 + 875 = 4625 cents = $46.25
         #expect(insight.text.contains("$46.25"))
         // Count: 3 months
         #expect(insight.text.contains("3 months"))
-        // Average: 46.25 / 3 = 15.42
+        // Average: 4625 / 3 = 1542 cents = $15.42
         #expect(insight.text.contains("$15.42"))
     }
 
     @Test("computeExtraUsageInsights returns insight at .usageDeviation priority")
     func extraUsageInsightPriority() {
         let cycles = [
-            CycleUtilization(label: "Oct", year: 2025, utilizationPercent: 80, dollarValue: 16, isPartial: false, resetCount: 5, extraUsageSpend: 10.0),
-            CycleUtilization(label: "Nov", year: 2025, utilizationPercent: 90, dollarValue: 18, isPartial: false, resetCount: 6, extraUsageSpend: 20.0),
+            CycleUtilization(label: "Oct", year: 2025, utilizationPercent: 80, dollarValue: 16, isPartial: false, resetCount: 5, extraUsageSpend: 1000.0),
+            CycleUtilization(label: "Nov", year: 2025, utilizationPercent: 90, dollarValue: 18, isPartial: false, resetCount: 6, extraUsageSpend: 2000.0),
             CycleUtilization(label: "Dec", year: 2025, utilizationPercent: 70, dollarValue: 14, isPartial: false, resetCount: 4),
         ]
         let insights = ValueInsightEngine.computeExtraUsageInsights(cycles: cycles)
@@ -1063,7 +1063,7 @@ struct ValueInsightEngineTests {
     @Test("computeExtraUsageInsights text format includes dollar amounts and cycle count")
     func extraUsageInsightTextFormat() {
         let cycles = [
-            CycleUtilization(label: "Oct", year: 2025, utilizationPercent: 80, dollarValue: 16, isPartial: false, resetCount: 5, extraUsageSpend: 5.0),
+            CycleUtilization(label: "Oct", year: 2025, utilizationPercent: 80, dollarValue: 16, isPartial: false, resetCount: 5, extraUsageSpend: 500.0),
         ]
         let insights = ValueInsightEngine.computeExtraUsageInsights(cycles: cycles)
         #expect(insights.count == 1)
@@ -1076,8 +1076,8 @@ struct ValueInsightEngineTests {
     @Test("computeExtraUsageInsights includes preciseDetail")
     func extraUsageInsightPreciseDetail() {
         let cycles = [
-            CycleUtilization(label: "Oct", year: 2025, utilizationPercent: 80, dollarValue: 16, isPartial: false, resetCount: 5, extraUsageSpend: 15.0),
-            CycleUtilization(label: "Nov", year: 2025, utilizationPercent: 90, dollarValue: 18, isPartial: false, resetCount: 6, extraUsageSpend: 25.0),
+            CycleUtilization(label: "Oct", year: 2025, utilizationPercent: 80, dollarValue: 16, isPartial: false, resetCount: 5, extraUsageSpend: 1500.0),
+            CycleUtilization(label: "Nov", year: 2025, utilizationPercent: 90, dollarValue: 18, isPartial: false, resetCount: 6, extraUsageSpend: 2500.0),
         ]
         let insights = ValueInsightEngine.computeExtraUsageInsights(cycles: cycles)
         #expect(insights[0].preciseDetail != nil)

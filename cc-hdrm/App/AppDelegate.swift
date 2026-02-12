@@ -329,9 +329,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else if appState.isExtraUsageActive {
             // Extra usage mode: reversed gauge showing prepaid balance draining
             let utilization = appState.extraUsageUtilization ?? 0
-            if let remaining = appState.extraUsageRemainingBalance,
-               let limit = appState.extraUsageMonthlyLimit, limit > 0 {
-                let remainingFraction = remaining / limit
+            if let remainingCents = appState.extraUsageRemainingBalanceCents,
+               let limitCents = appState.extraUsageMonthlyLimitCents, limitCents > 0 {
+                let remainingFraction = Double(remainingCents) / Double(limitCents)
                 icon = GaugeIcon.makeExtraUsage(remainingFraction: remainingFraction, utilization: utilization)
             } else {
                 icon = GaugeIcon.makeExtraUsageNoLimit(utilization: utilization)
@@ -379,11 +379,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if state == .disconnected {
             accessibilityValue = "cc-hdrm: Claude headroom disconnected"
         } else if appState.isExtraUsageActive {
-            let used = appState.extraUsageUsedCredits ?? 0
-            if let limit = appState.extraUsageMonthlyLimit {
-                accessibilityValue = "cc-hdrm: Claude usage: extra usage active, \(String(format: "%.2f", used)) dollars spent of \(String(format: "%.2f", limit)) dollar limit"
+            let usedCents = appState.extraUsageUsedCreditsCents ?? 0
+            if let limitCents = appState.extraUsageMonthlyLimitCents {
+                accessibilityValue = "cc-hdrm: Claude usage: extra usage active, \(AppState.formatCents(usedCents)) spent of \(AppState.formatCents(limitCents)) limit"
             } else {
-                accessibilityValue = "cc-hdrm: Claude usage: extra usage active, \(String(format: "%.2f", used)) dollars spent, no limit set"
+                accessibilityValue = "cc-hdrm: Claude usage: extra usage active, \(AppState.formatCents(usedCents)) spent, no limit set"
             }
         } else if state == .exhausted {
             let window: WindowState? = appState.displayedWindow == .fiveHour ? appState.fiveHour : appState.sevenDay

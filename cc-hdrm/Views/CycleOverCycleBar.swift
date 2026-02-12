@@ -106,7 +106,7 @@ struct CycleOverCycleBar: View {
                         .foregroundStyle(.secondary)
                 }
                 if let spend = cycle.extraUsageSpend, spend > 0 {
-                    Text(String(format: "Extra: $%.2f", spend))
+                    Text("Extra: \(AppState.formatCents(Int(spend.rounded())))")
                         .font(.caption2)
                         .foregroundStyle(Color.extraUsageCool)
                 }
