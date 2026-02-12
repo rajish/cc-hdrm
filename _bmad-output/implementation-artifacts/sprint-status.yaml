@@ -140,7 +140,7 @@ development_status:
   16-1-slow-burn-pattern-detection-service: done
   16-2-pattern-notification-analytics-display: done
   16-3-tier-recommendation-service: done
-  16-4-tier-recommendation-display-billing-cycle: ready-for-dev
-  16-5-context-aware-insight-engine: backlog  # Future iteration
-  16-6-self-benchmarking-visual-trends: backlog  # Future iteration
+  16-4-tier-recommendation-display-billing-cycle: done
+  16-5-context-aware-insight-engine: ready-for-dev
+  16-6-self-benchmarking-visual-trends: ready-for-dev
   epic-16-retrospective: optional
