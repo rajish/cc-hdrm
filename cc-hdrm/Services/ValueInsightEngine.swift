@@ -392,7 +392,8 @@ enum ValueInsightEngine {
         creditLimits: CreditLimits?,
         headroomAnalysisService: any HeadroomAnalysisServiceProtocol,
         patternFindings: [PatternFinding] = [],
-        tierRecommendation: TierRecommendation? = nil
+        tierRecommendation: TierRecommendation? = nil,
+        cycleUtilizations: [CycleUtilization] = []
     ) -> [ValueInsight] {
         var insights: [ValueInsight] = []
 
@@ -418,6 +419,10 @@ enum ValueInsightEngine {
             headroomAnalysisService: headroomAnalysisService
         )
         insights.append(usageInsight)
+
+        // Self-benchmarking anchors (Story 16.6) → usageDeviation priority
+        let benchmarkAnchors = computeBenchmarkAnchors(cycles: cycleUtilizations)
+        insights.append(contentsOf: benchmarkAnchors)
 
         // Sort by priority descending (highest first), stable order within same priority
         insights.sort { $0.priority > $1.priority }
@@ -450,5 +455,105 @@ enum ValueInsightEngine {
             priority: .tierRecommendation,
             preciseDetail: detail
         )
+    }
+
+    // MARK: - Self-Benchmarking Anchors (Story 16.6)
+
+    /// Computes self-benchmarking anchor insights from cycle utilization history.
+    /// Returns insights at `.usageDeviation` priority for integration with InsightStack.
+    ///
+    /// Three anchor types:
+    /// 1. **Peak detection**: Current cycle exceeds historical peak → "Your heaviest month since [month]"
+    /// 2. **Consecutive high months**: 3+ months above 80% → "Nth consecutive month above 80%"
+    /// 3. **Decline from peak**: Current down >30% from peak → "Usage down [amount] from peak in [month]"
+    static func computeBenchmarkAnchors(
+        cycles: [CycleUtilization]
+    ) -> [ValueInsight] {
+        let complete = cycles.filter { !$0.isPartial }
+        guard complete.count >= 3 else { return [] }
+
+        var anchors: [ValueInsight] = []
+
+        // Current cycle is the last one (may be partial)
+        let currentCycle = cycles.last!
+
+        // 1. Peak detection — compare current against historical maximum of complete cycles
+        if let peakCycle = complete.max(by: { $0.utilizationPercent < $1.utilizationPercent }) {
+            if currentCycle.utilizationPercent > peakCycle.utilizationPercent && currentCycle.isPartial {
+                let monthName = NaturalLanguageFormatter.monthName(for: monthNumber(from: peakCycle.label))
+                let ref = NaturalLanguageFormatter.formatRelativeTimeNatural(monthName: monthName, year: peakCycle.year)
+                anchors.append(ValueInsight(
+                    text: "Your heaviest month \(ref)",
+                    isQuiet: false,
+                    priority: .usageDeviation,
+                    preciseDetail: "\(formatPercent(currentCycle.utilizationPercent)) utilization, exceeding previous peak of \(formatPercent(peakCycle.utilizationPercent))"
+                ))
+            }
+        }
+
+        // 2. Consecutive high months — scan for runs above 80%
+        var consecutiveHigh = 0
+        for cycle in complete.reversed() {
+            if cycle.utilizationPercent > 80.0 {
+                consecutiveHigh += 1
+            } else {
+                break
+            }
+        }
+        if consecutiveHigh >= 3 {
+            anchors.append(ValueInsight(
+                text: "\(ordinal(consecutiveHigh)) consecutive month above 80% utilization",
+                isQuiet: false,
+                priority: .usageDeviation,
+                preciseDetail: "\(consecutiveHigh) months in a row above 80%"
+            ))
+        }
+
+        // 3. Decline from peak — current vs historical max
+        if let peakCycle = complete.max(by: { $0.utilizationPercent < $1.utilizationPercent }),
+           peakCycle.utilizationPercent > 0 {
+            let decline = peakCycle.utilizationPercent - currentCycle.utilizationPercent
+            let declinePercent = (decline / peakCycle.utilizationPercent) * 100.0
+            if declinePercent > 30.0 {
+                let monthName = NaturalLanguageFormatter.monthName(for: monthNumber(from: peakCycle.label))
+                let monthRef = NaturalLanguageFormatter.formatMonthReference(monthName: monthName, year: peakCycle.year)
+                let nl = NaturalLanguageFormatter.formatPercentNatural(decline)
+                anchors.append(ValueInsight(
+                    text: "Usage down \(nl) from your peak in \(monthRef)",
+                    isQuiet: false,
+                    priority: .usageDeviation,
+                    preciseDetail: "Down \(formatPercent(decline)) from peak of \(formatPercent(peakCycle.utilizationPercent))"
+                ))
+            }
+        }
+
+        return anchors
+    }
+
+    /// Converts a short month abbreviation to a month number (1-12).
+    private static func monthNumber(from abbreviation: String) -> Int {
+        let symbols = Calendar.current.shortMonthSymbols
+        if let index = symbols.firstIndex(of: abbreviation) {
+            return index + 1
+        }
+        return 1
+    }
+
+    /// Returns ordinal string (e.g., 3 → "3rd", 4 → "4th").
+    private static func ordinal(_ n: Int) -> String {
+        let suffix: String
+        let ones = n % 10
+        let tens = (n / 10) % 10
+        if tens == 1 {
+            suffix = "th"
+        } else {
+            switch ones {
+            case 1: suffix = "st"
+            case 2: suffix = "nd"
+            case 3: suffix = "rd"
+            default: suffix = "th"
+            }
+        }
+        return "\(n)\(suffix)"
     }
 }

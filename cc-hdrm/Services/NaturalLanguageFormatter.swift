@@ -57,6 +57,16 @@ enum NaturalLanguageFormatter {
         return "since \(monthName)"
     }
 
+    /// Returns a bare month reference without preposition (e.g., "November" or "November 2025").
+    /// Use when the caller supplies its own preposition (e.g., "in", "from").
+    static func formatMonthReference(monthName: String, year: Int? = nil) -> String {
+        let currentYear = Calendar.current.component(.year, from: Date())
+        if let year, year != currentYear {
+            return "\(monthName) \(year)"
+        }
+        return monthName
+    }
+
     /// Returns the month name for a given month number (1-12).
     static func monthName(for month: Int) -> String {
         let formatter = DateFormatter()

@@ -1,6 +1,6 @@
 # Story 16.6: Self-Benchmarking & Visual Trends
 
-Status: ready-for-dev
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -44,73 +44,73 @@ so that raw numbers have personal context and I can spot long-term patterns at a
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Create CycleUtilization model (AC: 1, 2, 4)
-  - [ ] 1.1 Create `cc-hdrm/Models/CycleUtilization.swift`
-  - [ ] 1.2 Define struct with: `label: String` (e.g., "Jan"), `year: Int`, `utilizationPercent: Double`, `dollarValue: Double?`, `isPartial: Bool` (current incomplete cycle), `resetCount: Int`
-  - [ ] 1.3 Make `Identifiable` (id = "\(year)-\(label)") and `Sendable`
+- [x] Task 1: Create CycleUtilization model (AC: 1, 2, 4)
+  - [x] 1.1 Create `cc-hdrm/Models/CycleUtilization.swift`
+  - [x] 1.2 Define struct with: `label: String` (e.g., "Jan"), `year: Int`, `utilizationPercent: Double`, `dollarValue: Double?`, `isPartial: Bool` (current incomplete cycle), `resetCount: Int`
+  - [x] 1.3 Make `Identifiable` (id = "\(year)-\(label)") and `Sendable`
 
-- [ ] Task 2: Create CycleUtilizationCalculator service (AC: 1, 4)
-  - [ ] 2.1 Create `cc-hdrm/Services/CycleUtilizationCalculator.swift` as pure enum (same pattern as `ValueInsightEngine`)
-  - [ ] 2.2 Implement `computeCycles(resetEvents:creditLimits:billingCycleDay:headroomAnalysisService:) -> [CycleUtilization]`
-  - [ ] 2.3 Group reset events by billing cycle (if `billingCycleDay` set) or calendar month (if nil)
-  - [ ] 2.4 For each group: compute utilization via `SubscriptionValueCalculator.calculate()`, mark last group as `isPartial: true` if within current calendar month/billing cycle
-  - [ ] 2.5 Return chronologically sorted array; return empty if fewer than 3 complete cycles
-  - [ ] 2.6 Reuse grouping pattern from `ValueInsightEngine.computeMonthlyUtilizations()` (lines 211-246)
+- [x] Task 2: Create CycleUtilizationCalculator service (AC: 1, 4)
+  - [x] 2.1 Create `cc-hdrm/Services/CycleUtilizationCalculator.swift` as pure enum (same pattern as `ValueInsightEngine`)
+  - [x] 2.2 Implement `computeCycles(resetEvents:creditLimits:billingCycleDay:headroomAnalysisService:) -> [CycleUtilization]`
+  - [x] 2.3 Group reset events by billing cycle (if `billingCycleDay` set) or calendar month (if nil)
+  - [x] 2.4 For each group: compute utilization via `SubscriptionValueCalculator.calculate()`, mark last group as `isPartial: true` if within current calendar month/billing cycle
+  - [x] 2.5 Return chronologically sorted array; return empty if fewer than 3 complete cycles
+  - [x] 2.6 Reuse grouping pattern from `ValueInsightEngine.computeMonthlyUtilizations()` (lines 211-246)
 
-- [ ] Task 3: Create CycleOverCycleBar view component (AC: 1, 2, 5)
-  - [ ] 3.1 Create `cc-hdrm/Views/CycleOverCycleBar.swift`
-  - [ ] 3.2 Accept `cycles: [CycleUtilization]`, `timeRange: TimeRange`
-  - [ ] 3.3 Render only when `timeRange` is `.month` or `.all` AND `cycles.count >= 3`
-  - [ ] 3.4 Use Swift Charts `BarMark` with one bar per cycle
-  - [ ] 3.5 Color: `.headroomNormal` for complete cycles, `.headroomNormal.opacity(0.4)` for partial (current) cycle
-  - [ ] 3.6 Height: fixed 60px to keep compact
-  - [ ] 3.7 X-axis: month abbreviation labels (e.g., "Jan", "Feb"); hide for >12 cycles (too crowded)
-  - [ ] 3.8 Y-axis: hidden (trend is enough — no need for explicit percent axis)
+- [x] Task 3: Create CycleOverCycleBar view component (AC: 1, 2, 5)
+  - [x] 3.1 Create `cc-hdrm/Views/CycleOverCycleBar.swift`
+  - [x] 3.2 Accept `cycles: [CycleUtilization]`, `timeRange: TimeRange`
+  - [x] 3.3 Render only when `timeRange` is `.month` or `.all` AND `cycles.count >= 3`
+  - [x] 3.4 Use Swift Charts `BarMark` with one bar per cycle
+  - [x] 3.5 Color: `.headroomNormal` for complete cycles, `.headroomNormal.opacity(0.4)` for partial (current) cycle
+  - [x] 3.6 Height: fixed 60px to keep compact
+  - [x] 3.7 X-axis: month abbreviation labels (e.g., "Jan", "Feb"); hide for >12 cycles (too crowded)
+  - [x] 3.8 Y-axis: hidden (trend is enough — no need for explicit percent axis)
 
-- [ ] Task 4: Add hover tooltip to CycleOverCycleBar (AC: 2)
-  - [ ] 4.1 Add `@State private var hoveredCycle: CycleUtilization?` state
-  - [ ] 4.2 Use `chartOverlay` or `AnnotationMark` for tooltip positioning
-  - [ ] 4.3 Tooltip content: "Nov 2025\n72% utilization\n$14 of $20" (month + year, percentage, dollar value if available)
-  - [ ] 4.4 Dollar value shows only when `dollarValue != nil`
+- [x] Task 4: Add hover tooltip to CycleOverCycleBar (AC: 2)
+  - [x] 4.1 Add `@State private var hoveredCycle: CycleUtilization?` state
+  - [x] 4.2 Use `chartOverlay` or `AnnotationMark` for tooltip positioning
+  - [x] 4.3 Tooltip content: "Nov 2025\n72% utilization\n$14 of $20" (month + year, percentage, dollar value if available)
+  - [x] 4.4 Dollar value shows only when `dollarValue != nil`
 
-- [ ] Task 5: Add VoiceOver accessibility to CycleOverCycleBar (AC: 6)
-  - [ ] 5.1 Compute trend summary string: "rising", "falling", "stable" based on last 3 complete cycles
-  - [ ] 5.2 Set `.accessibilityLabel("Usage trend over \(cycles.count) months. \(trendSummary).")`
-  - [ ] 5.3 Add `.accessibilityHint("Double-tap for details")`
-  - [ ] 5.4 Each bar as accessibility child element: "November 2025, 72 percent utilization, 14 dollars of 20"
+- [x] Task 5: Add VoiceOver accessibility to CycleOverCycleBar (AC: 6)
+  - [x] 5.1 Compute trend summary string: "rising", "falling", "stable" based on last 3 complete cycles
+  - [x] 5.2 Set `.accessibilityLabel("Usage trend over \(cycles.count) months. \(trendSummary).")`
+  - [x] 5.3 Add `.accessibilityHint("Double-tap for details")`
+  - [x] 5.4 Each bar as accessibility child element: "November 2025, 72 percent utilization, 14 dollars of 20"
 
-- [ ] Task 6: Add self-benchmarking anchor computation (AC: 3)
-  - [ ] 6.1 Add `static func computeBenchmarkAnchors(...)` to `cc-hdrm/Services/ValueInsightEngine.swift` (or `CycleUtilizationCalculator`)
-  - [ ] 6.2 Detect "highest usage week since [month]": find peak week utilization and compare against historical peak
-  - [ ] 6.3 Detect "N consecutive months above X% utilization": scan cycle array for runs above 80%
-  - [ ] 6.4 Detect "Usage down N% from peak in [month]": compare current cycle to historical max
-  - [ ] 6.5 Return as `[ValueInsight]` with `.usageDeviation` priority (integrates with Story 16.5's InsightStack)
-  - [ ] 6.6 Use `NaturalLanguageFormatter` from Story 16.5 for text generation
+- [x] Task 6: Add self-benchmarking anchor computation (AC: 3)
+  - [x] 6.1 Add `static func computeBenchmarkAnchors(...)` to `cc-hdrm/Services/ValueInsightEngine.swift` (or `CycleUtilizationCalculator`)
+  - [x] 6.2 Detect "highest usage week since [month]": find peak week utilization and compare against historical peak
+  - [x] 6.3 Detect "N consecutive months above X% utilization": scan cycle array for runs above 80%
+  - [x] 6.4 Detect "Usage down N% from peak in [month]": compare current cycle to historical max
+  - [x] 6.5 Return as `[ValueInsight]` with `.usageDeviation` priority (integrates with Story 16.5's InsightStack)
+  - [x] 6.6 Use `NaturalLanguageFormatter` from Story 16.5 for text generation
 
-- [ ] Task 7: Integrate CycleOverCycleBar into AnalyticsView (AC: 1, 5)
-  - [ ] 7.1 Add `@State private var cycleUtilizations: [CycleUtilization] = []` to `cc-hdrm/Views/AnalyticsView.swift`
-  - [ ] 7.2 Load cycles in `loadData()` after reset events are fetched
-  - [ ] 7.3 Insert `CycleOverCycleBar` in the value section between `HeadroomBreakdownBar` and card/insight area
-  - [ ] 7.4 Only render for `.month` and `.all` time ranges (per AC 5)
-  - [ ] 7.5 Pass `preferencesManager?.billingCycleDay` to calculator for billing cycle alignment
+- [x] Task 7: Integrate CycleOverCycleBar into AnalyticsView (AC: 1, 5)
+  - [x] 7.1 Add `@State private var cycleUtilizations: [CycleUtilization] = []` to `cc-hdrm/Views/AnalyticsView.swift`
+  - [x] 7.2 Load cycles in `loadData()` after reset events are fetched
+  - [x] 7.3 Insert `CycleOverCycleBar` in the value section between `HeadroomBreakdownBar` and card/insight area
+  - [x] 7.4 Only render for `.month` and `.all` time ranges (per AC 5)
+  - [x] 7.5 Pass `preferencesManager?.billingCycleDay` to calculator for billing cycle alignment
 
-- [ ] Task 8: Write unit tests for CycleUtilizationCalculator (AC: 1, 4)
-  - [ ] 8.1 Create `cc-hdrmTests/Services/CycleUtilizationCalculatorTests.swift`
-  - [ ] 8.2 Test grouping by calendar month produces correct cycle labels
-  - [ ] 8.3 Test grouping with `billingCycleDay` set aligns to billing boundaries
-  - [ ] 8.4 Test fewer than 3 complete cycles returns empty array
-  - [ ] 8.5 Test current partial cycle has `isPartial: true`
-  - [ ] 8.6 Test utilization percentages match expected values
-  - [ ] 8.7 Test dollar values are populated when `creditLimits` has `monthlyPrice`
+- [x] Task 8: Write unit tests for CycleUtilizationCalculator (AC: 1, 4)
+  - [x] 8.1 Create `cc-hdrmTests/Services/CycleUtilizationCalculatorTests.swift`
+  - [x] 8.2 Test grouping by calendar month produces correct cycle labels
+  - [x] 8.3 Test grouping with `billingCycleDay` set aligns to billing boundaries
+  - [x] 8.4 Test fewer than 3 complete cycles returns empty array
+  - [x] 8.5 Test current partial cycle has `isPartial: true`
+  - [x] 8.6 Test utilization percentages match expected values
+  - [x] 8.7 Test dollar values are populated when `creditLimits` has `monthlyPrice`
 
-- [ ] Task 9: Write unit tests for self-benchmarking anchors (AC: 3)
-  - [ ] 9.1 Add tests in same file or `cc-hdrmTests/Services/ValueInsightEngineTests.swift`
-  - [ ] 9.2 Test peak detection returns "highest usage week since [month]" when current exceeds historical peak
-  - [ ] 9.3 Test consecutive months detection when 3+ months above 80%
-  - [ ] 9.4 Test decline detection when current is significantly below peak
-  - [ ] 9.5 Test no anchors returned when insufficient history
+- [x] Task 9: Write unit tests for self-benchmarking anchors (AC: 3)
+  - [x] 9.1 Add tests in same file or `cc-hdrmTests/Services/ValueInsightEngineTests.swift`
+  - [x] 9.2 Test peak detection returns "highest usage week since [month]" when current exceeds historical peak
+  - [x] 9.3 Test consecutive months detection when 3+ months above 80%
+  - [x] 9.4 Test decline detection when current is significantly below peak
+  - [x] 9.5 Test no anchors returned when insufficient history
 
-- [ ] Task 10: Run `xcodegen generate` and verify compilation + all tests pass
+- [x] Task 10: Run `xcodegen generate` and verify compilation + all tests pass
 
 ## Dev Notes
 
@@ -275,8 +275,41 @@ After adding files, run `xcodegen generate` to regenerate the Xcode project.
 
 ### Agent Model Used
 
+Claude Opus 4.6
+
 ### Debug Log References
+
+- Build error: `proxy.plotFrame` returns `Anchor<CGRect>?`, not `CGRect?`. Fixed by using `proxy.value(atX:)` for string-keyed x-axis hover detection instead.
+- Build error: `CGFloat` division result cannot be directly cast to `Int`. Fixed with explicit `Double()` conversion.
 
 ### Completion Notes List
 
+- Created `CycleUtilization` model with `Identifiable`, `Sendable`, `Equatable` conformances
+- Created `CycleUtilizationCalculator` as pure enum with calendar month and billing cycle grouping, partial cycle detection, and 3-complete-cycle minimum threshold
+- Created `CycleOverCycleBar` view using Swift Charts `BarMark`, 60px compact height, conditional rendering for `.month`/`.all` only
+- Added hover tooltip via `chartOverlay` showing month/year, utilization %, and dollar value
+- Added VoiceOver accessibility: trend summary label, hint, per-bar child labels
+- Added `computeBenchmarkAnchors()` to `ValueInsightEngine` with three anchor types: peak detection, consecutive high months, decline from peak
+- Integrated into `AnalyticsView`: state property, loading in `loadData()`, rendering in value section between HeadroomBreakdownBar and PatternFindingCards
+- Wrote 16 unit tests covering calculator grouping, edge cases, and all 3 benchmark anchor types
+
 ### File List
+
+New files:
+- `cc-hdrm/Models/CycleUtilization.swift`
+- `cc-hdrm/Services/CycleUtilizationCalculator.swift`
+- `cc-hdrm/Views/CycleOverCycleBar.swift`
+- `cc-hdrmTests/Services/CycleUtilizationCalculatorTests.swift`
+
+Modified files:
+- `cc-hdrm/Views/AnalyticsView.swift`
+- `cc-hdrm/Services/ValueInsightEngine.swift`
+- `cc-hdrm/Views/CycleOverCycleBar.swift`
+- `cc-hdrm/Services/NaturalLanguageFormatter.swift`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `_bmad-output/implementation-artifacts/16-6-self-benchmarking-visual-trends.md`
+
+## Change Log
+
+- 2026-02-12: Implemented Story 16.6 - Self-Benchmarking & Visual Trends. Added cycle-over-cycle bar chart, billing cycle alignment, hover tooltips, VoiceOver accessibility, self-benchmarking anchor computation, and AnalyticsView integration. 16 unit tests added.
+- 2026-02-12: Code review fixes — integrated benchmark anchors into InsightStack (AC 3 was dead code), fixed tooltip "$X of $Y" format (AC 2), cached DateFormatter in CycleOverCycleBar, fixed decline anchor preposition ("in [month]" not "since [month]"), added NaturalLanguageFormatter.formatMonthReference(), corrected test count (16 not 17).
