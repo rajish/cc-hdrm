@@ -38,5 +38,9 @@ protocol PreferencesManagerProtocol: AnyObject {
     /// Set of cooldown keys for pattern findings the user has dismissed in the analytics view.
     var dismissedPatternFindings: Set<String> { get set }
 
+    /// Fingerprint of the last dismissed tier recommendation.
+    /// When the current recommendation fingerprint matches, the card stays dismissed.
+    var dismissedTierRecommendation: String? { get set }
+
     func resetToDefaults()
 }

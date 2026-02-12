@@ -24,6 +24,7 @@ final class PreferencesManager: PreferencesManagerProtocol {
         static let billingCycleDay = "com.cc-hdrm.billingCycleDay"
         static let patternNotificationCooldowns = "com.cc-hdrm.patternNotificationCooldowns"
         static let dismissedPatternFindings = "com.cc-hdrm.dismissedPatternFindings"
+        static let dismissedTierRecommendation = "com.cc-hdrm.dismissedTierRecommendation"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -241,6 +242,22 @@ final class PreferencesManager: PreferencesManagerProtocol {
         }
     }
 
+    // MARK: - Dismissed Tier Recommendation
+
+    var dismissedTierRecommendation: String? {
+        get {
+            defaults.string(forKey: Keys.dismissedTierRecommendation)
+        }
+        set {
+            if let newValue {
+                defaults.set(newValue, forKey: Keys.dismissedTierRecommendation)
+            } else {
+                defaults.removeObject(forKey: Keys.dismissedTierRecommendation)
+            }
+        }
+    }
+
+
     // MARK: - Reset
 
     func resetToDefaults() {
@@ -257,5 +274,6 @@ final class PreferencesManager: PreferencesManagerProtocol {
         defaults.removeObject(forKey: Keys.billingCycleDay)
         defaults.removeObject(forKey: Keys.patternNotificationCooldowns)
         defaults.removeObject(forKey: Keys.dismissedPatternFindings)
+        defaults.removeObject(forKey: Keys.dismissedTierRecommendation)
     }
 }

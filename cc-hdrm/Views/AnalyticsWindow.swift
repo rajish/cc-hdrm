@@ -14,6 +14,7 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
     private var historicalDataService: (any HistoricalDataServiceProtocol)?
     private var headroomAnalysisService: (any HeadroomAnalysisServiceProtocol)?
     private var patternDetector: (any SubscriptionPatternDetectorProtocol)?
+    private var tierRecommendationService: (any TierRecommendationServiceProtocol)?
     private var preferencesManager: (any PreferencesManagerProtocol)?
 
     private static let logger = Logger(
@@ -25,19 +26,21 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
         super.init()
     }
 
-    /// Configure with AppState and HistoricalDataService references.
+    /// Configure with AppState and service references.
     /// Must be called during app initialization.
     func configure(
         appState: AppState,
         historicalDataService: any HistoricalDataServiceProtocol,
         headroomAnalysisService: any HeadroomAnalysisServiceProtocol,
         patternDetector: (any SubscriptionPatternDetectorProtocol)? = nil,
+        tierRecommendationService: (any TierRecommendationServiceProtocol)? = nil,
         preferencesManager: (any PreferencesManagerProtocol)? = nil
     ) {
         self.appState = appState
         self.historicalDataService = historicalDataService
         self.headroomAnalysisService = headroomAnalysisService
         self.patternDetector = patternDetector
+        self.tierRecommendationService = tierRecommendationService
         self.preferencesManager = preferencesManager
     }
 
@@ -107,6 +110,7 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
             appState: appState,
             headroomAnalysisService: headroomAnalysisService,
             patternDetector: patternDetector,
+            tierRecommendationService: tierRecommendationService,
             preferencesManager: preferencesManager
         )
         panel.contentView = NSHostingView(rootView: contentView)
@@ -137,6 +141,7 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
         historicalDataService = nil
         headroomAnalysisService = nil
         patternDetector = nil
+        tierRecommendationService = nil
         preferencesManager = nil
     }
     #endif

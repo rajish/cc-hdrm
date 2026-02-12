@@ -124,9 +124,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
 
-        // Configure AnalyticsWindow with AppState, HistoricalDataService, HeadroomAnalysisService, and pattern detection
+        // Configure AnalyticsWindow with AppState, HistoricalDataService, HeadroomAnalysisService, pattern detection, and tier recommendations
         if let histService = historicalDataServiceRef, let headroomService = headroomAnalysisServiceRef {
             let analyticsPatternDetector = SubscriptionPatternDetector(
+                historicalDataService: histService,
+                preferencesManager: preferences
+            )
+            let tierRecommendationService = TierRecommendationService(
                 historicalDataService: histService,
                 preferencesManager: preferences
             )
@@ -135,6 +139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 historicalDataService: histService,
                 headroomAnalysisService: headroomService,
                 patternDetector: analyticsPatternDetector,
+                tierRecommendationService: tierRecommendationService,
                 preferencesManager: preferences
             )
         }
