@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import Testing
 @testable import cc_hdrm
 
@@ -121,6 +122,32 @@ struct ColorHeadroomTests {
         #expect(cool != warm, "Cool and warm should be different colors")
         #expect(warm != hot, "Warm and hot should be different colors")
         #expect(hot != critical, "Hot and critical should be different colors")
+    }
+
+    // MARK: - SwiftUI Color.extraUsageColor(for:) Tests (Story 17.2)
+
+    @Test("Color.extraUsageColor(for: 0.2) returns .extraUsageCool")
+    func swiftUIExtraUsageCool() {
+        let color = Color.extraUsageColor(for: 0.2)
+        #expect(color == Color.extraUsageCool, "0.2 utilization should return extraUsageCool")
+    }
+
+    @Test("Color.extraUsageColor(for: 0.6) returns .extraUsageWarm")
+    func swiftUIExtraUsageWarm() {
+        let color = Color.extraUsageColor(for: 0.6)
+        #expect(color == Color.extraUsageWarm, "0.6 utilization should return extraUsageWarm")
+    }
+
+    @Test("Color.extraUsageColor(for: 0.8) returns .extraUsageHot")
+    func swiftUIExtraUsageHot() {
+        let color = Color.extraUsageColor(for: 0.8)
+        #expect(color == Color.extraUsageHot, "0.8 utilization should return extraUsageHot")
+    }
+
+    @Test("Color.extraUsageColor(for: 0.95) returns .extraUsageCritical")
+    func swiftUIExtraUsageCritical() {
+        let color = Color.extraUsageColor(for: 0.95)
+        #expect(color == Color.extraUsageCritical, "0.95 utilization should return extraUsageCritical")
     }
 
     @Test("extraUsageMenuBarFont uses semibold below 0.75, bold at 0.75+")

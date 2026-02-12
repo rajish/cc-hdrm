@@ -128,4 +128,19 @@ extension Color {
     static func headroomColor(for state: HeadroomState) -> Color {
         state.swiftUIColor
     }
+
+    /// Returns the SwiftUI extra usage color for the given utilization fraction (0-1).
+    /// Mirrors the `NSColor.extraUsageColor(for:)` 4-tier ramp.
+    static func extraUsageColor(for utilization: Double) -> Color {
+        switch utilization {
+        case ..<0.50:
+            return .extraUsageCool
+        case 0.50..<0.75:
+            return .extraUsageWarm
+        case 0.75..<0.90:
+            return .extraUsageHot
+        default:
+            return .extraUsageCritical
+        }
+    }
 }
