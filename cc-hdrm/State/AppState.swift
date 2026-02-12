@@ -49,6 +49,12 @@ final class AppState {
     private(set) var sevenDaySlope: SlopeLevel = .flat
     private(set) var creditLimits: CreditLimits?
 
+    // MARK: - Extra Usage State (Story 17.1)
+    private(set) var extraUsageEnabled: Bool = false
+    private(set) var extraUsageMonthlyLimit: Double?
+    private(set) var extraUsageUsedCredits: Double?
+    private(set) var extraUsageUtilization: Double?
+
     /// Whether the analytics window is currently open.
     /// Updated by AnalyticsWindow on window open/close.
     private(set) var isAnalyticsWindowOpen: Bool = false
@@ -147,12 +153,45 @@ final class AppState {
         }
     }
 
+    /// Whether extra usage mode is active: enabled AND at least one window exhausted.
+    var isExtraUsageActive: Bool {
+        guard extraUsageEnabled else { return false }
+        let fiveHourExhausted = fiveHour?.headroomState == .exhausted
+        let sevenDayExhausted = sevenDay?.headroomState == .exhausted
+        return fiveHourExhausted || sevenDayExhausted
+    }
+
+    /// Remaining prepaid extra usage balance. Nil when monthly limit or used credits unknown.
+    var extraUsageRemainingBalance: Double? {
+        guard let limit = extraUsageMonthlyLimit, let used = extraUsageUsedCredits else { return nil }
+        return limit - used
+    }
+
+    /// Menu bar text for extra usage mode. Returns formatted currency when active, nil otherwise.
+    var menuBarExtraUsageText: String? {
+        guard isExtraUsageActive else { return nil }
+        if let remaining = extraUsageRemainingBalance {
+            if remaining < 0 {
+                return String(format: "-$%.2f", abs(remaining))
+            }
+            return String(format: "$%.2f", remaining)
+        } else if let used = extraUsageUsedCredits {
+            return String(format: "$%.2f spent", used)
+        }
+        return "$0.00"
+    }
+
     /// Derived menu bar text: headroom percentage, countdown, or em dash when disconnected.
     /// Appends slope arrow when slope is actionable (rising/steep) and not in exhausted state.
     /// Note: Sparkle icon removed — gauge icon now provides the visual indicator.
     var menuBarText: String {
         if menuBarHeadroomState == .disconnected {
             return "\u{2014}" // — (em dash only)
+        }
+
+        // Extra usage mode: show currency instead of headroom
+        if let extraText = menuBarExtraUsageText {
+            return extraText
         }
 
         let window: WindowState? = displayedWindow == .fiveHour ? fiveHour : sevenDay
@@ -217,6 +256,14 @@ final class AppState {
     func updateSlopes(fiveHour: SlopeLevel, sevenDay: SlopeLevel) {
         self.fiveHourSlope = fiveHour
         self.sevenDaySlope = sevenDay
+    }
+
+    /// Updates extra usage billing state from API data.
+    func updateExtraUsage(enabled: Bool, monthlyLimit: Double?, usedCredits: Double?, utilization: Double?) {
+        self.extraUsageEnabled = enabled
+        self.extraUsageMonthlyLimit = monthlyLimit
+        self.extraUsageUsedCredits = usedCredits
+        self.extraUsageUtilization = utilization
     }
 
     /// Updates the sparkline data from recent polls.

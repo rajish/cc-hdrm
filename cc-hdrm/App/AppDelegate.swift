@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var previousAccessibilityValue: String?
     private var previousDisplayedWindow: DisplayedWindow?
     private var previousShowingCountdown: Bool = false
+    private var previousExtraUsageActive: Bool = false
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -317,6 +318,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let icon: NSImage
         if state == .disconnected {
             icon = makeDisconnectedIcon()
+        } else if appState.isExtraUsageActive {
+            // Extra usage mode: reversed gauge showing prepaid balance draining
+            let utilization = appState.extraUsageUtilization ?? 0
+            if let remaining = appState.extraUsageRemainingBalance,
+               let limit = appState.extraUsageMonthlyLimit, limit > 0 {
+                let remainingFraction = remaining / limit
+                icon = GaugeIcon.makeExtraUsage(remainingFraction: remainingFraction, utilization: utilization)
+            } else {
+                icon = GaugeIcon.makeExtraUsageNoLimit(utilization: utilization)
+            }
         } else {
             let window: WindowState? = appState.displayedWindow == .fiveHour ? appState.fiveHour : appState.sevenDay
             let headroom = min(100, max(0, 100.0 - (window?.utilization ?? 0)))
@@ -338,8 +349,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         statusItem?.button?.image = icon
 
-        let color = NSColor.headroomColor(for: state)
-        let font = NSFont.menuBarFont(for: state)
+        let color: NSColor
+        let font: NSFont
+        if appState.isExtraUsageActive {
+            let utilization = appState.extraUsageUtilization ?? 0
+            color = NSColor.extraUsageColor(for: utilization)
+            font = NSFont.extraUsageMenuBarFont(for: utilization)
+        } else {
+            color = NSColor.headroomColor(for: state)
+            font = NSFont.menuBarFont(for: state)
+        }
 
         let attributes: [NSAttributedString.Key: Any] = [
             .foregroundColor: color,
@@ -347,10 +366,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ]
         statusItem?.button?.attributedTitle = NSAttributedString(string: text, attributes: attributes)
 
-        // Accessibility (AC #6, #7)
+        // Accessibility (AC #6, #7, Story 17.1 AC #8)
         let accessibilityValue: String
         if state == .disconnected {
             accessibilityValue = "cc-hdrm: Claude headroom disconnected"
+        } else if appState.isExtraUsageActive {
+            let used = appState.extraUsageUsedCredits ?? 0
+            if let limit = appState.extraUsageMonthlyLimit {
+                accessibilityValue = "cc-hdrm: Claude usage: extra usage active, \(String(format: "%.2f", used)) dollars spent of \(String(format: "%.2f", limit)) dollar limit"
+            } else {
+                accessibilityValue = "cc-hdrm: Claude usage: extra usage active, \(String(format: "%.2f", used)) dollars spent, no limit set"
+            }
         } else if state == .exhausted {
             let window: WindowState? = appState.displayedWindow == .fiveHour ? appState.fiveHour : appState.sevenDay
             if let resetsAt = window?.resetsAt {
@@ -372,10 +398,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusItem?.button?.setAccessibilityLabel(accessibilityValue)
 
-        // Log display mode transitions (percentage↔countdown, 5h↔7d promotion)
+        // Log display mode transitions (percentage↔countdown, 5h↔7d promotion, extra usage)
         let currentWindow = appState.displayedWindow
         let currentShowingCountdown = text.contains("\u{21BB}")
+        let currentExtraUsageActive = appState.isExtraUsageActive
 
+        if previousExtraUsageActive != currentExtraUsageActive {
+            let mode = currentExtraUsageActive ? "extra usage" : "normal headroom"
+            Self.logger.info("Display mode switched to \(mode, privacy: .public)")
+        }
         if previousDisplayedWindow != nil && previousDisplayedWindow != currentWindow {
             let from = previousDisplayedWindow == .fiveHour ? "5h" : "7d"
             let to = currentWindow == .fiveHour ? "5h" : "7d"
@@ -387,6 +418,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         previousDisplayedWindow = currentWindow
         previousShowingCountdown = currentShowingCountdown
+        previousExtraUsageActive = currentExtraUsageActive
 
         if previousAccessibilityValue != accessibilityValue {
             statusItem?.button?.setAccessibilityValue(accessibilityValue)

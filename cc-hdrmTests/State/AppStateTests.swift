@@ -686,4 +686,157 @@ struct AppStateTests {
         state.setAnalyticsWindowOpen(false)
         #expect(state.isAnalyticsWindowOpen == false)
     }
+
+    // MARK: - Extra Usage State Tests (Story 17.1)
+
+    @Test("isExtraUsageActive returns true when enabled AND 5h exhausted")
+    @MainActor
+    func extraUsageActiveWhen5hExhausted() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateExtraUsage(enabled: true, monthlyLimit: 100.0, usedCredits: 15.0, utilization: 0.15)
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 100.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 70.0, resetsAt: nil)
+        )
+        #expect(state.isExtraUsageActive == true)
+    }
+
+    @Test("isExtraUsageActive returns true when enabled AND 7d exhausted")
+    @MainActor
+    func extraUsageActiveWhen7dExhausted() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateExtraUsage(enabled: true, monthlyLimit: 100.0, usedCredits: 15.0, utilization: 0.15)
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 50.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 100.0, resetsAt: nil)
+        )
+        #expect(state.isExtraUsageActive == true)
+    }
+
+    @Test("isExtraUsageActive returns false when enabled but no window exhausted")
+    @MainActor
+    func extraUsageInactiveWhenNoExhausted() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateExtraUsage(enabled: true, monthlyLimit: 100.0, usedCredits: 15.0, utilization: 0.15)
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 50.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 70.0, resetsAt: nil)
+        )
+        #expect(state.isExtraUsageActive == false)
+    }
+
+    @Test("isExtraUsageActive returns false when disabled even if exhausted")
+    @MainActor
+    func extraUsageInactiveWhenDisabled() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 100.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 100.0, resetsAt: nil)
+        )
+        #expect(state.isExtraUsageActive == false)
+    }
+
+    @Test("extraUsageRemainingBalance computes correctly")
+    @MainActor
+    func extraUsageRemainingBalanceComputation() {
+        let state = AppState()
+        state.updateExtraUsage(enabled: true, monthlyLimit: 100.0, usedCredits: 27.39, utilization: 0.2739)
+        #expect(state.extraUsageRemainingBalance != nil)
+        #expect(abs(state.extraUsageRemainingBalance! - 72.61) < 0.01)
+    }
+
+    @Test("extraUsageRemainingBalance returns nil when limit is nil")
+    @MainActor
+    func extraUsageRemainingBalanceNilWithoutLimit() {
+        let state = AppState()
+        state.updateExtraUsage(enabled: true, monthlyLimit: nil, usedCredits: 15.0, utilization: nil)
+        #expect(state.extraUsageRemainingBalance == nil)
+    }
+
+    @Test("menuBarText returns currency format when extra usage active with known limit")
+    @MainActor
+    func menuBarTextExtraUsageCurrency() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateExtraUsage(enabled: true, monthlyLimit: 100.0, usedCredits: 72.61, utilization: 0.7261)
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 100.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 70.0, resetsAt: nil)
+        )
+        #expect(state.menuBarText == "$27.39")
+    }
+
+    @Test("menuBarText returns spent format when extra usage active with no limit")
+    @MainActor
+    func menuBarTextExtraUsageSpent() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateExtraUsage(enabled: true, monthlyLimit: nil, usedCredits: 15.61, utilization: nil)
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 100.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 70.0, resetsAt: nil)
+        )
+        #expect(state.menuBarText == "$15.61 spent")
+    }
+
+    @Test("menuBarText returns normal headroom when extra usage inactive")
+    @MainActor
+    func menuBarTextNormalWhenExtraUsageInactive() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateExtraUsage(enabled: true, monthlyLimit: 100.0, usedCredits: 15.0, utilization: 0.15)
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 50.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 70.0, resetsAt: nil)
+        )
+        #expect(state.menuBarText == "50%")
+    }
+
+    @Test("updateExtraUsage clears previous values when called with nil")
+    @MainActor
+    func updateExtraUsageClearsValues() {
+        let state = AppState()
+        state.updateExtraUsage(enabled: true, monthlyLimit: 100.0, usedCredits: 50.0, utilization: 0.5)
+        #expect(state.extraUsageEnabled == true)
+        #expect(state.extraUsageMonthlyLimit == 100.0)
+
+        state.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
+        #expect(state.extraUsageEnabled == false)
+        #expect(state.extraUsageMonthlyLimit == nil)
+        #expect(state.extraUsageUsedCredits == nil)
+        #expect(state.extraUsageUtilization == nil)
+    }
+
+    @Test("menuBarText formats negative remaining balance with leading minus sign")
+    @MainActor
+    func menuBarTextNegativeRemainingBalance() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        // usedCredits exceeds monthlyLimit
+        state.updateExtraUsage(enabled: true, monthlyLimit: 100.0, usedCredits: 105.23, utilization: 1.0523)
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 100.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 70.0, resetsAt: nil)
+        )
+        #expect(state.menuBarText == "-$5.23")
+    }
+
+    @Test("menuBarExtraUsageText returns fallback when active but no credits data")
+    @MainActor
+    func menuBarExtraUsageTextFallbackWhenNilCredits() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateExtraUsage(enabled: true, monthlyLimit: nil, usedCredits: nil, utilization: nil)
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 100.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 70.0, resetsAt: nil)
+        )
+        #expect(state.menuBarExtraUsageText == "$0.00")
+        #expect(state.menuBarText == "$0.00")
+    }
 }

@@ -161,6 +161,18 @@ final class PollingEngine: PollingEngineProtocol {
             )
             appState.updateCreditLimits(resolvedLimits)
 
+            // Propagate extra usage state before windows to avoid transient UI flicker
+            if let extra = response.extraUsage {
+                appState.updateExtraUsage(
+                    enabled: extra.isEnabled ?? false,
+                    monthlyLimit: extra.monthlyLimit,
+                    usedCredits: extra.usedCredits,
+                    utilization: extra.utilization
+                )
+            } else {
+                appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
+            }
+
             appState.updateWindows(fiveHour: fiveHourState, sevenDay: sevenDayState)
             await notificationService?.evaluateThresholds(fiveHour: fiveHourState, sevenDay: sevenDayState)
             appState.updateConnectionStatus(.connected)
@@ -250,6 +262,7 @@ final class PollingEngine: PollingEngineProtocol {
             await attemptTokenRefresh(credentials: credentials)
         case .networkUnreachable:
             Self.logger.error("Network unreachable during usage fetch")
+            appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
             appState.updateConnectionStatus(.disconnected)
             appState.updateStatusMessage(StatusMessage(
                 title: "Unable to reach Claude API",
@@ -257,6 +270,7 @@ final class PollingEngine: PollingEngineProtocol {
             ))
         case .apiError(let statusCode, let body):
             Self.logger.error("API error \(statusCode): \(body ?? "no body")")
+            appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
             appState.updateConnectionStatus(.disconnected)
             appState.updateStatusMessage(StatusMessage(
                 title: "API error (\(statusCode))",
@@ -264,6 +278,7 @@ final class PollingEngine: PollingEngineProtocol {
             ))
         case .parseError:
             Self.logger.error("Failed to parse API response")
+            appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
             appState.updateConnectionStatus(.disconnected)
             appState.updateStatusMessage(StatusMessage(
                 title: "Unexpected API response format",
@@ -271,6 +286,7 @@ final class PollingEngine: PollingEngineProtocol {
             ))
         default:
             Self.logger.error("Unexpected error during usage fetch: \(String(describing: error))")
+            appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
             appState.updateConnectionStatus(.disconnected)
             appState.updateStatusMessage(StatusMessage(
                 title: "Unexpected error",
@@ -281,6 +297,7 @@ final class PollingEngine: PollingEngineProtocol {
 
     private func handleCredentialError(_ error: any Error) {
         appState.updateCreditLimits(nil)
+        appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
         appState.updateConnectionStatus(.noCredentials)
         appState.updateStatusMessage(StatusMessage(
             title: "No Claude credentials found",

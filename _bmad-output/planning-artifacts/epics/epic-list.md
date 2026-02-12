@@ -74,3 +74,11 @@ Alex sees the real story behind his usage — a three-band breakdown showing wha
 
 Alex configures how long cc-hdrm keeps historical data and optionally overrides credit limits for unknown subscription tiers.
 **FRs covered:** FR38
+
+## Epic 16: Subscription Intelligence (Phase 4)
+
+Alex doesn't just see what happened — cc-hdrm tells him what it means. Slow-burn patterns surface as macOS notifications before they become costly surprises. Tier recommendations answer "am I on the right plan?" with concrete numbers. The analytics view presents the single most relevant conclusion from multiple valid lenses, anchored against Alex's own usage history.
+
+## Epic 17: Extra Usage Visibility & Alerts (Phase 5)
+
+Alex doesn't just hit the wall anymore — when his 5h or 7d plan quota runs out, Anthropic's pay-as-you-go overflow kicks in and cc-hdrm shows him exactly what it's costing. The menu bar glows amber when extra credits are burning, the popover shows a live spend bar with balance and reset date, and the analytics window reveals which cycles crossed the 100% line and by how much. Configurable alerts fire when extra spend crosses thresholds.
