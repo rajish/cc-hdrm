@@ -113,4 +113,27 @@ struct PatternFindingTests {
         let b = PatternFinding.usageDecay(currentUtil: 30.0, threeMonthAgoUtil: 70.0)
         #expect(a != b)
     }
+
+    // MARK: - Cooldown Key Tests
+
+    @Test("cooldownKey is unique per finding type")
+    func cooldownKeyUniqueness() {
+        let findings: [PatternFinding] = [
+            .forgottenSubscription(weeks: 3, avgUtilization: 2.5, monthlyCost: 20.0),
+            .chronicOverpaying(currentTier: "Max 5x", recommendedTier: "Pro", monthlySavings: 80.0),
+            .chronicUnderpowering(rateLimitCount: 5, currentTier: "Pro", suggestedTier: "Max 5x"),
+            .usageDecay(currentUtil: 30.0, threeMonthAgoUtil: 70.0),
+            .extraUsageOverflow(avgExtraSpend: 47.0, recommendedTier: "Max 5x", estimatedSavings: 67.0),
+            .persistentExtraUsage(avgMonthlyExtra: 15.0, basePrice: 20.0, recommendedTier: "Max 5x"),
+        ]
+        let keys = Set(findings.map(\.cooldownKey))
+        #expect(keys.count == findings.count)
+    }
+
+    @Test("cooldownKey is consistent regardless of associated values")
+    func cooldownKeyConsistency() {
+        let a = PatternFinding.forgottenSubscription(weeks: 3, avgUtilization: 2.5, monthlyCost: 20.0)
+        let b = PatternFinding.forgottenSubscription(weeks: 5, avgUtilization: 1.0, monthlyCost: 100.0)
+        #expect(a.cooldownKey == b.cooldownKey)
+    }
 }

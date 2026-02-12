@@ -63,4 +63,17 @@ enum PatternFinding: Sendable, Equatable {
             return "Extra usage is \(pct)% of your base subscription ($\(String(format: "%.0f", avgExtra))/$\(Int(base))/mo). Consider \(recommended)."
         }
     }
+
+    /// Deterministic key for cooldown tracking and dismiss persistence.
+    /// Based on finding type only, not associated values.
+    var cooldownKey: String {
+        switch self {
+        case .forgottenSubscription: return "forgottenSubscription"
+        case .chronicOverpaying: return "chronicOverpaying"
+        case .chronicUnderpowering: return "chronicUnderpowering"
+        case .usageDecay: return "usageDecay"
+        case .extraUsageOverflow: return "extraUsageOverflow"
+        case .persistentExtraUsage: return "persistentExtraUsage"
+        }
+    }
 }

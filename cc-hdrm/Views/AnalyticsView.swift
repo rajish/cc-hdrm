@@ -13,6 +13,8 @@ struct AnalyticsView: View {
     let historicalDataService: any HistoricalDataServiceProtocol
     let appState: AppState
     let headroomAnalysisService: any HeadroomAnalysisServiceProtocol
+    var patternDetector: (any SubscriptionPatternDetectorProtocol)?
+    var preferencesManager: (any PreferencesManagerProtocol)?
 
     /// Per-time-range toggle state for series visibility.
     /// Defaults both series to visible; stored as a simple value type for `@State` compatibility.
@@ -64,6 +66,7 @@ struct AnalyticsView: View {
     /// Set to true once any successful load returns data. Used to distinguish
     /// "no data yet" (fresh install) from "no data for this range".
     @State private var hasAnyHistoricalData: Bool = false
+    @State private var patternFindings: [PatternFinding] = []
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -88,6 +91,9 @@ struct AnalyticsView: View {
         .padding()
         .task(id: selectedTimeRange) {
             await loadData()
+        }
+        .task {
+            await loadPatternFindings()
         }
     }
 
@@ -119,6 +125,9 @@ struct AnalyticsView: View {
             }
             // AC 5: quiet insight — no bar, falls through to summary only
         }
+        // Pattern finding cards (between bar and summary)
+        patternFindingCards
+
         // AC 4: empty events — no bar, summary only
         // Summary always shown — adapts text via ValueInsightEngine
         ContextAwareValueSummary(
@@ -160,6 +169,37 @@ struct AnalyticsView: View {
             headroomAnalysisService: headroomAnalysisService
         )
         return insight.isQuiet
+    }
+
+    // MARK: - Pattern Findings
+
+    @ViewBuilder
+    private var patternFindingCards: some View {
+        let dismissed = preferencesManager?.dismissedPatternFindings ?? []
+        let visible = patternFindings.filter { !dismissed.contains($0.cooldownKey) }
+        ForEach(visible, id: \.cooldownKey) { finding in
+            PatternFindingCard(finding: finding) {
+                dismissFinding(finding)
+            }
+        }
+    }
+
+    private func loadPatternFindings() async {
+        guard let detector = patternDetector else { return }
+        do {
+            patternFindings = try await detector.analyzePatterns()
+        } catch {
+            Self.logger.error("Failed to load pattern findings: \(error.localizedDescription)")
+        }
+    }
+
+    private func dismissFinding(_ finding: PatternFinding) {
+        guard let prefs = preferencesManager else { return }
+        var dismissed = prefs.dismissedPatternFindings
+        dismissed.insert(finding.cooldownKey)
+        prefs.dismissedPatternFindings = dismissed
+        // Remove from local state to update UI immediately
+        patternFindings.removeAll { $0.cooldownKey == finding.cooldownKey }
     }
 
     // MARK: - Data Loading

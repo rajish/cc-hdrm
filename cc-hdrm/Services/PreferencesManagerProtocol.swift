@@ -32,5 +32,11 @@ protocol PreferencesManagerProtocol: AnyObject {
     /// When set, tier recommendations and dollar summaries align to billing cycle boundaries.
     var billingCycleDay: Int? { get set }
 
+    /// Cooldown timestamps for pattern notification delivery. Key is PatternFinding.cooldownKey.
+    var patternNotificationCooldowns: [String: Date] { get set }
+
+    /// Set of cooldown keys for pattern findings the user has dismissed in the analytics view.
+    var dismissedPatternFindings: Set<String> { get set }
+
     func resetToDefaults()
 }
