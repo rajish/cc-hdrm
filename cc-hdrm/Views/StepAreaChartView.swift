@@ -131,7 +131,9 @@ struct StepAreaChartView: View {
                     fiveHourUtil: nil,
                     sevenDayUtil: nil,
                     slopeLevel: nil,
-                    segment: point.segment
+                    segment: point.segment,
+                    extraUsageActive: nil,
+                    extraUsageUsedCredits: nil
                 )
             }
             return point

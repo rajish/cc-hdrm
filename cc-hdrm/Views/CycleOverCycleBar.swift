@@ -36,7 +36,7 @@ struct CycleOverCycleBar: View {
             .accessibilityLabel(accessibilityLabel(for: cycle))
 
             // Extra usage stacked segment (Story 17.3)
-            if let spend = cycle.extraUsageSpend, spend > 0, let dollarValue = cycle.dollarValue, dollarValue > 0 {
+            if let spend = cycle.extraUsageSpend, spend > 0, let dollarValue = cycle.dollarValue, dollarValue > 0, cycle.utilizationPercent > 0 {
                 let baseCost = dollarValue / (cycle.utilizationPercent / 100.0)
                 let extraPercent = (spend / baseCost) * 100.0
                 BarMark(
