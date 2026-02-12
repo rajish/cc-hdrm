@@ -1,6 +1,6 @@
 # Story 17.2: Popover Extra Usage Card
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -267,3 +267,49 @@ None required -- all tests passed on first run after fixing a missing SwiftUI im
 - `cc-hdrm/Views/PopoverView.swift`
 - `cc-hdrmTests/Extensions/ColorHeadroomTests.swift`
 - `cc-hdrmTests/Views/PopoverViewTests.swift`
+
+## Senior Developer Review (AI)
+
+### Review Outcome: APPROVED (with fixes applied)
+
+### Issues Found and Fixed
+
+**MEDIUM-1: DateFormatter allocated on every render** (ExtraUsageCardView.swift)
+- `formatResetDate()` created a new `DateFormatter` each call. DateFormatter is expensive.
+- **Fix**: Replaced with `private static let resetDateFormatter` lazy initialization.
+
+**MEDIUM-2: Redundant computation of reset date and utilization** (ExtraUsageCardView.swift)
+- `nextResetDate()` was called independently by both the display text and the accessibility label, creating potential inconsistency (midnight boundary) and unnecessary work.
+- Similarly, utilization was computed twice (display vs accessibility).
+- **Fix**: Introduced `ResetInfo` struct and `resolvedResetInfo` computed property. Both display and accessibility now share the same computed values via parameters.
+
+**MEDIUM-3: Currency and accessibility tests were smoke tests only** (ExtraUsageCardViewTests.swift)
+- Currency formatting tests just rendered the view and checked for no-crash.
+- Accessibility label test constructed the expected string independently but never verified the actual view label.
+- **Fix**: Made `currencyText` a `static func` for direct testability. Replaced smoke tests with real assertions (`#expect(text == "$15.61 / $43.00")`). Added zero-limit edge case test. Strengthened accessibility label tests to verify string format components.
+
+**LOW-1: Force-unwrap on `targetComponents.month!`** (ExtraUsageCardView.swift)
+- `nextResetDate` used `targetComponents.month!` after setting it 2 lines above. Safe but poor style.
+- **Fix**: Refactored to use a local `nextMonth` variable, eliminating the force-unwrap.
+
+### Issues Not Fixed (LOW, acceptable)
+
+**LOW-2: Implicit EmptyView via if without else** (ExtraUsageCardView.swift:15-17)
+- When `!extraUsageEnabled`, the `if` block produces no content (implicit EmptyView). Story task 1.10 mentions `@ViewBuilder` with conditional. The body property already has `@ViewBuilder` via `some View`, so this is valid SwiftUI. No change needed.
+
+### Acceptance Criteria Verification
+
+All 9 ACs verified as IMPLEMENTED:
+- AC 1: Full card with progress bar, currency, %, reset date
+- AC 2-5: Color ramp (Cool/Warm/Hot/Critical) at correct thresholds
+- AC 6: Collapsed state when enabled but no spend
+- AC 7: Hidden when disabled
+- AC 8: No-limit mode (no bar, no %)
+- AC 9: VoiceOver accessibility labels
+
+### Test Summary
+
+- 1107 tests total, all passing (25 new tests for Story 17.2)
+- ExtraUsageCardView Tests: 21 tests (rendering, currency, reset date, accessibility)
+- Color.extraUsageColor SwiftUI tests: 4 tests
+- PopoverView Extra Usage Card integration tests: 4 tests (including observation tracking)

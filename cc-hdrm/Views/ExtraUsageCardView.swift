@@ -1,5 +1,11 @@
 import SwiftUI
 
+/// Resolved billing cycle reset info shared between display and accessibility label.
+private struct ResetInfo {
+    let displayText: String
+    let accessibilityText: String
+}
+
 /// Popover card showing extra usage spend, limit, utilization bar, and billing cycle reset date.
 /// Renders in three modes: full card (active spend), collapsed (enabled but no spend), or hidden (disabled).
 struct ExtraUsageCardView: View {
@@ -23,6 +29,7 @@ struct ExtraUsageCardView: View {
         let limit = appState.extraUsageMonthlyLimit
         let hasLimit = limit != nil && limit! > 0
         let utilization = hasLimit ? min(1.0, usedCredits / limit!) : 0.0
+        let resetInfo = resolvedResetInfo
 
         VStack(alignment: .leading, spacing: 6) {
             // Progress bar (only when limit is known)
@@ -43,7 +50,7 @@ struct ExtraUsageCardView: View {
 
             // Currency and utilization text
             HStack {
-                Text(currencyText(usedCredits: usedCredits, limit: limit))
+                Text(Self.currencyText(usedCredits: usedCredits, limit: limit))
                     .font(.caption)
                     .fontWeight(.semibold)
 
@@ -57,14 +64,14 @@ struct ExtraUsageCardView: View {
             }
 
             // Reset date context
-            resetDateText
+            Text(resetInfo.displayText)
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
         .padding(8)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(fullCardAccessibilityLabel(usedCredits: usedCredits, limit: limit))
+        .accessibilityLabel(fullCardAccessibilityLabel(usedCredits: usedCredits, limit: limit, utilization: utilization, resetInfo: resetInfo))
     }
 
     // MARK: - Collapsed Card
@@ -82,7 +89,7 @@ struct ExtraUsageCardView: View {
 
     // MARK: - Currency Formatting
 
-    private func currencyText(usedCredits: Double, limit: Double?) -> String {
+    static func currencyText(usedCredits: Double, limit: Double?) -> String {
         if let limit, limit > 0 {
             return String(format: "$%.2f / $%.2f", usedCredits, limit)
         }
@@ -91,14 +98,14 @@ struct ExtraUsageCardView: View {
 
     // MARK: - Reset Date
 
-    @ViewBuilder
-    private var resetDateText: some View {
+    /// Resolved reset info, computed once and shared between display and accessibility label.
+    private var resolvedResetInfo: ResetInfo {
         if let day = preferencesManager.billingCycleDay {
             let resetDate = Self.nextResetDate(billingCycleDay: day)
-            Text("Resets \(Self.formatResetDate(resetDate))")
-        } else {
-            Text("Set billing day in Settings for reset date")
+            let formatted = Self.formatResetDate(resetDate)
+            return ResetInfo(displayText: "Resets \(formatted)", accessibilityText: "resets \(formatted)")
         }
+        return ResetInfo(displayText: "Set billing day in Settings for reset date", accessibilityText: "billing day not configured")
     }
 
     /// Computes the next occurrence of the billing cycle day from today.
@@ -117,11 +124,13 @@ struct ExtraUsageCardView: View {
             targetComponents.month = components.month
         } else {
             // Reset is next month
-            targetComponents.month = (components.month ?? 1) + 1
+            let nextMonth = (components.month ?? 1) + 1
             // Handle December -> January year rollover
-            if targetComponents.month! > 12 {
+            if nextMonth > 12 {
                 targetComponents.month = 1
-                targetComponents.year = (targetComponents.year ?? 2026) + 1
+                targetComponents.year = (components.year ?? 2026) + 1
+            } else {
+                targetComponents.month = nextMonth
             }
         }
 
@@ -143,30 +152,27 @@ struct ExtraUsageCardView: View {
 
     /// Formats a date as "MMM d" (e.g., "Mar 1").
     static func formatResetDate(_ date: Date) -> String {
+        resetDateFormatter.string(from: date)
+    }
+
+    private static let resetDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d"
-        return formatter.string(from: date)
-    }
+        return formatter
+    }()
 
     // MARK: - Accessibility
 
-    private func fullCardAccessibilityLabel(usedCredits: Double, limit: Double?) -> String {
+    private func fullCardAccessibilityLabel(usedCredits: Double, limit: Double?, utilization: Double, resetInfo: ResetInfo) -> String {
         var parts: [String] = []
 
         if let limit, limit > 0 {
-            let utilization = min(1.0, usedCredits / limit)
             parts.append(String(format: "Extra usage: $%.2f spent of $%.2f monthly limit, %.0f%% used", usedCredits, limit, utilization * 100))
         } else {
             parts.append(String(format: "Extra usage: $%.2f spent, no monthly limit set", usedCredits))
         }
 
-        if let day = preferencesManager.billingCycleDay {
-            let resetDate = Self.nextResetDate(billingCycleDay: day)
-            parts.append("resets \(Self.formatResetDate(resetDate))")
-        } else {
-            parts.append("billing day not configured")
-        }
-
+        parts.append(resetInfo.accessibilityText)
         return parts.joined(separator: ", ")
     }
 }

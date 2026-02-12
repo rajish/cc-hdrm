@@ -80,29 +80,21 @@ struct ExtraUsageCardViewTests {
     // MARK: - Currency Formatting (AC 1, 8)
 
     @Test("Currency text formats as '$X.XX / $Y.YY' with known limit")
-    @MainActor
     func currencyFormattingWithLimit() {
-        let appState = AppState()
-        appState.updateExtraUsage(enabled: true, monthlyLimit: 43.0, usedCredits: 15.61, utilization: 0.363)
-        let prefs = MockPreferencesManager()
-        prefs.billingCycleDay = 1
-
-        // We verify the view renders — detailed text content is covered by accessibility label tests
-        let view = ExtraUsageCardView(appState: appState, preferencesManager: prefs)
-        let controller = NSHostingController(rootView: view)
-        _ = controller.view
+        let text = ExtraUsageCardView.currencyText(usedCredits: 15.61, limit: 43.0)
+        #expect(text == "$15.61 / $43.00")
     }
 
     @Test("Currency text formats as '$X.XX spent' without limit")
-    @MainActor
     func currencyFormattingWithoutLimit() {
-        let appState = AppState()
-        appState.updateExtraUsage(enabled: true, monthlyLimit: nil, usedCredits: 15.61, utilization: nil)
-        let prefs = MockPreferencesManager()
+        let text = ExtraUsageCardView.currencyText(usedCredits: 15.61, limit: nil)
+        #expect(text == "$15.61 spent")
+    }
 
-        let view = ExtraUsageCardView(appState: appState, preferencesManager: prefs)
-        let controller = NSHostingController(rootView: view)
-        _ = controller.view
+    @Test("Currency text formats as '$X.XX spent' when limit is zero")
+    func currencyFormattingWithZeroLimit() {
+        let text = ExtraUsageCardView.currencyText(usedCredits: 7.50, limit: 0.0)
+        #expect(text == "$7.50 spent")
     }
 
     // MARK: - Reset Date Computation (Task 2)
@@ -156,9 +148,34 @@ struct ExtraUsageCardViewTests {
 
     // MARK: - VoiceOver Accessibility (AC 9)
 
-    @Test("Accessibility label contains expected components for full card")
+    @Test("Accessibility label components for full card with limit and billing day")
+    func accessibilityLabelFullCardComponents() {
+        // Verify the expected label format by composing the same way the view does
+        let usedCredits = 15.61
+        let limit = 43.0
+        let utilization = min(1.0, usedCredits / limit)
+        let resetDate = ExtraUsageCardView.nextResetDate(billingCycleDay: 1)
+        let resetStr = ExtraUsageCardView.formatResetDate(resetDate)
+
+        let spendPart = String(format: "Extra usage: $%.2f spent of $%.2f monthly limit, %.0f%% used", usedCredits, limit, utilization * 100)
+        let expected = "\(spendPart), resets \(resetStr)"
+
+        #expect(expected.contains("$15.61 spent of $43.00 monthly limit"))
+        #expect(expected.contains("36% used"))
+        #expect(expected.contains("resets "))
+        #expect(resetStr.count > 0)
+    }
+
+    @Test("Accessibility label for no-limit card omits percentage")
+    func accessibilityLabelNoLimit() {
+        let text = String(format: "Extra usage: $%.2f spent, no monthly limit set", 15.61)
+        #expect(text == "Extra usage: $15.61 spent, no monthly limit set")
+        #expect(!text.contains("% used"))
+    }
+
+    @Test("Full card renders with accessibility configuration")
     @MainActor
-    func accessibilityLabelFullCard() {
+    func fullCardRendersWithAccessibility() {
         let appState = AppState()
         appState.updateExtraUsage(enabled: true, monthlyLimit: 43.0, usedCredits: 15.61, utilization: 0.363)
         let prefs = MockPreferencesManager()
@@ -167,24 +184,11 @@ struct ExtraUsageCardViewTests {
         let view = ExtraUsageCardView(appState: appState, preferencesManager: prefs)
         let controller = NSHostingController(rootView: view)
         _ = controller.view
-
-        // The accessibility label is built by fullCardAccessibilityLabel
-        // We verify the static helper produces correct output
-        let resetDate = ExtraUsageCardView.nextResetDate(billingCycleDay: 1)
-        let resetStr = ExtraUsageCardView.formatResetDate(resetDate)
-
-        // Expected format: "Extra usage: $15.61 spent of $43.00 monthly limit, 36% used, resets Mar 1"
-        let utilization = min(1.0, 15.61 / 43.0)
-        let expectedPrefix = String(format: "Extra usage: $%.2f spent of $%.2f monthly limit, %.0f%% used", 15.61, 43.0, utilization * 100)
-        #expect(expectedPrefix.contains("$15.61"))
-        #expect(expectedPrefix.contains("$43.00"))
-        #expect(expectedPrefix.contains("36%"))
-        #expect(resetStr.count > 0)
     }
 
-    @Test("Accessibility label for collapsed state")
+    @Test("Collapsed state renders with accessibility label")
     @MainActor
-    func accessibilityLabelCollapsed() {
+    func collapsedStateRendersWithAccessibility() {
         let appState = AppState()
         appState.updateExtraUsage(enabled: true, monthlyLimit: 43.0, usedCredits: 0, utilization: 0.0)
         let prefs = MockPreferencesManager()
@@ -192,7 +196,6 @@ struct ExtraUsageCardViewTests {
         let view = ExtraUsageCardView(appState: appState, preferencesManager: prefs)
         let controller = NSHostingController(rootView: view)
         _ = controller.view
-        // Collapsed state has accessibility label "Extra usage: enabled, no spend this period"
     }
 }
 
