@@ -131,7 +131,9 @@ struct StepAreaChartView: View {
                     fiveHourUtil: nil,
                     sevenDayUtil: nil,
                     slopeLevel: nil,
-                    segment: point.segment
+                    segment: point.segment,
+                    extraUsageActive: nil,
+                    extraUsageUsedCredits: nil
                 )
             }
             return point
@@ -162,6 +164,8 @@ struct StepAreaChartView: View {
         let sevenDayUtil: Double?
         let slopeLevel: SlopeLevel?
         let segment: Int
+        var extraUsageActive: Bool? = nil
+        var extraUsageUsedCredits: Double? = nil
     }
 
     /// A time range where no poll data exists (sleep, system off, etc.)
@@ -188,13 +192,19 @@ struct StepAreaChartView: View {
                 }
             }
 
+            let isExtraUsageActive = poll.extraUsageEnabled == true
+                && poll.fiveHourUtil != nil
+                && poll.fiveHourUtil! >= 99.5
+
             return ChartPoint(
                 id: index,
                 date: Date(timeIntervalSince1970: Double(poll.timestamp) / 1000.0),
                 fiveHourUtil: poll.fiveHourUtil,
                 sevenDayUtil: poll.sevenDayUtil,
                 slopeLevel: slopes[index],
-                segment: currentSegment
+                segment: currentSegment,
+                extraUsageActive: isExtraUsageActive,
+                extraUsageUsedCredits: poll.extraUsageUsedCredits
             )
         }
     }
@@ -326,7 +336,9 @@ struct StepAreaChartView: View {
                     fiveHourUtil: clampedFive,
                     sevenDayUtil: clampedSeven,
                     slopeLevel: point.slopeLevel,
-                    segment: point.segment
+                    segment: point.segment,
+                    extraUsageActive: point.extraUsageActive,
+                    extraUsageUsedCredits: point.extraUsageUsedCredits
                 ))
             }
         }
@@ -461,6 +473,12 @@ private struct StaticChartContent: View {
                 .foregroundStyle(Color.secondary.opacity(0.08))
             }
 
+            // 100% reference line (Story 17.3)
+            RuleMark(y: .value("Threshold", 100))
+                .foregroundStyle(Color.secondary.opacity(0.35))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [6, 3]))
+                .accessibilityHidden(true)
+
             // 5h series: area + line (green)
             // series: "5h-N" creates separate pen strokes per segment
             if fiveHourVisible {
@@ -499,6 +517,17 @@ private struct StaticChartContent: View {
                     .interpolationMethod(.stepEnd)
                     .lineStyle(StrokeStyle(lineWidth: 2))
                 }
+            }
+
+            // Extra usage annotations — colored dots at y=100 where extra usage is active (Story 17.3)
+            ForEach(fiveHourPoints.filter { $0.extraUsageActive == true }) { point in
+                PointMark(
+                    x: .value("Time", point.date),
+                    y: .value("Utilization", 100)
+                )
+                .symbolSize(30)
+                .foregroundStyle(Color.extraUsageCool.opacity(0.8))
+                .accessibilityLabel("Extra usage active: \(String(format: "$%.2f", point.extraUsageUsedCredits ?? 0)) spent this period")
             }
 
             // Reset boundaries — orange so they're visually distinct from grey grid lines

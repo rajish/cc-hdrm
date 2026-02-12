@@ -1450,6 +1450,131 @@ struct HistoricalDataServiceTests {
         let events = try await service.getResetEvents(range: .week)
         #expect(events.isEmpty)
     }
+
+    // MARK: - getExtraUsagePerCycle Tests (Story 17.3)
+
+    @Test("getExtraUsagePerCycle returns empty when no extra usage data exists")
+    func getExtraUsagePerCycleEmpty() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        // Persist a poll without extra usage
+        let response = UsageResponse(
+            fiveHour: WindowUsage(utilization: 50.0, resetsAt: "2026-02-03T15:00:00Z"),
+            sevenDay: WindowUsage(utilization: 30.0, resetsAt: "2026-02-10T00:00:00Z"),
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response)
+
+        let result = try await service.getExtraUsagePerCycle(billingCycleDay: nil)
+        #expect(result.isEmpty)
+    }
+
+    @Test("getExtraUsagePerCycle returns correct per-cycle totals spanning multiple months")
+    func getExtraUsagePerCycleMultiMonth() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        let calendar = Calendar.current
+
+        // Insert polls with extra usage across two months
+        // January: two polls with increasing usedCredits (cumulative)
+        let jan15 = calendar.date(from: DateComponents(year: 2026, month: 1, day: 15, hour: 10))!
+        let jan25 = calendar.date(from: DateComponents(year: 2026, month: 1, day: 25, hour: 10))!
+        // February: two polls
+        let feb5 = calendar.date(from: DateComponents(year: 2026, month: 2, day: 5, hour: 10))!
+        let feb10 = calendar.date(from: DateComponents(year: 2026, month: 2, day: 10, hour: 10))!
+
+        let conn = try dbManager.getConnection()
+        let insertSQL = """
+            INSERT INTO usage_polls
+            (timestamp, five_hour_util, five_hour_resets_at, seven_day_util, seven_day_resets_at,
+             extra_usage_enabled, extra_usage_monthly_limit, extra_usage_used_credits, extra_usage_utilization)
+            VALUES (?, 100.0, NULL, 50.0, NULL, 1, 100.0, ?, 0.5)
+            """
+
+        for (date, credits) in [(jan15, 5.0), (jan25, 12.50), (feb5, 3.0), (feb10, 8.75)] {
+            let ts = Int64(date.timeIntervalSince1970 * 1000)
+            var stmt: OpaquePointer?
+            sqlite3_prepare_v2(conn, insertSQL, -1, &stmt, nil)
+            sqlite3_bind_int64(stmt, 1, ts)
+            sqlite3_bind_double(stmt, 2, credits)
+            sqlite3_step(stmt)
+            sqlite3_finalize(stmt)
+        }
+
+        let result = try await service.getExtraUsagePerCycle(billingCycleDay: nil)
+
+        // January: MAX(5.0, 12.50) = 12.50
+        #expect(result["2026-Jan"] == 12.50)
+        // February: MAX(3.0, 8.75) = 8.75
+        #expect(result["2026-Feb"] == 8.75)
+        #expect(result.count == 2)
+    }
+
+    @Test("getExtraUsagePerCycle with billingCycleDay groups by billing cycle")
+    func getExtraUsagePerCycleBillingDay() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        let calendar = Calendar.current
+        let conn = try dbManager.getConnection()
+
+        // Billing cycle day = 15
+        // Jan 10 → belongs to Dec cycle (before billing day)
+        // Jan 20 → belongs to Jan cycle (after billing day)
+        // Feb 10 → belongs to Jan cycle (before billing day)
+
+        let jan10 = calendar.date(from: DateComponents(year: 2026, month: 1, day: 10, hour: 10))!
+        let jan20 = calendar.date(from: DateComponents(year: 2026, month: 1, day: 20, hour: 10))!
+        let feb10 = calendar.date(from: DateComponents(year: 2026, month: 2, day: 10, hour: 10))!
+
+        let insertSQL = """
+            INSERT INTO usage_polls
+            (timestamp, five_hour_util, five_hour_resets_at, seven_day_util, seven_day_resets_at,
+             extra_usage_enabled, extra_usage_monthly_limit, extra_usage_used_credits, extra_usage_utilization)
+            VALUES (?, 100.0, NULL, 50.0, NULL, 1, 100.0, ?, 0.5)
+            """
+
+        for (date, credits) in [(jan10, 7.0), (jan20, 15.0), (feb10, 20.0)] {
+            let ts = Int64(date.timeIntervalSince1970 * 1000)
+            var stmt: OpaquePointer?
+            sqlite3_prepare_v2(conn, insertSQL, -1, &stmt, nil)
+            sqlite3_bind_int64(stmt, 1, ts)
+            sqlite3_bind_double(stmt, 2, credits)
+            sqlite3_step(stmt)
+            sqlite3_finalize(stmt)
+        }
+
+        let result = try await service.getExtraUsagePerCycle(billingCycleDay: 15)
+
+        // Dec cycle: Jan 10 poll → MAX = 7.0
+        #expect(result["2025-Dec"] == 7.0)
+        // Jan cycle: Jan 20 (15.0) and Feb 10 (20.0) → MAX = 20.0
+        #expect(result["2026-Jan"] == 20.0)
+        #expect(result.count == 2)
+    }
+
+    @Test("getExtraUsagePerCycle returns empty when database unavailable")
+    func getExtraUsagePerCycleUnavailable() async throws {
+        let mockManager = MockDatabaseManager()
+        mockManager.shouldBeAvailable = false
+
+        let service = HistoricalDataService(databaseManager: mockManager)
+
+        let result = try await service.getExtraUsagePerCycle(billingCycleDay: nil)
+        #expect(result.isEmpty)
+    }
 }
 
 // MARK: - Mock DatabaseManager for Graceful Degradation Tests

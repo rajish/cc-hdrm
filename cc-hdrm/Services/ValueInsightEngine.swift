@@ -457,6 +457,31 @@ enum ValueInsightEngine {
         )
     }
 
+    // MARK: - Extra Usage Insights (Story 17.3)
+
+    /// Computes extra usage summary insights from cycle-level data.
+    /// Returns insights at `.usageDeviation` priority for overflow spending patterns.
+    static func computeExtraUsageInsights(cycles: [CycleUtilization]) -> [ValueInsight] {
+        let overflowCycles = cycles.filter { ($0.extraUsageSpend ?? 0) > 0 }
+        guard !overflowCycles.isEmpty else { return [] }
+
+        let totalSpend = overflowCycles.compactMap(\.extraUsageSpend).reduce(0, +)
+        let count = overflowCycles.count
+        let avgSpend = totalSpend / Double(count)
+
+        let text = String(format: "Extra usage: $%.2f across %d month%@ (avg $%.2f/month)",
+                          totalSpend, count, count == 1 ? "" : "s", avgSpend)
+        let precise = String(format: "Total extra spend: $%.2f over %d cycle%@, average $%.2f per overflow month",
+                             totalSpend, count, count == 1 ? "" : "s", avgSpend)
+
+        return [ValueInsight(
+            text: text,
+            isQuiet: false,
+            priority: .usageDeviation,
+            preciseDetail: precise
+        )]
+    }
+
     // MARK: - Self-Benchmarking Anchors (Story 16.6)
 
     /// Computes self-benchmarking anchor insights from cycle utilization history.

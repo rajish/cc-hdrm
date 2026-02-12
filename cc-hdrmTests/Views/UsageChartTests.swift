@@ -1107,6 +1107,81 @@ struct UsageChartTests {
         #expect(barPoints.count == 1)
     }
 
+    // MARK: - Extra Usage Annotations (Story 17.3)
+
+    @Test("makeChartPoints populates extraUsageActive=true when extraUsageEnabled and util >= 99.5")
+    func extraUsageActiveWhenEnabled() {
+        let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
+        let polls = [
+            UsagePoll(id: 1, timestamp: nowMs - 60_000, fiveHourUtil: 99.8,
+                      fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil,
+                      extraUsageEnabled: true, extraUsageMonthlyLimit: 100,
+                      extraUsageUsedCredits: 12.50, extraUsageUtilization: 0.125)
+        ]
+        let points = StepAreaChartView.makeChartPoints(from: polls)
+        #expect(points.count == 1)
+        #expect(points[0].extraUsageActive == true)
+        #expect(points[0].extraUsageUsedCredits == 12.50)
+    }
+
+    @Test("makeChartPoints sets extraUsageActive=false when extraUsageEnabled=false even at 100% util")
+    func extraUsageInactiveWhenDisabled() {
+        let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
+        let polls = [
+            UsagePoll(id: 1, timestamp: nowMs, fiveHourUtil: 100.0,
+                      fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil,
+                      extraUsageEnabled: false, extraUsageMonthlyLimit: nil,
+                      extraUsageUsedCredits: nil, extraUsageUtilization: nil)
+        ]
+        let points = StepAreaChartView.makeChartPoints(from: polls)
+        #expect(points.count == 1)
+        #expect(points[0].extraUsageActive == false)
+    }
+
+    @Test("makeChartPoints sets extraUsageActive=false when util below 99.5 even if extra usage enabled")
+    func extraUsageInactiveWhenUtilLow() {
+        let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
+        let polls = [
+            UsagePoll(id: 1, timestamp: nowMs, fiveHourUtil: 85.0,
+                      fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil,
+                      extraUsageEnabled: true, extraUsageMonthlyLimit: 100,
+                      extraUsageUsedCredits: 5.0, extraUsageUtilization: 0.05)
+        ]
+        let points = StepAreaChartView.makeChartPoints(from: polls)
+        #expect(points.count == 1)
+        #expect(points[0].extraUsageActive == false)
+    }
+
+    @Test("makeChartPoints sets extraUsageActive=nil when extraUsageEnabled is nil (pre-schema-v3)")
+    func extraUsageNilWhenFieldsNil() {
+        let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
+        let polls = [
+            UsagePoll(id: 1, timestamp: nowMs, fiveHourUtil: 100.0,
+                      fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil)
+        ]
+        let points = StepAreaChartView.makeChartPoints(from: polls)
+        #expect(points.count == 1)
+        // extraUsageEnabled defaults to nil → condition is false
+        #expect(points[0].extraUsageActive == false)
+    }
+
+    @Test("BarPoint extraUsageSpend defaults to nil")
+    func barPointExtraUsageDefaultNil() {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let rollups = [
+            UsageRollup(
+                id: 1, periodStart: nowMs - 300_000, periodEnd: nowMs,
+                resolution: .fiveMin,
+                fiveHourAvg: 30.0, fiveHourPeak: 45.0, fiveHourMin: 20.0,
+                sevenDayAvg: 15.0, sevenDayPeak: 25.0, sevenDayMin: 10.0,
+                resetCount: 0, unusedCredits: nil
+            )
+        ]
+        let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .week)
+        #expect(barPoints.count == 1)
+        #expect(barPoints[0].extraUsageSpend == nil)
+    }
+
     @Test("Monthly aggregation groups hourly rollups into daily bars")
     func monthlyAggregation() {
         let calendar = Calendar.current

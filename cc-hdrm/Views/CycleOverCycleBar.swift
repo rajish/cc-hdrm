@@ -34,6 +34,17 @@ struct CycleOverCycleBar: View {
             )
             .foregroundStyle(cycle.isPartial ? Color.headroomNormal.opacity(0.4) : Color.headroomNormal)
             .accessibilityLabel(accessibilityLabel(for: cycle))
+
+            // Extra usage stacked segment (Story 17.3)
+            if let spend = cycle.extraUsageSpend, spend > 0, let dollarValue = cycle.dollarValue, dollarValue > 0, cycle.utilizationPercent > 0 {
+                let baseCost = dollarValue / (cycle.utilizationPercent / 100.0)
+                let extraPercent = (spend / baseCost) * 100.0
+                BarMark(
+                    x: .value("Month", cycle.id),
+                    y: .value("Extra", extraPercent)
+                )
+                .foregroundStyle(cycle.isPartial ? Color.extraUsageCool.opacity(0.4) : Color.extraUsageCool)
+            }
         }
         .chartYAxis(.hidden)
         .chartXAxis {
@@ -94,6 +105,11 @@ struct CycleOverCycleBar: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
+                if let spend = cycle.extraUsageSpend, spend > 0 {
+                    Text(String(format: "Extra: $%.2f", spend))
+                        .font(.caption2)
+                        .foregroundStyle(Color.extraUsageCool)
+                }
             }
             .padding(6)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6))
@@ -132,6 +148,9 @@ struct CycleOverCycleBar: View {
             parts.append("\(SubscriptionValueCalculator.formatDollars(dollars)) of \(SubscriptionValueCalculator.formatDollars(total))")
         } else if let dollars = cycle.dollarValue {
             parts.append(SubscriptionValueCalculator.formatDollars(dollars))
+        }
+        if let spend = cycle.extraUsageSpend, spend > 0 {
+            parts.append("Extra usage: \(String(format: "%.2f", spend)) dollars")
         }
         return parts.joined(separator: ", ")
     }

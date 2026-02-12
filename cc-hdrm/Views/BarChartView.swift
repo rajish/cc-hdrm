@@ -41,6 +41,8 @@ struct BarChartView: View {
         let fiveHourMin: Double?
         let sevenDayMin: Double?
         let resetCount: Int
+        /// Extra usage spend in dollars for this period (nil if unavailable)
+        var extraUsageSpend: Double? = nil
     }
 
     // MARK: - Init
@@ -353,6 +355,12 @@ private struct StaticBarChartContent: View {
                 .foregroundStyle(Color.secondary.opacity(0.08))
             }
 
+            // 100% reference line (Story 17.3)
+            RuleMark(y: .value("Threshold", 100))
+                .foregroundStyle(Color.secondary.opacity(0.35))
+                .lineStyle(StrokeStyle(lineWidth: 1, dash: [6, 3]))
+                .accessibilityHidden(true)
+
             // 5h series bars (green) — uses RectangleMark for explicit temporal boundaries
             if fiveHourVisible {
                 ForEach(barPoints) { point in
@@ -553,6 +561,13 @@ private struct BarHoverOverlayContent: View {
                 Text("\(point.resetCount) reset\(point.resetCount > 1 ? "s" : "")")
                     .font(.caption2)
                     .foregroundStyle(Color.orange)
+            }
+
+            // Extra usage indicator (Story 17.3)
+            if let spend = point.extraUsageSpend, spend > 0 {
+                Text(String(format: "Extra: $%.2f", spend))
+                    .font(.caption2)
+                    .foregroundStyle(Color.extraUsageCool)
             }
         }
         .padding(6)
