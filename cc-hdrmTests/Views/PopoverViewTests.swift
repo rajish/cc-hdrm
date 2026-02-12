@@ -213,6 +213,87 @@ struct PopoverViewStatusMessageTests {
     }
 }
 
+// MARK: - Extra Usage Card Integration Tests (Story 17.2, Task 8)
+
+@Suite("PopoverView Extra Usage Card Tests")
+struct PopoverViewExtraUsageCardTests {
+
+    @Test("PopoverView renders without crash when extra usage enabled with spend")
+    @MainActor
+    func rendersWithExtraUsageEnabled() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: nil
+        )
+        appState.updateExtraUsage(enabled: true, monthlyLimit: 43.0, usedCredits: 15.61, utilization: 0.363)
+        let prefs = MockPreferencesManager()
+        prefs.billingCycleDay = 1
+
+        let view = PopoverView(appState: appState, preferencesManager: prefs, launchAtLoginService: MockLaunchAtLoginService())
+        let controller = NSHostingController(rootView: view)
+        _ = controller.view
+    }
+
+    @Test("PopoverView renders without crash when extra usage enabled with zero spend (collapsed)")
+    @MainActor
+    func rendersWithExtraUsageCollapsed() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: nil
+        )
+        appState.updateExtraUsage(enabled: true, monthlyLimit: 43.0, usedCredits: 0, utilization: 0.0)
+
+        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
+        let controller = NSHostingController(rootView: view)
+        _ = controller.view
+    }
+
+    @Test("PopoverView renders without crash when extra usage disabled (no card)")
+    @MainActor
+    func rendersWithExtraUsageDisabled() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: nil
+        )
+        appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
+
+        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
+        let controller = NSHostingController(rootView: view)
+        _ = controller.view
+    }
+
+    @Test("Observation triggers when extraUsageEnabled changes")
+    @MainActor
+    func observationTriggersOnExtraUsageChange() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: nil
+        )
+
+        let expectation = OSAllocatedUnfairLock(initialState: false)
+        withObservationTracking {
+            let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
+            _ = view.body
+        } onChange: {
+            expectation.withLock { $0 = true }
+        }
+
+        // Enable extra usage — PopoverView.body reads appState.extraUsageEnabled directly
+        appState.updateExtraUsage(enabled: true, monthlyLimit: 43.0, usedCredits: 15.0, utilization: 0.35)
+
+        let detected = expectation.withLock { $0 }
+        #expect(detected, "Observation should detect extraUsageEnabled change read by PopoverView.body")
+    }
+}
+
 // MARK: - 5h Gauge Integration Tests (Story 4.2, Task 9)
 
 @Suite("PopoverView 5h Gauge Integration Tests")

@@ -25,6 +25,14 @@ struct PopoverView: View {
                     .padding(.vertical, 8)
             }
 
+            // Extra usage card (Story 17.2): spend/limit/utilization with color-coded progress bar
+            if appState.extraUsageEnabled {
+                Divider()
+                ExtraUsageCardView(appState: appState, preferencesManager: preferencesManager)
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+            }
+
             // Sparkline section (Story 12.4): 24h usage trend visualization
             // Divider chain per AC-1: gauges -> Divider -> sparkline -> Divider -> [status/update/footer]
             // The divider below sparkline comes from StatusMessageView, UpdateBadgeView, or Footer (line 54)
