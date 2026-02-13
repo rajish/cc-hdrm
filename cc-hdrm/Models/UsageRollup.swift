@@ -30,6 +30,8 @@ struct UsageRollup: Sendable, Equatable {
     /// Extra usage credits consumed (in-memory only, not persisted in rollup DB schema).
     /// Propagated from raw polls for recent data; nil for historical rollups.
     var extraUsageUsedCredits: Double? = nil
+    /// Extra usage utilization percentage 0-100 (in-memory only).
+    var extraUsageUtilization: Double? = nil
 
     /// Resolution tier for aggregated usage data.
     enum Resolution: String, Codable, CaseIterable, Sendable {
