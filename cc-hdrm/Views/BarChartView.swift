@@ -128,6 +128,11 @@ struct BarChartView: View {
             let sevenDayMins = rollups.compactMap(\.sevenDayMin)
             let totalResets = rollups.reduce(0) { $0 + $1.resetCount }
 
+            // Extra usage: take MAX across rollups in this period
+            // (cumulative within billing cycle, so max = latest/highest reading)
+            let extraUsageValues = rollups.compactMap(\.extraUsageUsedCredits)
+            let extraUsageSpend: Double? = extraUsageValues.isEmpty ? nil : extraUsageValues.max()
+
             return BarPoint(
                 id: Int(periodStart.timeIntervalSince1970),
                 periodStart: periodStart,
@@ -139,7 +144,8 @@ struct BarChartView: View {
                 sevenDayAvg: sevenDayAvgs.isEmpty ? nil : sevenDayAvgs.reduce(0, +) / Double(sevenDayAvgs.count),
                 fiveHourMin: fiveHourMins.isEmpty ? nil : fiveHourMins.min(),
                 sevenDayMin: sevenDayMins.isEmpty ? nil : sevenDayMins.min(),
-                resetCount: totalResets
+                resetCount: totalResets,
+                extraUsageSpend: extraUsageSpend
             )
         }
     }
@@ -416,6 +422,22 @@ private struct StaticBarChartContent: View {
                         )
                         .foregroundStyle(BarChartView.sevenDayColor)
                     }
+                }
+            }
+
+            // Extra usage cap overlay — colored bar at y=100-105 for bars with active extra usage
+            ForEach(barPoints) { point in
+                if let spend = point.extraUsageSpend, spend > 0 {
+                    let bounds = barBounds(for: point, series: fiveHourVisible ? .fiveHour : .sevenDay)
+                    RectangleMark(
+                        xStart: .value("Start", bounds.start),
+                        xEnd: .value("End", bothVisible
+                            ? barBounds(for: point, series: .sevenDay).end
+                            : bounds.end),
+                        yStart: .value("Bottom", 100),
+                        yEnd: .value("Top", 105)
+                    )
+                    .foregroundStyle(Color.extraUsageCool.opacity(0.7))
                 }
             }
 

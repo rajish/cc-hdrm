@@ -27,6 +27,9 @@ struct UsageRollup: Sendable, Equatable {
     let resetCount: Int
     /// Calculated true unused credits (daily resolution only, NULL otherwise)
     let unusedCredits: Double?
+    /// Extra usage credits consumed (in-memory only, not persisted in rollup DB schema).
+    /// Propagated from raw polls for recent data; nil for historical rollups.
+    var extraUsageUsedCredits: Double? = nil
 
     /// Resolution tier for aggregated usage data.
     enum Resolution: String, Codable, CaseIterable, Sendable {

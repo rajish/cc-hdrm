@@ -1388,7 +1388,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             sevenDayPeak: poll.sevenDayUtil,
             sevenDayMin: poll.sevenDayUtil,
             resetCount: 0,
-            unusedCredits: nil
+            unusedCredits: nil,
+            extraUsageUsedCredits: poll.extraUsageUsedCredits
         )
     }
 
@@ -1426,7 +1427,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                     sevenDayPeak: rollup.sevenDayPeak,
                     sevenDayMin: rollup.sevenDayMin,
                     resetCount: count,
-                    unusedCredits: rollup.unusedCredits
+                    unusedCredits: rollup.unusedCredits,
+                    extraUsageUsedCredits: rollup.extraUsageUsedCredits
                 )
             }
             return rollup
