@@ -1210,6 +1210,69 @@ struct UsageChartTests {
         #expect(barPoints[0].extraUsageSpend == nil)
     }
 
+    // MARK: - Issue #66 / #39 / #40 Regression Tests
+
+    @Test("Reset boundary detects 7d utilization drop when 5h is stable")
+    func resetBoundaryDetectsSevenDayDrop() {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let intervalMs: Int64 = 30_000
+        // 5h util stable, 7d util drops from 95% to 5% at midpoint
+        let polls = [
+            UsagePoll(id: 1, timestamp: nowMs - 2 * intervalMs, fiveHourUtil: 50.0, fiveHourResetsAt: nil, sevenDayUtil: 90.0, sevenDayResetsAt: nil),
+            UsagePoll(id: 2, timestamp: nowMs - intervalMs, fiveHourUtil: 51.0, fiveHourResetsAt: nil, sevenDayUtil: 95.0, sevenDayResetsAt: nil),
+            UsagePoll(id: 3, timestamp: nowMs, fiveHourUtil: 52.0, fiveHourResetsAt: nil, sevenDayUtil: 5.0, sevenDayResetsAt: nil),
+        ]
+
+        let resets = StepAreaChartView.findResetTimestamps(in: polls)
+        // Should detect 1 reset from 7d drop (95% -> 5% = 90% drop, well above 10% threshold)
+        #expect(resets.count == 1)
+    }
+
+    @Test("Reset boundary deduplicates when both 5h and 7d drop at same poll")
+    func resetBoundaryDeduplicatesBothDrops() {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let intervalMs: Int64 = 30_000
+        // Both 5h and 7d drop at the same poll — should produce only 1 reset, not 2
+        let polls = [
+            UsagePoll(id: 1, timestamp: nowMs - intervalMs, fiveHourUtil: 80.0, fiveHourResetsAt: nil, sevenDayUtil: 90.0, sevenDayResetsAt: nil),
+            UsagePoll(id: 2, timestamp: nowMs, fiveHourUtil: 5.0, fiveHourResetsAt: nil, sevenDayUtil: 5.0, sevenDayResetsAt: nil),
+        ]
+
+        let resets = StepAreaChartView.findResetTimestamps(in: polls)
+        // 5h triggers first, so 7d check is skipped — only 1 reset
+        #expect(resets.count == 1)
+    }
+
+    @Test("Bar chart x-axis domain renders without crash with sparse data")
+    func barChartXAxisDomainRendersWithoutCrash() {
+        // Create only 2 data points within a 7-day range — chart should still span full 7 days
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let rollups = [
+            UsageRollup(
+                id: 1, periodStart: nowMs - 3_600_000, periodEnd: nowMs - 3_300_000,
+                resolution: .fiveMin,
+                fiveHourAvg: 30.0, fiveHourPeak: 45.0, fiveHourMin: 20.0,
+                sevenDayAvg: 15.0, sevenDayPeak: 25.0, sevenDayMin: 10.0,
+                resetCount: 0, unusedCredits: nil
+            ),
+            UsageRollup(
+                id: 2, periodStart: nowMs - 300_000, periodEnd: nowMs,
+                resolution: .fiveMin,
+                fiveHourAvg: 35.0, fiveHourPeak: 50.0, fiveHourMin: 25.0,
+                sevenDayAvg: 18.0, sevenDayPeak: 28.0, sevenDayMin: 12.0,
+                resetCount: 0, unusedCredits: nil
+            ),
+        ]
+        let view = BarChartView(
+            rollups: rollups,
+            timeRange: .week,
+            fiveHourVisible: true,
+            sevenDayVisible: true
+        )
+        // Verify it renders with the x-axis domain set
+        let _ = view.body
+    }
+
     @Test("Monthly aggregation groups hourly rollups into daily bars")
     func monthlyAggregation() {
         let calendar = Calendar.current

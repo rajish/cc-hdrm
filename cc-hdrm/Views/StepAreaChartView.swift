@@ -226,10 +226,26 @@ struct StepAreaChartView: View {
 
         var resets: [Date] = []
         for i in 1..<polls.count {
+            let resetDate = Date(timeIntervalSince1970: Double(polls[i].timestamp) / 1000.0)
+            var detected = false
+
+            // Check 5h utilization drop
             if let prevUtil = polls[i - 1].fiveHourUtil,
                let currUtil = polls[i].fiveHourUtil,
                prevUtil - currUtil >= dropThreshold {
-                resets.append(Date(timeIntervalSince1970: Double(polls[i].timestamp) / 1000.0))
+                detected = true
+            }
+
+            // Check 7d utilization drop
+            if !detected,
+               let prevUtil = polls[i - 1].sevenDayUtil,
+               let currUtil = polls[i].sevenDayUtil,
+               prevUtil - currUtil >= dropThreshold {
+                detected = true
+            }
+
+            if detected {
+                resets.append(resetDate)
             }
         }
         return resets

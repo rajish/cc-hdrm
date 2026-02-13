@@ -430,24 +430,24 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         tier: String?,
         connection: OpaquePointer
     ) async throws {
-        let resetDetected: Bool
-        let detectionMethod: String
+        var resetDetected: Bool
+        var detectionMethod: String
 
-        // Primary detection: resets_at timestamp shift (with jitter tolerance)
+        // Primary detection: 5h resets_at timestamp shift (with jitter tolerance)
         if let currentResetsAt = currentPoll.fiveHourResetsAt,
            let previousResetsAt = previousPoll.fiveHourResetsAt,
            abs(currentResetsAt - previousResetsAt) > resetsAtToleranceMs {
             resetDetected = true
-            detectionMethod = "resets_at shifted from \(previousResetsAt) to \(currentResetsAt)"
+            detectionMethod = "5h resets_at shifted from \(previousResetsAt) to \(currentResetsAt)"
         }
-        // Fallback detection: large utilization drop
+        // Fallback detection: large 5h utilization drop
         else if let currentUtil = currentPoll.fiveHourUtil,
                 let previousUtil = previousPoll.fiveHourUtil,
                 currentPoll.fiveHourResetsAt == nil || previousPoll.fiveHourResetsAt == nil {
             let drop = previousUtil - currentUtil
             if drop >= utilizationDropThreshold {
                 resetDetected = true
-                detectionMethod = "utilization dropped from \(previousUtil)% to \(currentUtil)%"
+                detectionMethod = "5h utilization dropped from \(previousUtil)% to \(currentUtil)%"
             } else {
                 resetDetected = false
                 detectionMethod = ""
@@ -455,6 +455,27 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         } else {
             resetDetected = false
             detectionMethod = ""
+        }
+
+        // 7d reset detection (if no 5h reset detected)
+        if !resetDetected {
+            // 7d primary: sevenDayResetsAt timestamp shift
+            if let currentResetsAt = currentPoll.sevenDayResetsAt,
+               let previousResetsAt = previousPoll.sevenDayResetsAt,
+               abs(currentResetsAt - previousResetsAt) > resetsAtToleranceMs {
+                resetDetected = true
+                detectionMethod = "7d resets_at shifted from \(previousResetsAt) to \(currentResetsAt)"
+            }
+            // 7d fallback: large utilization drop
+            else if let currentUtil = currentPoll.sevenDayUtil,
+                    let previousUtil = previousPoll.sevenDayUtil,
+                    currentPoll.sevenDayResetsAt == nil || previousPoll.sevenDayResetsAt == nil {
+                let drop = previousUtil - currentUtil
+                if drop >= utilizationDropThreshold {
+                    resetDetected = true
+                    detectionMethod = "7d utilization dropped from \(previousUtil)% to \(currentUtil)%"
+                }
+            }
         }
 
         guard resetDetected else { return }
