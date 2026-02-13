@@ -1143,7 +1143,35 @@ struct UsageChartTests {
         let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
         let polls = [
             UsagePoll(id: 1, timestamp: nowMs, fiveHourUtil: 85.0,
-                      fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil,
+                      fiveHourResetsAt: nil, sevenDayUtil: 40.0, sevenDayResetsAt: nil,
+                      extraUsageEnabled: true, extraUsageMonthlyLimit: 100,
+                      extraUsageUsedCredits: 5.0, extraUsageUtilization: 0.05)
+        ]
+        let points = StepAreaChartView.makeChartPoints(from: polls)
+        #expect(points.count == 1)
+        #expect(points[0].extraUsageActive == false)
+    }
+
+    @Test("makeChartPoints sets extraUsageActive=true when sevenDayUtil >= 99.5 even if fiveHourUtil is low")
+    func extraUsageActiveWhenSevenDayUtilHigh() {
+        let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
+        let polls = [
+            UsagePoll(id: 1, timestamp: nowMs, fiveHourUtil: 50.0,
+                      fiveHourResetsAt: nil, sevenDayUtil: 100.0, sevenDayResetsAt: nil,
+                      extraUsageEnabled: true, extraUsageMonthlyLimit: 100,
+                      extraUsageUsedCredits: 10.0, extraUsageUtilization: 0.10)
+        ]
+        let points = StepAreaChartView.makeChartPoints(from: polls)
+        #expect(points.count == 1)
+        #expect(points[0].extraUsageActive == true)
+    }
+
+    @Test("makeChartPoints sets extraUsageActive=false when both fiveHourUtil and sevenDayUtil below 99.5")
+    func extraUsageNilWhenBothUtilBelow995() {
+        let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
+        let polls = [
+            UsagePoll(id: 1, timestamp: nowMs, fiveHourUtil: 90.0,
+                      fiveHourResetsAt: nil, sevenDayUtil: 85.0, sevenDayResetsAt: nil,
                       extraUsageEnabled: true, extraUsageMonthlyLimit: 100,
                       extraUsageUsedCredits: 5.0, extraUsageUtilization: 0.05)
         ]

@@ -405,7 +405,7 @@ private struct StaticBarChartContent: View {
                 }
             }
         }
-        .chartYScale(domain: 0...100)
+        .chartYScale(domain: 0...105)
         .chartLegend(.hidden)
         .chartYAxis {
             AxisMarks(values: [0, 25, 50, 75, 100]) { value in
