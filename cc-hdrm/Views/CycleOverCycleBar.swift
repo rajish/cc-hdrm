@@ -150,7 +150,7 @@ struct CycleOverCycleBar: View {
             parts.append(SubscriptionValueCalculator.formatDollars(dollars))
         }
         if let spend = cycle.extraUsageSpend, spend > 0 {
-            parts.append("Extra usage: \(String(format: "%.2f", spend)) dollars")
+            parts.append("Extra usage: \(AppState.formatCents(Int(spend.rounded())))")
         }
         return parts.joined(separator: ", ")
     }
