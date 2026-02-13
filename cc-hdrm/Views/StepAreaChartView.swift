@@ -596,21 +596,21 @@ private struct StaticChartContent: View {
     private var extraUsageMarks: some ChartContent {
         ForEach(extraUsagePoints) { point in
             let yValue = Self.extraUsageY(for: point)
-            LineMark(
+            AreaMark(
                 x: .value("Time", point.date),
-                y: .value("Utilization", yValue),
+                yStart: .value("Base", 100),
+                yEnd: .value("Utilization", yValue),
                 series: .value("Seg", "ex-\(point.segment)")
             )
-            .foregroundStyle(Color.extraUsageCool)
+            .foregroundStyle(Color.extraUsageCool.opacity(0.5))
             .interpolationMethod(.stepEnd)
-            .lineStyle(StrokeStyle(lineWidth: 2))
         }
     }
 
     /// Computes the Y-axis value for an extra usage chart point.
-    /// Maps extraUsageUtilization (0-1) to y=100-105.
+    /// Maps extraUsageUtilization (0-100%) to y=100-105.
     private static func extraUsageY(for point: StepAreaChartView.ChartPoint) -> Double {
-        100 + min((point.extraUsageUtilization ?? 0) * 5.0, 5.0)
+        100 + min((point.extraUsageUtilization ?? 0) / 100.0 * 5.0, 5.0)
     }
 }
 
