@@ -462,6 +462,9 @@ private struct StaticBarChartContent: View {
                 }
             }
         }
+        .chartPlotStyle { plotArea in
+            plotArea.padding(.trailing, 4)
+        }
     }
 }
 
