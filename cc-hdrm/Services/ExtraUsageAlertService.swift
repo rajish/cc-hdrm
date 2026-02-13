@@ -122,8 +122,8 @@ final class ExtraUsageAlertService: ExtraUsageAlertServiceProtocol {
         usedCents: Int,
         limitCents: Int
     ) -> (title: String, body: String) {
-        let usedText = Self.formatCents(max(0, usedCents))
-        let limitText = Self.formatCents(max(0, limitCents))
+        let usedText = AppState.formatCents(max(0, usedCents))
+        let limitText = AppState.formatCents(max(0, limitCents))
 
         switch percent {
         case 50:
@@ -140,21 +140,11 @@ final class ExtraUsageAlertService: ExtraUsageAlertServiceProtocol {
             let remainingCents = max(0, limitCents - usedCents)
             return (
                 "Extra usage alert",
-                "Extra usage at 90% \u{2014} \(Self.formatCents(remainingCents)) left before hitting your monthly limit"
+                "Extra usage at 90% \u{2014} \(AppState.formatCents(remainingCents)) left before hitting your monthly limit"
             )
         default:
             return ("Extra usage alert", "Extra usage at \(percent)%")
         }
-    }
-
-    /// Formats a cent amount as a currency string using integer math (no floating-point rounding).
-    /// Example: `formatCents(1561)` → `"$15.61"`.
-    static func formatCents(_ cents: Int, symbol: String = "$") -> String {
-        let absCents = abs(cents)
-        let dollars = absCents / 100
-        let remainder = absCents % 100
-        let prefix = cents < 0 ? "-" : ""
-        return String(format: "%@%@%d.%02d", prefix, symbol, dollars, remainder)
     }
 
     // MARK: - Notification Delivery

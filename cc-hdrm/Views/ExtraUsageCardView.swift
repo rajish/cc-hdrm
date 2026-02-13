@@ -26,14 +26,13 @@ struct ExtraUsageCardView: View {
 
     @ViewBuilder
     private func fullCard(usedCents: Int) -> some View {
-        let limitCents = appState.extraUsageMonthlyLimitCents
-        let hasLimit = limitCents != nil && limitCents! > 0
-        let utilization = hasLimit ? min(1.0, Double(usedCents) / Double(limitCents!)) : 0.0
+        let activeLimitCents = appState.extraUsageMonthlyLimitCents.flatMap { $0 > 0 ? $0 : nil }
+        let utilization = activeLimitCents.map { min(1.0, Double(usedCents) / Double($0)) } ?? 0.0
         let resetInfo = resolvedResetInfo
 
         VStack(alignment: .leading, spacing: 6) {
             // Progress bar (only when limit is known)
-            if hasLimit {
+            if activeLimitCents != nil {
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 3)
@@ -50,13 +49,13 @@ struct ExtraUsageCardView: View {
 
             // Currency and utilization text
             HStack {
-                Text(Self.currencyText(usedCents: usedCents, limitCents: limitCents))
+                Text(Self.currencyText(usedCents: usedCents, limitCents: activeLimitCents))
                     .font(.caption)
                     .fontWeight(.semibold)
 
                 Spacer()
 
-                if hasLimit {
+                if activeLimitCents != nil {
                     Text(String(format: "%.0f%%", utilization * 100))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -71,7 +70,7 @@ struct ExtraUsageCardView: View {
         .padding(8)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(fullCardAccessibilityLabel(usedCents: usedCents, limitCents: limitCents, utilization: utilization, resetInfo: resetInfo))
+        .accessibilityLabel(fullCardAccessibilityLabel(usedCents: usedCents, limitCents: activeLimitCents, utilization: utilization, resetInfo: resetInfo))
     }
 
     // MARK: - Collapsed Card
