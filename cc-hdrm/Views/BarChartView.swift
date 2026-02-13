@@ -346,18 +346,25 @@ private struct StaticBarChartContent: View {
     /// not just the data range. For `.all`, falls back to data bounds or 90 days.
     private var xAxisDomain: ClosedRange<Date> {
         let now = Date()
+        // Add trailing buffer (half a bar period) so the rightmost bar
+        // doesn't overlap the Y-axis percentage labels on the right edge.
+        let trailingBuffer: TimeInterval
         switch timeRange {
         case .day:
-            return Calendar.current.date(byAdding: .day, value: -1, to: now)!...now
+            trailingBuffer = 1800   // 30 min (half of 1h bar)
+            return Calendar.current.date(byAdding: .day, value: -1, to: now)!...now.addingTimeInterval(trailingBuffer)
         case .week:
-            return Calendar.current.date(byAdding: .day, value: -7, to: now)!...now
+            trailingBuffer = 1800   // 30 min (half of 1h bar)
+            return Calendar.current.date(byAdding: .day, value: -7, to: now)!...now.addingTimeInterval(trailingBuffer)
         case .month:
-            return Calendar.current.date(byAdding: .day, value: -30, to: now)!...now
+            trailingBuffer = 43200  // 12h (half of 1d bar)
+            return Calendar.current.date(byAdding: .day, value: -30, to: now)!...now.addingTimeInterval(trailingBuffer)
         case .all:
+            trailingBuffer = 43200  // 12h (half of 1d bar)
             if let earliest = barPoints.first?.periodStart {
-                return earliest...now
+                return earliest...now.addingTimeInterval(trailingBuffer)
             }
-            return Calendar.current.date(byAdding: .day, value: -90, to: now)!...now
+            return Calendar.current.date(byAdding: .day, value: -90, to: now)!...now.addingTimeInterval(trailingBuffer)
         }
     }
 
@@ -461,9 +468,6 @@ private struct StaticBarChartContent: View {
                     AxisValueLabel(format: .dateTime.hour())
                 }
             }
-        }
-        .chartPlotStyle { plotArea in
-            plotArea.padding(.trailing, 4)
         }
     }
 }
