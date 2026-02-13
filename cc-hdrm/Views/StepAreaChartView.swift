@@ -193,8 +193,7 @@ struct StepAreaChartView: View {
             }
 
             let isExtraUsageActive = poll.extraUsageEnabled == true
-                && poll.fiveHourUtil != nil
-                && poll.fiveHourUtil! >= 99.5
+                && ((poll.fiveHourUtil ?? 0) >= 99.5 || (poll.sevenDayUtil ?? 0) >= 99.5)
 
             return ChartPoint(
                 id: index,
@@ -537,7 +536,7 @@ private struct StaticChartContent: View {
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [6, 4]))
             }
         }
-        .chartYScale(domain: 0...100)
+        .chartYScale(domain: 0...105)
         .chartLegend(.hidden)
         .chartYAxis {
             AxisMarks(values: [0, 25, 50, 75, 100]) { value in
