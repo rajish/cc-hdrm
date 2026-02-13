@@ -43,6 +43,8 @@ struct BarChartView: View {
         let resetCount: Int
         /// Extra usage spend in cents for this period (nil if unavailable)
         var extraUsageSpend: Double? = nil
+        /// Extra usage utilization percentage 0-100 for this period (nil if unavailable)
+        var extraUsageUtilization: Double? = nil
     }
 
     // MARK: - Init
@@ -128,6 +130,13 @@ struct BarChartView: View {
             let sevenDayMins = rollups.compactMap(\.sevenDayMin)
             let totalResets = rollups.reduce(0) { $0 + $1.resetCount }
 
+            // Extra usage: take MAX across rollups in this period
+            // (cumulative within billing cycle, so max = latest/highest reading)
+            let extraUsageValues = rollups.compactMap(\.extraUsageUsedCredits)
+            let extraUsageSpend: Double? = extraUsageValues.isEmpty ? nil : extraUsageValues.max()
+            let extraUtilValues = rollups.compactMap(\.extraUsageUtilization)
+            let extraUsageUtil: Double? = extraUtilValues.isEmpty ? nil : extraUtilValues.max()
+
             return BarPoint(
                 id: Int(periodStart.timeIntervalSince1970),
                 periodStart: periodStart,
@@ -139,7 +148,9 @@ struct BarChartView: View {
                 sevenDayAvg: sevenDayAvgs.isEmpty ? nil : sevenDayAvgs.reduce(0, +) / Double(sevenDayAvgs.count),
                 fiveHourMin: fiveHourMins.isEmpty ? nil : fiveHourMins.min(),
                 sevenDayMin: sevenDayMins.isEmpty ? nil : sevenDayMins.min(),
-                resetCount: totalResets
+                resetCount: totalResets,
+                extraUsageSpend: extraUsageSpend,
+                extraUsageUtilization: extraUsageUtil
             )
         }
     }
@@ -415,6 +426,33 @@ private struct StaticBarChartContent: View {
                             yEnd: .value("Peak", peak)
                         )
                         .foregroundStyle(BarChartView.sevenDayColor)
+                    }
+                }
+            }
+
+            // Extra usage cap overlay — proportional height above 100% for bars with active extra usage
+            ForEach(barPoints) { point in
+                if let util = point.extraUsageUtilization, util > 0 {
+                    let capTop = 100.0 + min(util / 100.0 * 5.0, 5.0)
+                    if fiveHourVisible {
+                        let bounds = barBounds(for: point, series: .fiveHour)
+                        RectangleMark(
+                            xStart: .value("Start", bounds.start),
+                            xEnd: .value("End", bounds.end),
+                            yStart: .value("Bottom", 100),
+                            yEnd: .value("Top", capTop)
+                        )
+                        .foregroundStyle(Color.extraUsageCool.opacity(0.6))
+                    }
+                    if sevenDayVisible {
+                        let bounds = barBounds(for: point, series: .sevenDay)
+                        RectangleMark(
+                            xStart: .value("Start", bounds.start),
+                            xEnd: .value("End", bounds.end),
+                            yStart: .value("Bottom", 100),
+                            yEnd: .value("Top", capTop)
+                        )
+                        .foregroundStyle(Color.extraUsageCool.opacity(0.6))
                     }
                 }
             }
