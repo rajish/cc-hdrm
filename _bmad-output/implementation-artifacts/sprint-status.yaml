@@ -145,7 +145,7 @@ development_status:
   16-6-self-benchmarking-visual-trends: done
   epic-16-retrospective: optional
 
-  epic-17: in-progress  # Extra Usage Visibility & Alerts (Phase 5)
+  epic-17: done  # Extra Usage Visibility & Alerts (Phase 5)
   17-1-extra-usage-state-menu-bar-indicator: done
   17-2-popover-extra-usage-card: done
   17-3-analytics-extra-usage-crossover-visualization: done

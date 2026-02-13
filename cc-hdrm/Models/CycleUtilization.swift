@@ -16,7 +16,7 @@ struct CycleUtilization: Identifiable, Sendable, Equatable {
     let isPartial: Bool
     /// Number of reset events in this cycle
     let resetCount: Int
-    /// Extra usage spend in dollars for this cycle (nil if no extra usage data)
+    /// Extra usage spend in cents for this cycle (nil if no extra usage data)
     var extraUsageSpend: Double? = nil
 
     var id: String { "\(year)-\(label)" }

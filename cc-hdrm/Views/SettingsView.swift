@@ -371,6 +371,7 @@ struct SettingsView: View {
                         isUpdating = true
                         preferencesManager.billingCycleDay = newValue == 0 ? nil : newValue
                         billingCycleDay = preferencesManager.billingCycleDay ?? 0
+                        appState?.updateBillingCycleDay(preferencesManager.billingCycleDay)
                         isUpdating = false
                     }
                     .accessibilityLabel("Billing cycle day, \(billingCycleDay == 0 ? "not set" : "day \(billingCycleDay)")")
@@ -400,6 +401,7 @@ struct SettingsView: View {
                     fiveHourError = nil
                     sevenDayError = nil
                     billingCycleDay = 0
+                    appState?.updateBillingCycleDay(nil)
                     extraUsageAlertsEnabled = preferencesManager.extraUsageAlertsEnabled
                     extraUsageThreshold50 = preferencesManager.extraUsageThreshold50Enabled
                     extraUsageThreshold75 = preferencesManager.extraUsageThreshold75Enabled

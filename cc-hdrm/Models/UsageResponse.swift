@@ -28,6 +28,8 @@ struct WindowUsage: Codable, Sendable, Equatable {
 }
 
 /// Extra usage billing information.
+/// Note: `monthlyLimit` and `usedCredits` are returned by the API in **cents**
+/// (smallest currency unit). Divide by 100 before displaying as currency.
 struct ExtraUsage: Codable, Sendable, Equatable {
     let isEnabled: Bool?
     let monthlyLimit: Double?

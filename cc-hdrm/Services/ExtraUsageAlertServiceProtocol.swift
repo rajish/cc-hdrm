@@ -5,8 +5,8 @@ protocol ExtraUsageAlertServiceProtocol {
     func evaluateExtraUsageThresholds(
         extraUsageEnabled: Bool,
         utilization: Double?,
-        usedCredits: Double?,
-        monthlyLimit: Double?,
+        usedCreditsCents: Int?,
+        monthlyLimitCents: Int?,
         billingCycleDay: Int?,
         planExhausted: Bool
     ) async

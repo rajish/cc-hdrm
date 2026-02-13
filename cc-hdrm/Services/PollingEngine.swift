@@ -185,8 +185,8 @@ final class PollingEngine: PollingEngineProtocol {
                 await alertService.evaluateExtraUsageThresholds(
                     extraUsageEnabled: response.extraUsage?.isEnabled ?? false,
                     utilization: response.extraUsage?.utilization,
-                    usedCredits: response.extraUsage?.usedCredits,
-                    monthlyLimit: response.extraUsage?.monthlyLimit,
+                    usedCreditsCents: response.extraUsage?.usedCredits.map { Int($0.rounded()) },
+                    monthlyLimitCents: response.extraUsage?.monthlyLimit.map { Int($0.rounded()) },
                     billingCycleDay: preferencesManager.billingCycleDay,
                     planExhausted: planExhausted
                 )

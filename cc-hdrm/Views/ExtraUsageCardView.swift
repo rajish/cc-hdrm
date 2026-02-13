@@ -14,8 +14,8 @@ struct ExtraUsageCardView: View {
 
     var body: some View {
         if appState.extraUsageEnabled {
-            if let used = appState.extraUsageUsedCredits, used > 0 {
-                fullCard(usedCredits: used)
+            if let usedCents = appState.extraUsageUsedCreditsCents, usedCents > 0 {
+                fullCard(usedCents: usedCents)
             } else {
                 collapsedCard
             }
@@ -25,15 +25,14 @@ struct ExtraUsageCardView: View {
     // MARK: - Full Card
 
     @ViewBuilder
-    private func fullCard(usedCredits: Double) -> some View {
-        let limit = appState.extraUsageMonthlyLimit
-        let hasLimit = limit != nil && limit! > 0
-        let utilization = hasLimit ? min(1.0, usedCredits / limit!) : 0.0
+    private func fullCard(usedCents: Int) -> some View {
+        let activeLimitCents = appState.extraUsageMonthlyLimitCents.flatMap { $0 > 0 ? $0 : nil }
+        let utilization = activeLimitCents.map { min(1.0, Double(usedCents) / Double($0)) } ?? 0.0
         let resetInfo = resolvedResetInfo
 
         VStack(alignment: .leading, spacing: 6) {
             // Progress bar (only when limit is known)
-            if hasLimit {
+            if activeLimitCents != nil {
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 3)
@@ -50,13 +49,13 @@ struct ExtraUsageCardView: View {
 
             // Currency and utilization text
             HStack {
-                Text(Self.currencyText(usedCredits: usedCredits, limit: limit))
+                Text(Self.currencyText(usedCents: usedCents, limitCents: activeLimitCents))
                     .font(.caption)
                     .fontWeight(.semibold)
 
                 Spacer()
 
-                if hasLimit {
+                if activeLimitCents != nil {
                     Text(String(format: "%.0f%%", utilization * 100))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -71,7 +70,7 @@ struct ExtraUsageCardView: View {
         .padding(8)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(fullCardAccessibilityLabel(usedCredits: usedCredits, limit: limit, utilization: utilization, resetInfo: resetInfo))
+        .accessibilityLabel(fullCardAccessibilityLabel(usedCents: usedCents, limitCents: activeLimitCents, utilization: utilization, resetInfo: resetInfo))
     }
 
     // MARK: - Collapsed Card
@@ -89,18 +88,20 @@ struct ExtraUsageCardView: View {
 
     // MARK: - Currency Formatting
 
-    static func currencyText(usedCredits: Double, limit: Double?) -> String {
-        if let limit, limit > 0 {
-            return String(format: "$%.2f / $%.2f", usedCredits, limit)
+    /// Formats cent amounts to display currency using integer math (no floating-point rounding).
+    /// Example: `currencyText(usedCents: 1561, limitCents: 4250)` → `"$15.61 / $42.50"`.
+    static func currencyText(usedCents: Int, limitCents: Int?) -> String {
+        if let limitCents, limitCents > 0 {
+            return "\(AppState.formatCents(usedCents)) / \(AppState.formatCents(limitCents))"
         }
-        return String(format: "$%.2f spent", usedCredits)
+        return "\(AppState.formatCents(usedCents)) spent"
     }
 
     // MARK: - Reset Date
 
     /// Resolved reset info, computed once and shared between display and accessibility label.
     private var resolvedResetInfo: ResetInfo {
-        if let day = preferencesManager.billingCycleDay {
+        if let day = appState.billingCycleDay {
             let resetDate = Self.nextResetDate(billingCycleDay: day)
             let formatted = Self.formatResetDate(resetDate)
             return ResetInfo(displayText: "Resets \(formatted)", accessibilityText: "resets \(formatted)")
@@ -163,13 +164,13 @@ struct ExtraUsageCardView: View {
 
     // MARK: - Accessibility
 
-    private func fullCardAccessibilityLabel(usedCredits: Double, limit: Double?, utilization: Double, resetInfo: ResetInfo) -> String {
+    private func fullCardAccessibilityLabel(usedCents: Int, limitCents: Int?, utilization: Double, resetInfo: ResetInfo) -> String {
         var parts: [String] = []
 
-        if let limit, limit > 0 {
-            parts.append(String(format: "Extra usage: $%.2f spent of $%.2f monthly limit, %.0f%% used", usedCredits, limit, utilization * 100))
+        if let limitCents, limitCents > 0 {
+            parts.append("Extra usage: \(AppState.formatCents(usedCents)) spent of \(AppState.formatCents(limitCents)) monthly limit, \(Int(utilization * 100))% used")
         } else {
-            parts.append(String(format: "Extra usage: $%.2f spent, no monthly limit set", usedCredits))
+            parts.append("Extra usage: \(AppState.formatCents(usedCents)) spent, no monthly limit set")
         }
 
         parts.append(resetInfo.accessibilityText)

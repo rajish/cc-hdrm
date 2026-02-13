@@ -12,9 +12,9 @@ struct ExtraUsageCardViewTests {
     @MainActor
     func fullCardRendersWithSpendAndLimit() {
         let appState = AppState()
-        appState.updateExtraUsage(enabled: true, monthlyLimit: 43.0, usedCredits: 15.61, utilization: 0.363)
+        appState.updateExtraUsage(enabled: true, monthlyLimit: 4300.0, usedCredits: 1561.0, utilization: 0.363)
+        appState.updateBillingCycleDay(1)
         let prefs = MockPreferencesManager()
-        prefs.billingCycleDay = 1
 
         let view = ExtraUsageCardView(appState: appState, preferencesManager: prefs)
         let controller = NSHostingController(rootView: view)
@@ -27,7 +27,7 @@ struct ExtraUsageCardViewTests {
     @MainActor
     func collapsedStateWithZeroSpend() {
         let appState = AppState()
-        appState.updateExtraUsage(enabled: true, monthlyLimit: 43.0, usedCredits: 0, utilization: 0.0)
+        appState.updateExtraUsage(enabled: true, monthlyLimit: 4300.0, usedCredits: 0, utilization: 0.0)
         let prefs = MockPreferencesManager()
 
         let view = ExtraUsageCardView(appState: appState, preferencesManager: prefs)
@@ -39,7 +39,7 @@ struct ExtraUsageCardViewTests {
     @MainActor
     func collapsedStateWithNilSpend() {
         let appState = AppState()
-        appState.updateExtraUsage(enabled: true, monthlyLimit: 43.0, usedCredits: nil, utilization: nil)
+        appState.updateExtraUsage(enabled: true, monthlyLimit: 4300.0, usedCredits: nil, utilization: nil)
         let prefs = MockPreferencesManager()
 
         let view = ExtraUsageCardView(appState: appState, preferencesManager: prefs)
@@ -68,9 +68,9 @@ struct ExtraUsageCardViewTests {
     @MainActor
     func noLimitModeRendersWithoutProgressBar() {
         let appState = AppState()
-        appState.updateExtraUsage(enabled: true, monthlyLimit: nil, usedCredits: 15.61, utilization: nil)
+        appState.updateExtraUsage(enabled: true, monthlyLimit: nil, usedCredits: 1561.0, utilization: nil)
+        appState.updateBillingCycleDay(15)
         let prefs = MockPreferencesManager()
-        prefs.billingCycleDay = 15
 
         let view = ExtraUsageCardView(appState: appState, preferencesManager: prefs)
         let controller = NSHostingController(rootView: view)
@@ -79,21 +79,21 @@ struct ExtraUsageCardViewTests {
 
     // MARK: - Currency Formatting (AC 1, 8)
 
-    @Test("Currency text formats as '$X.XX / $Y.YY' with known limit")
+    @Test("Currency text formats cents as '$X.XX / $Y.YY' with known limit")
     func currencyFormattingWithLimit() {
-        let text = ExtraUsageCardView.currencyText(usedCredits: 15.61, limit: 43.0)
+        let text = ExtraUsageCardView.currencyText(usedCents: 1561, limitCents: 4300)
         #expect(text == "$15.61 / $43.00")
     }
 
-    @Test("Currency text formats as '$X.XX spent' without limit")
+    @Test("Currency text formats cents as '$X.XX spent' without limit")
     func currencyFormattingWithoutLimit() {
-        let text = ExtraUsageCardView.currencyText(usedCredits: 15.61, limit: nil)
+        let text = ExtraUsageCardView.currencyText(usedCents: 1561, limitCents: nil)
         #expect(text == "$15.61 spent")
     }
 
-    @Test("Currency text formats as '$X.XX spent' when limit is zero")
+    @Test("Currency text formats cents as '$X.XX spent' when limit is zero")
     func currencyFormattingWithZeroLimit() {
-        let text = ExtraUsageCardView.currencyText(usedCredits: 7.50, limit: 0.0)
+        let text = ExtraUsageCardView.currencyText(usedCents: 750, limitCents: 0)
         #expect(text == "$7.50 spent")
     }
 
@@ -137,7 +137,7 @@ struct ExtraUsageCardViewTests {
     @MainActor
     func resetTextWithNoBillingDay() {
         let appState = AppState()
-        appState.updateExtraUsage(enabled: true, monthlyLimit: 43.0, usedCredits: 15.61, utilization: 0.363)
+        appState.updateExtraUsage(enabled: true, monthlyLimit: 4300.0, usedCredits: 1561.0, utilization: 0.363)
         let prefs = MockPreferencesManager()
         prefs.billingCycleDay = nil
 
@@ -150,14 +150,14 @@ struct ExtraUsageCardViewTests {
 
     @Test("Accessibility label components for full card with limit and billing day")
     func accessibilityLabelFullCardComponents() {
-        // Verify the expected label format by composing the same way the view does
-        let usedCredits = 15.61
-        let limit = 43.0
-        let utilization = min(1.0, usedCredits / limit)
+        // Verify the expected label format using formatCents (same as the view)
+        let usedCents = 1561
+        let limitCents = 4300
+        let utilization = min(1.0, Double(usedCents) / Double(limitCents))
         let resetDate = ExtraUsageCardView.nextResetDate(billingCycleDay: 1)
         let resetStr = ExtraUsageCardView.formatResetDate(resetDate)
 
-        let spendPart = String(format: "Extra usage: $%.2f spent of $%.2f monthly limit, %.0f%% used", usedCredits, limit, utilization * 100)
+        let spendPart = "Extra usage: \(AppState.formatCents(usedCents)) spent of \(AppState.formatCents(limitCents)) monthly limit, \(Int(utilization * 100))% used"
         let expected = "\(spendPart), resets \(resetStr)"
 
         #expect(expected.contains("$15.61 spent of $43.00 monthly limit"))
@@ -168,7 +168,7 @@ struct ExtraUsageCardViewTests {
 
     @Test("Accessibility label for no-limit card omits percentage")
     func accessibilityLabelNoLimit() {
-        let text = String(format: "Extra usage: $%.2f spent, no monthly limit set", 15.61)
+        let text = "Extra usage: \(AppState.formatCents(1561)) spent, no monthly limit set"
         #expect(text == "Extra usage: $15.61 spent, no monthly limit set")
         #expect(!text.contains("% used"))
     }
@@ -177,9 +177,9 @@ struct ExtraUsageCardViewTests {
     @MainActor
     func fullCardRendersWithAccessibility() {
         let appState = AppState()
-        appState.updateExtraUsage(enabled: true, monthlyLimit: 43.0, usedCredits: 15.61, utilization: 0.363)
+        appState.updateExtraUsage(enabled: true, monthlyLimit: 4300.0, usedCredits: 1561.0, utilization: 0.363)
+        appState.updateBillingCycleDay(1)
         let prefs = MockPreferencesManager()
-        prefs.billingCycleDay = 1
 
         let view = ExtraUsageCardView(appState: appState, preferencesManager: prefs)
         let controller = NSHostingController(rootView: view)
@@ -190,7 +190,7 @@ struct ExtraUsageCardViewTests {
     @MainActor
     func collapsedStateRendersWithAccessibility() {
         let appState = AppState()
-        appState.updateExtraUsage(enabled: true, monthlyLimit: 43.0, usedCredits: 0, utilization: 0.0)
+        appState.updateExtraUsage(enabled: true, monthlyLimit: 4300.0, usedCredits: 0, utilization: 0.0)
         let prefs = MockPreferencesManager()
 
         let view = ExtraUsageCardView(appState: appState, preferencesManager: prefs)

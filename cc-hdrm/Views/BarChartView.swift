@@ -41,7 +41,7 @@ struct BarChartView: View {
         let fiveHourMin: Double?
         let sevenDayMin: Double?
         let resetCount: Int
-        /// Extra usage spend in dollars for this period (nil if unavailable)
+        /// Extra usage spend in cents for this period (nil if unavailable)
         var extraUsageSpend: Double? = nil
     }
 
@@ -565,7 +565,7 @@ private struct BarHoverOverlayContent: View {
 
             // Extra usage indicator (Story 17.3)
             if let spend = point.extraUsageSpend, spend > 0 {
-                Text(String(format: "Extra: $%.2f", spend))
+                Text("Extra: \(AppState.formatCents(Int(spend.rounded())))")
                     .font(.caption2)
                     .foregroundStyle(Color.extraUsageCool)
             }
