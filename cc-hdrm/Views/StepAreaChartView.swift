@@ -318,6 +318,13 @@ struct StepAreaChartView: View {
                 maxSevenDay = nil
             }
 
+            // Also reset on 7d utilization drop
+            if let util = point.sevenDayUtil, let maxS = maxSevenDay,
+               maxS - util >= resetDropThreshold {
+                maxFiveHour = nil
+                maxSevenDay = nil
+            }
+
             let clampedFive: Double?
             if let util = point.fiveHourUtil {
                 if let maxF = maxFiveHour {
