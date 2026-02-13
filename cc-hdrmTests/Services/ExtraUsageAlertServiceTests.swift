@@ -28,8 +28,8 @@ struct ExtraUsageAlertServiceTests {
         await sut.evaluateExtraUsageThresholds(
             extraUsageEnabled: true,
             utilization: 0.55,
-            usedCredits: 5500.0,
-            monthlyLimit: 10000.0,
+            usedCreditsCents: 5500,
+            monthlyLimitCents: 10000,
             billingCycleDay: nil,
             planExhausted: false
         )
@@ -49,8 +49,8 @@ struct ExtraUsageAlertServiceTests {
         await sut.evaluateExtraUsageThresholds(
             extraUsageEnabled: true,
             utilization: 0.78,
-            usedCredits: 7800.0,
-            monthlyLimit: 10000.0,
+            usedCreditsCents: 7800,
+            monthlyLimitCents: 10000,
             billingCycleDay: nil,
             planExhausted: false
         )
@@ -70,8 +70,8 @@ struct ExtraUsageAlertServiceTests {
         await sut.evaluateExtraUsageThresholds(
             extraUsageEnabled: true,
             utilization: 0.92,
-            usedCredits: 9200.0,
-            monthlyLimit: 10000.0,
+            usedCreditsCents: 9200,
+            monthlyLimitCents: 10000,
             billingCycleDay: nil,
             planExhausted: false
         )
@@ -90,8 +90,8 @@ struct ExtraUsageAlertServiceTests {
         await sut.evaluateExtraUsageThresholds(
             extraUsageEnabled: true,
             utilization: 0.55,
-            usedCredits: 5500.0,
-            monthlyLimit: 10000.0,
+            usedCreditsCents: 5500,
+            monthlyLimitCents: 10000,
             billingCycleDay: nil,
             planExhausted: false
         )
@@ -110,8 +110,8 @@ struct ExtraUsageAlertServiceTests {
         await sut.evaluateExtraUsageThresholds(
             extraUsageEnabled: true,
             utilization: 0.55,
-            usedCredits: 5500.0,
-            monthlyLimit: 10000.0,
+            usedCreditsCents: 5500,
+            monthlyLimitCents: 10000,
             billingCycleDay: nil,
             planExhausted: false
         )
@@ -129,8 +129,8 @@ struct ExtraUsageAlertServiceTests {
         await sut.evaluateExtraUsageThresholds(
             extraUsageEnabled: true,
             utilization: 0.0,
-            usedCredits: 0.0,
-            monthlyLimit: 10000.0,
+            usedCreditsCents: 0,
+            monthlyLimitCents: 10000,
             billingCycleDay: nil,
             planExhausted: true
         )
@@ -147,8 +147,8 @@ struct ExtraUsageAlertServiceTests {
         await sut.evaluateExtraUsageThresholds(
             extraUsageEnabled: true,
             utilization: 0.0,
-            usedCredits: 0.0,
-            monthlyLimit: 10000.0,
+            usedCreditsCents: 0,
+            monthlyLimitCents: 10000,
             billingCycleDay: nil,
             planExhausted: true
         )
@@ -164,8 +164,8 @@ struct ExtraUsageAlertServiceTests {
         await sut.evaluateExtraUsageThresholds(
             extraUsageEnabled: true,
             utilization: 0.0,
-            usedCredits: 0.0,
-            monthlyLimit: 10000.0,
+            usedCreditsCents: 0,
+            monthlyLimitCents: 10000,
             billingCycleDay: nil,
             planExhausted: true
         )
@@ -183,8 +183,8 @@ struct ExtraUsageAlertServiceTests {
         await sut.evaluateExtraUsageThresholds(
             extraUsageEnabled: true,
             utilization: 0.95,
-            usedCredits: 9500.0,
-            monthlyLimit: 10000.0,
+            usedCreditsCents: 9500,
+            monthlyLimitCents: 10000,
             billingCycleDay: nil,
             planExhausted: true
         )
@@ -200,8 +200,8 @@ struct ExtraUsageAlertServiceTests {
         await sut.evaluateExtraUsageThresholds(
             extraUsageEnabled: true,
             utilization: 0.55,
-            usedCredits: 5500.0,
-            monthlyLimit: 10000.0,
+            usedCreditsCents: 5500,
+            monthlyLimitCents: 10000,
             billingCycleDay: nil,
             planExhausted: false
         )
@@ -216,8 +216,8 @@ struct ExtraUsageAlertServiceTests {
         await sut.evaluateExtraUsageThresholds(
             extraUsageEnabled: false,
             utilization: 0.95,
-            usedCredits: 9500.0,
-            monthlyLimit: 10000.0,
+            usedCreditsCents: 9500,
+            monthlyLimitCents: 10000,
             billingCycleDay: nil,
             planExhausted: true
         )
@@ -232,8 +232,8 @@ struct ExtraUsageAlertServiceTests {
         await sut.evaluateExtraUsageThresholds(
             extraUsageEnabled: true,
             utilization: nil,
-            usedCredits: nil,
-            monthlyLimit: nil,
+            usedCreditsCents: nil,
+            monthlyLimitCents: nil,
             billingCycleDay: nil,
             planExhausted: false
         )
@@ -255,8 +255,8 @@ struct ExtraUsageAlertServiceTests {
         await sut.evaluateExtraUsageThresholds(
             extraUsageEnabled: true,
             utilization: 0.95,
-            usedCredits: 9500.0,
-            monthlyLimit: 10000.0,
+            usedCreditsCents: 9500,
+            monthlyLimitCents: 10000,
             billingCycleDay: nil,
             planExhausted: true
         )
@@ -271,8 +271,8 @@ struct ExtraUsageAlertServiceTests {
         await sut.evaluateExtraUsageThresholds(
             extraUsageEnabled: true,
             utilization: 0.95,
-            usedCredits: 9500.0,
-            monthlyLimit: 10000.0,
+            usedCreditsCents: 9500,
+            monthlyLimitCents: 10000,
             billingCycleDay: nil,
             planExhausted: false
         )

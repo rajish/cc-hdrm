@@ -29,8 +29,8 @@ final class ExtraUsageAlertService: ExtraUsageAlertServiceProtocol {
     func evaluateExtraUsageThresholds(
         extraUsageEnabled: Bool,
         utilization: Double?,
-        usedCredits: Double?,
-        monthlyLimit: Double?,
+        usedCreditsCents: Int?,
+        monthlyLimitCents: Int?,
         billingCycleDay: Int?,
         planExhausted: Bool
     ) async {
@@ -74,9 +74,8 @@ final class ExtraUsageAlertService: ExtraUsageAlertServiceProtocol {
         let utilizationPercent = utilization * 100.0
         var firedThresholds = preferencesManager.extraUsageFiredThresholds
 
-        // Convert raw API cents (Double) to Int once for notification text
-        let usedCents = Int((usedCredits ?? 0).rounded())
-        let limitCents = Int((monthlyLimit ?? 0).rounded())
+        let usedCents = usedCreditsCents ?? 0
+        let limitCents = monthlyLimitCents ?? 0
 
         for (percent, toggleKeyPath) in thresholds {
             guard preferencesManager[keyPath: toggleKeyPath] else { continue }
