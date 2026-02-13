@@ -342,6 +342,25 @@ private struct StaticBarChartContent: View {
         }
     }
 
+    /// Computes the x-axis domain to cover the full selected time range,
+    /// not just the data range. For `.all`, falls back to data bounds or 90 days.
+    private var xAxisDomain: ClosedRange<Date> {
+        let now = Date()
+        switch timeRange {
+        case .day:
+            return Calendar.current.date(byAdding: .day, value: -1, to: now)!...now
+        case .week:
+            return Calendar.current.date(byAdding: .day, value: -7, to: now)!...now
+        case .month:
+            return Calendar.current.date(byAdding: .day, value: -30, to: now)!...now
+        case .all:
+            if let earliest = barPoints.first?.periodStart {
+                return earliest...now
+            }
+            return Calendar.current.date(byAdding: .day, value: -90, to: now)!...now
+        }
+    }
+
     var body: some View {
         Chart {
             // Layer 0: No-data gap regions (grey background) — rendered before bars so bars draw on top
@@ -406,6 +425,7 @@ private struct StaticBarChartContent: View {
             }
         }
         .chartYScale(domain: 0...105)
+        .chartXScale(domain: xAxisDomain)
         .chartLegend(.hidden)
         .chartYAxis {
             AxisMarks(values: [0, 25, 50, 75, 100]) { value in
