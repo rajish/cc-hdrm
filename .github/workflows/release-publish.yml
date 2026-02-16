@@ -293,11 +293,21 @@ jobs:
             "cc-hdrm-${NEW_VERSION}.dmg" \
             checksums.txt
 
+      - name: Generate Homebrew tap token
+        if: steps.detect.outputs.release == 'true'
+        uses: actions/create-github-app-token@v1
+        id: tap-token
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: rajish
+          repositories: homebrew-tap
+
       - name: Update Homebrew Cask formula
         if: steps.detect.outputs.release == 'true'
         continue-on-error: true
         env:
-          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAP_TOKEN: ${{ steps.tap-token.outputs.token }}
           NEW_VERSION: ${{ steps.detect.outputs.version }}
         run: |
           ZIP_FILE="cc-hdrm-${NEW_VERSION}-macos.zip"
