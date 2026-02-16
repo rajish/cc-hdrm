@@ -1,0 +1,33 @@
+name: Test Homebrew Tap Auth
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate Homebrew tap token
+        uses: actions/create-github-app-token@v1
+        id: tap-token
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: rajish
+          repositories: homebrew-tap
+
+      - name: Test clone and push access
+        env:
+          TAP_TOKEN: ${{ steps.tap-token.outputs.token }}
+        run: |
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/rajish/homebrew-tap.git" /tmp/tap-test
+          cd /tmp/tap-test
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create and immediately delete a test branch to verify push access
+          git checkout -b test-auth-check
+          git push origin test-auth-check
+          git push origin --delete test-auth-check
+
+          echo "Auth test passed — clone and push both work."
