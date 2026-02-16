@@ -20,6 +20,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-02-16
+
+### Changed
+
+- feat: extra usage step-end line visualization above 100% in 24h chart (#76)
+- feat: extra usage visualization and tooltip data in bar chart views (#75)
+- fix: extend x-axis domain to prevent last bar overlapping Y-axis labels (#77)
+- fix: add trailing padding to prevent last bar overlapping Y-axis labels (#74)
+- fix: detect 7d utilization drops in monotonic clamping reset logic (#73)
+- fix: chart x-axis domain, 7d reset detection in chart and service layers (#68)
+- fix: chart Y-axis clipping and extra usage 7d trigger detection (#67)
+- fix: use integer cents for extra usage currency display (#63)
+- feat: extra usage alerts and configuration with threshold notifications (Story 17.4)
+- feat: analytics extra usage crossover visualization with 100% reference line (Story 17.3)
+- feat: popover extra usage card with progress bar and billing cycle reset (Story 17.2)
+- feat: extra usage state propagation and menu bar indicator (Story 17.1) (#59)
+- feat: cycle-over-cycle bar chart and self-benchmarking anchors (Story 16.6) (#58)
+- feat: context-aware insight engine with NL formatting and tone matching (Story 16.5) (#57)
+- docs: create stories 16.5 and 16.6 via BMAD workflow, update sprint status (#56)
+- feat: tier recommendation display card with billing cycle settings (Story 16.4) (#54)
+- docs: create story 16.4 via BMAD workflow, update sprint status
+- feat: pattern notification and analytics display (Story 16.2)
+- fix: handle negative savings in tier cost comparison (#53)
+- feat: slow-burn pattern detection service (Story 16.1) (#49)
+- docs: mark story 16.3 as done in sprint status (#51)
+- feat: tier recommendation service with billing cycle support (Story 16.3) (#50)
+- feat: custom credit limit override for unknown tiers (Story 15.2) (#48)
+- feat: data retention configuration with clear history (Story 15.1) (#47)
+- feat: analytics view conditional display with data qualifier (Story 14.5) (#46)
+- docs: address CodeRabbit review feedback across planning artifacts (#45)
+- docs: shard epics into individual files and update planning artifacts (#44)
+- feat: context-aware value summary with terminology refactor (Story 14.4) (#42)
+- feat: persist extra usage data to SQLite database (#43)
+- feat: subscription value bar with dollar-based utilization tracking (Story 14.3) (#41)
+- feat: headroom analysis service with code review fixes (Story 14.2) (#38)
+
 ## [1.2.0] - 2026-02-07
 
 ### What's New in v1.2
@@ -125,7 +161,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Launch at login via SMAppService
 - Xcode project with XcodeGen configuration
 
-[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/rajish/cc-hdrm/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/rajish/cc-hdrm/compare/v1.1.4...v1.2.0
 [1.1.4]: https://github.com/rajish/cc-hdrm/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/rajish/cc-hdrm/compare/v1.1.2...v1.1.3
