@@ -20,6 +20,12 @@ final class PollingEngine: PollingEngineProtocol {
     private var pollingTask: Task<Void, Never>?
     private var sparklineRefreshTask: Task<Void, Never>?
 
+    /// In-memory cache for refreshed credentials. Avoids writing to Claude Code's
+    /// Keychain item, which would trigger ACL re-evaluation and repeated password prompts.
+    /// Set on successful token refresh; cleared on refresh failure so the next cycle
+    /// falls back to a Keychain read (e.g. if Claude Code refreshed externally).
+    private var cachedCredentials: KeychainCredentials?
+
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
         category: "polling"
@@ -80,7 +86,19 @@ final class PollingEngine: PollingEngineProtocol {
     /// Executes a single poll cycle: read credentials → check token → fetch usage → update state.
     func performPollCycle() async {
         do {
-            let credentials = try await keychainService.readCredentials()
+            // Prefer in-memory cached credentials (from a prior token refresh) over
+            // Keychain reads. This avoids repeated Keychain access prompts.
+            // IMPORTANT: Always prefer cache even when the access token is expired,
+            // because the cache holds the rotated refresh token. Anthropic's OAuth
+            // invalidates old refresh tokens on rotation, so the Keychain's refresh
+            // token is stale after a successful refresh. The token expiry check below
+            // will trigger attemptTokenRefresh() with the cached (rotated) refresh token.
+            let credentials: KeychainCredentials
+            if let cached = cachedCredentials {
+                credentials = cached
+            } else {
+                credentials = try await keychainService.readCredentials()
+            }
             appState.updateSubscriptionTier(credentials.subscriptionType)
 
             let status = TokenExpiryChecker.tokenStatus(for: credentials)
@@ -125,13 +143,19 @@ final class PollingEngine: PollingEngineProtocol {
                 scopes: credentials.scopes
             )
 
-            try await keychainService.writeCredentials(mergedCredentials)
+            // Cache in memory instead of writing to Keychain. Writing to Claude Code's
+            // Keychain item triggers ACL re-evaluation, causing repeated password prompts
+            // even after the user clicks "Always Allow".
+            cachedCredentials = mergedCredentials
 
             appState.updateConnectionStatus(.connected)
             appState.updateStatusMessage(nil)
-            Self.logger.info("Token refresh succeeded — credentials updated in Keychain")
+            Self.logger.info("Token refresh succeeded — credentials cached in memory")
         } catch {
             Self.logger.error("Token refresh failed: \(error.localizedDescription)")
+            // Clear cache so next cycle reads from Keychain — Claude Code may have
+            // refreshed externally, providing a valid token.
+            cachedCredentials = nil
             appState.updateConnectionStatus(.tokenExpired)
             appState.updateStatusMessage(StatusMessage(
                 title: "Token expired",
