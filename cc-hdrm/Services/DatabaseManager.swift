@@ -3,7 +3,7 @@ import os
 import SQLite3
 
 /// Current database schema version. Increment when schema changes require migration.
-private let currentSchemaVersion: Int = 4
+private let currentSchemaVersion: Int = 5
 
 /// SQLITE_TRANSIENT tells SQLite to make its own copy of the string data.
 /// Required when binding strings from Swift's withCString which uses temporary buffers.
@@ -161,6 +161,14 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
             Self.logger.info("Migration v3->v4: added extra_usage columns to usage_rollups")
         }
 
+        if existingVersion < 5 {
+            let connection = try getConnection()
+            try executeSQL("ALTER TABLE usage_polls ADD COLUMN extra_usage_delta REAL", on: connection)
+            try executeSQL("ALTER TABLE usage_rollups ADD COLUMN extra_usage_delta REAL", on: connection)
+            try backfillExtraUsageDeltas(connection: connection)
+            Self.logger.info("Migration v4->v5: added extra_usage_delta columns and backfilled deltas")
+        }
+
         Self.logger.info("Migrations complete: \(existingVersion) -> \(currentSchemaVersion)")
         try setSchemaVersion(currentSchemaVersion)
     }
@@ -247,7 +255,8 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
                 extra_usage_enabled INTEGER,
                 extra_usage_monthly_limit REAL,
                 extra_usage_used_credits REAL,
-                extra_usage_utilization REAL
+                extra_usage_utilization REAL,
+                extra_usage_delta REAL
             )
             """
         try executeSQL(createTable, on: connection)
@@ -274,7 +283,8 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
                 reset_count INTEGER DEFAULT 0,
                 waste_credits REAL,
                 extra_usage_used_credits REAL,
-                extra_usage_utilization REAL
+                extra_usage_utilization REAL,
+                extra_usage_delta REAL
             )
             """
         try executeSQL(createTable, on: connection)
@@ -383,6 +393,79 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
             let errorMessage = String(cString: sqlite3_errmsg(connection))
             throw AppError.databaseQueryFailed(underlying: SQLiteError.execFailed(message: errorMessage))
         }
+    }
+
+    // MARK: - Migration Helpers
+
+    /// Backfills `extra_usage_delta` for existing polls by computing deltas
+    /// from consecutive `extra_usage_used_credits` values.
+    private func backfillExtraUsageDeltas(connection: OpaquePointer) throws {
+        let selectSQL = "SELECT id, extra_usage_used_credits FROM usage_polls ORDER BY timestamp ASC"
+
+        var selectStmt: OpaquePointer?
+        defer {
+            if let selectStmt = selectStmt {
+                sqlite3_finalize(selectStmt)
+            }
+        }
+
+        let prepareResult = sqlite3_prepare_v2(connection, selectSQL, -1, &selectStmt, nil)
+        guard prepareResult == SQLITE_OK else {
+            let errorMessage = String(cString: sqlite3_errmsg(connection))
+            Self.logger.error("Backfill: failed to prepare SELECT: \(errorMessage, privacy: .public)")
+            return
+        }
+
+        var previousCredits: Double?
+        var updates: [(id: Int64, delta: Double)] = []
+
+        while sqlite3_step(selectStmt) == SQLITE_ROW {
+            let id = sqlite3_column_int64(selectStmt, 0)
+            let currentCredits: Double?
+            if sqlite3_column_type(selectStmt, 1) == SQLITE_NULL {
+                currentCredits = nil
+            } else {
+                currentCredits = sqlite3_column_double(selectStmt, 1)
+            }
+
+            let delta: Double
+            if let current = currentCredits, let previous = previousCredits {
+                delta = max(0, current - previous)
+            } else {
+                delta = 0
+            }
+
+            if currentCredits != nil || previousCredits != nil {
+                updates.append((id: id, delta: delta))
+            }
+
+            previousCredits = currentCredits
+        }
+
+        guard !updates.isEmpty else { return }
+
+        // Wrap in transaction for performance (avoids per-row fsync)
+        sqlite3_exec(connection, "BEGIN TRANSACTION", nil, nil, nil)
+
+        let updateSQL = "UPDATE usage_polls SET extra_usage_delta = ? WHERE id = ?"
+        var updateStmt: OpaquePointer?
+        let updatePrepare = sqlite3_prepare_v2(connection, updateSQL, -1, &updateStmt, nil)
+        guard updatePrepare == SQLITE_OK else {
+            sqlite3_exec(connection, "ROLLBACK", nil, nil, nil)
+            return
+        }
+
+        for update in updates {
+            sqlite3_bind_double(updateStmt, 1, update.delta)
+            sqlite3_bind_int64(updateStmt, 2, update.id)
+            sqlite3_step(updateStmt)
+            sqlite3_reset(updateStmt)
+        }
+
+        sqlite3_finalize(updateStmt)
+        sqlite3_exec(connection, "COMMIT", nil, nil, nil)
+
+        Self.logger.info("Backfill: computed deltas for \(updates.count, privacy: .public) polls")
     }
 
     // MARK: - Schema Verification Helpers (for testing)

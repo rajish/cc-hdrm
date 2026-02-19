@@ -33,6 +33,9 @@ struct UsageRollup: Sendable, Equatable {
     /// Extra usage utilization percentage 0-100 (persisted in rollup DB schema since v4).
     /// MAX aggregation across source polls/rollups in each period.
     var extraUsageUtilization: Double? = nil
+    /// Extra usage delta: SUM of credits consumed across polls/rollups in this period.
+    /// Persisted in rollup DB schema since v5.
+    var extraUsageDelta: Double? = nil
 
     /// Resolution tier for aggregated usage data.
     enum Resolution: String, Codable, CaseIterable, Sendable {

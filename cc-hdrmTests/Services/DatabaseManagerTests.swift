@@ -51,7 +51,7 @@ struct DatabaseManagerTests {
         #expect(manager.indexExists("idx_reset_events_timestamp"))
     }
 
-    @Test("Schema creation sets schema version to current (4)")
+    @Test("Schema creation sets schema version to current (5)")
     func schemaCreationSetsVersion() throws {
         let (manager, path) = makeManager()
         defer { cleanup(manager: manager, path: path) }
@@ -59,7 +59,7 @@ struct DatabaseManagerTests {
         try manager.ensureSchema()
 
         let version = try manager.getSchemaVersion()
-        #expect(version == 4)
+        #expect(version == 5)
     }
 
     @Test("Database path is correct")
@@ -202,7 +202,7 @@ struct DatabaseManagerTests {
         let version2 = try manager2.getSchemaVersion()
 
         #expect(version1 == version2)
-        #expect(version1 == 4)
+        #expect(version1 == 5)
     }
 
     @Test("Migration v1->v2 creates rollup_metadata table")
@@ -289,7 +289,7 @@ struct DatabaseManagerTests {
         #expect(util == 0.99)
 
         // Verify version bumped to current (migration runs all the way through)
-        #expect(try manager2.getSchemaVersion() == 4)
+        #expect(try manager2.getSchemaVersion() == 5)
     }
 
     @Test("Migration v2->v3 adds extra_usage columns to usage_polls")
@@ -377,7 +377,7 @@ struct DatabaseManagerTests {
         #expect(util == 0.88)
 
         // Verify version bumped to 4
-        #expect(try manager2.getSchemaVersion() == 4)
+        #expect(try manager2.getSchemaVersion() == 5)
     }
 
     // MARK: - Table Schema Verification (AC #1)
@@ -411,6 +411,7 @@ struct DatabaseManagerTests {
         #expect(columns.contains("extra_usage_monthly_limit"))
         #expect(columns.contains("extra_usage_used_credits"))
         #expect(columns.contains("extra_usage_utilization"))
+        #expect(columns.contains("extra_usage_delta"))
     }
 
     @Test("usage_rollups table has correct columns")
@@ -444,6 +445,9 @@ struct DatabaseManagerTests {
         #expect(columns.contains("seven_day_min"))
         #expect(columns.contains("reset_count"))
         #expect(columns.contains("waste_credits"))
+        #expect(columns.contains("extra_usage_used_credits"))
+        #expect(columns.contains("extra_usage_utilization"))
+        #expect(columns.contains("extra_usage_delta"))
     }
 
     @Test("reset_events table has correct columns")
@@ -567,6 +571,87 @@ struct DatabaseManagerTests {
 
         #expect(tier == "pro")
         #expect(unusedCredits == 50.0)
+    }
+
+    // MARK: - Story 17.5: Migration v4->v5 (extra_usage_delta)
+
+    @Test("Migration v4->v5 adds extra_usage_delta columns to both tables")
+    func migrationV4ToV5AddsExtraUsageDeltaColumns() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let testPath = tempDir.appendingPathComponent("test_\(UUID().uuidString).db")
+
+        let manager1 = DatabaseManager(databasePath: testPath)
+        let connection = try manager1.getConnection()
+
+        sqlite3_exec(connection, "CREATE TABLE IF NOT EXISTS usage_polls (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INTEGER NOT NULL, five_hour_util REAL, five_hour_resets_at INTEGER, seven_day_util REAL, seven_day_resets_at INTEGER, extra_usage_enabled INTEGER, extra_usage_monthly_limit REAL, extra_usage_used_credits REAL, extra_usage_utilization REAL)", nil, nil, nil)
+        sqlite3_exec(connection, "CREATE TABLE IF NOT EXISTS usage_rollups (id INTEGER PRIMARY KEY AUTOINCREMENT, period_start INTEGER NOT NULL, period_end INTEGER NOT NULL, resolution TEXT NOT NULL, five_hour_avg REAL, five_hour_peak REAL, five_hour_min REAL, seven_day_avg REAL, seven_day_peak REAL, seven_day_min REAL, reset_count INTEGER DEFAULT 0, waste_credits REAL, extra_usage_used_credits REAL, extra_usage_utilization REAL)", nil, nil, nil)
+        sqlite3_exec(connection, "CREATE TABLE IF NOT EXISTS reset_events (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INTEGER NOT NULL, five_hour_peak REAL, seven_day_util REAL, tier TEXT, used_credits REAL, constrained_credits REAL, waste_credits REAL)", nil, nil, nil)
+        sqlite3_exec(connection, "CREATE TABLE IF NOT EXISTS rollup_metadata (key TEXT PRIMARY KEY, value TEXT)", nil, nil, nil)
+        sqlite3_exec(connection, "PRAGMA user_version = 4", nil, nil, nil)
+
+        manager1.closeConnection()
+
+        let manager2 = DatabaseManager(databasePath: testPath)
+        defer { cleanup(manager: manager2, path: testPath) }
+        try manager2.ensureSchema()
+
+        let connection2 = try manager2.getConnection()
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        let pollResult = sqlite3_exec(connection2, "INSERT INTO usage_polls (timestamp, extra_usage_delta) VALUES (999, 5.25)", nil, nil, &errorMessage)
+        #expect(pollResult == SQLITE_OK, "INSERT with extra_usage_delta into usage_polls should succeed")
+
+        let rollupResult = sqlite3_exec(connection2, "INSERT INTO usage_rollups (period_start, period_end, resolution, extra_usage_delta) VALUES (1000, 2000, '5min', 10.5)", nil, nil, &errorMessage)
+        #expect(rollupResult == SQLITE_OK, "INSERT with extra_usage_delta into usage_rollups should succeed")
+
+        #expect(try manager2.getSchemaVersion() == 5)
+    }
+
+    @Test("Migration v4->v5 backfills deltas from consecutive polls")
+    func migrationV4ToV5BackfillsDeltas() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let testPath = tempDir.appendingPathComponent("test_\(UUID().uuidString).db")
+
+        let manager1 = DatabaseManager(databasePath: testPath)
+        let connection = try manager1.getConnection()
+
+        sqlite3_exec(connection, "CREATE TABLE IF NOT EXISTS usage_polls (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INTEGER NOT NULL, five_hour_util REAL, five_hour_resets_at INTEGER, seven_day_util REAL, seven_day_resets_at INTEGER, extra_usage_enabled INTEGER, extra_usage_monthly_limit REAL, extra_usage_used_credits REAL, extra_usage_utilization REAL)", nil, nil, nil)
+        sqlite3_exec(connection, "CREATE TABLE IF NOT EXISTS usage_rollups (id INTEGER PRIMARY KEY AUTOINCREMENT, period_start INTEGER NOT NULL, period_end INTEGER NOT NULL, resolution TEXT NOT NULL, five_hour_avg REAL, five_hour_peak REAL, five_hour_min REAL, seven_day_avg REAL, seven_day_peak REAL, seven_day_min REAL, reset_count INTEGER DEFAULT 0, waste_credits REAL, extra_usage_used_credits REAL, extra_usage_utilization REAL)", nil, nil, nil)
+        sqlite3_exec(connection, "CREATE TABLE IF NOT EXISTS reset_events (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INTEGER NOT NULL, five_hour_peak REAL, seven_day_util REAL, tier TEXT, used_credits REAL, constrained_credits REAL, waste_credits REAL)", nil, nil, nil)
+        sqlite3_exec(connection, "CREATE TABLE IF NOT EXISTS rollup_metadata (key TEXT PRIMARY KEY, value TEXT)", nil, nil, nil)
+        sqlite3_exec(connection, "PRAGMA user_version = 4", nil, nil, nil)
+
+        // Insert consecutive polls: 0, 10, 25, 20 (reset), NULL
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util, extra_usage_used_credits) VALUES (1000, 50.0, 0.0)", nil, nil, &errorMessage)
+        sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util, extra_usage_used_credits) VALUES (2000, 55.0, 10.0)", nil, nil, &errorMessage)
+        sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util, extra_usage_used_credits) VALUES (3000, 60.0, 25.0)", nil, nil, &errorMessage)
+        sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util, extra_usage_used_credits) VALUES (4000, 65.0, 20.0)", nil, nil, &errorMessage)
+        sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util) VALUES (5000, 70.0)", nil, nil, &errorMessage)
+
+        manager1.closeConnection()
+
+        let manager2 = DatabaseManager(databasePath: testPath)
+        defer { cleanup(manager: manager2, path: testPath) }
+        try manager2.ensureSchema()
+
+        let connection2 = try manager2.getConnection()
+        var stmt: OpaquePointer?
+        sqlite3_prepare_v2(connection2, "SELECT timestamp, extra_usage_delta FROM usage_polls ORDER BY timestamp ASC", -1, &stmt, nil)
+
+        var deltas: [(timestamp: Int64, delta: Double?)] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let ts = sqlite3_column_int64(stmt, 0)
+            let delta: Double? = sqlite3_column_type(stmt, 1) == SQLITE_NULL ? nil : sqlite3_column_double(stmt, 1)
+            deltas.append((timestamp: ts, delta: delta))
+        }
+        sqlite3_finalize(stmt)
+
+        #expect(deltas.count == 5)
+        #expect(deltas[0].delta == 0.0, "First poll delta should be 0")
+        #expect(deltas[1].delta == 10.0, "Poll 2 delta should be 10.0")
+        #expect(deltas[2].delta == 15.0, "Poll 3 delta should be 15.0")
+        #expect(deltas[3].delta == 0.0, "Poll 4 (billing reset) delta should be 0")
+        #expect(deltas[4].delta == 0.0, "Poll 5 (NULL credits) delta should be 0")
     }
 
     // MARK: - Protocol Conformance
