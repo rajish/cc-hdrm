@@ -14,6 +14,7 @@ struct PopoverViewSparklineTests {
     @Test("PopoverView renders without crash when sparklineData is empty")
     func rendersWithEmptySparklineData() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
         appState.updateWindows(
             fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
@@ -34,6 +35,7 @@ struct PopoverViewSparklineTests {
     @Test("PopoverView renders without crash with sparkline data")
     func rendersWithSparklineData() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
         appState.updateWindows(
             fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
@@ -61,6 +63,7 @@ struct PopoverViewSparklineTests {
     @Test("PopoverView renders with both 5h and 7d gauges plus sparkline")
     func rendersWithBothGaugesAndSparkline() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
         appState.updateWindows(
             fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
@@ -91,6 +94,7 @@ struct PopoverViewSparklineTests {
     @Test("Sparkline receives sparklineData from AppState")
     func sparklineReceivesData() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
 
         // Add some test data
         let now = Int64(Date().timeIntervalSince1970 * 1000)
@@ -107,6 +111,7 @@ struct PopoverViewSparklineTests {
     @Test("hasSparklineData returns false with fewer than 2 data points")
     func hasSparklineDataWithInsufficientData() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
 
         // No data
         #expect(appState.hasSparklineData == false)
@@ -125,6 +130,7 @@ struct PopoverViewSparklineTests {
     @Test("isAnalyticsWindowOpen state is accessible from AppState")
     func analyticsWindowStateAccessible() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
 
         #expect(appState.isAnalyticsWindowOpen == false)
         appState.setAnalyticsWindowOpen(true)
@@ -136,6 +142,7 @@ struct PopoverViewSparklineTests {
     @Test("PopoverView renders correctly when analytics window is open")
     func rendersWithAnalyticsWindowOpen() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
         appState.updateWindows(
             fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
@@ -166,6 +173,7 @@ struct PopoverViewSparklineTests {
     @Test("Observation triggers when sparklineData changes")
     func observationTriggersOnSparklineDataChange() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
         appState.updateWindows(
             fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
@@ -199,6 +207,7 @@ struct PopoverViewSparklineTests {
     @Test("Observation triggers when isAnalyticsWindowOpen changes")
     func observationTriggersOnAnalyticsWindowOpenChange() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
         appState.updateWindows(
             fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
@@ -237,6 +246,7 @@ struct PopoverViewSparklineTests {
     @Test("PopoverView renders placeholder when sparkline has insufficient data")
     func rendersPlaceholderWithInsufficientData() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
         appState.updateWindows(
             fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
@@ -263,6 +273,7 @@ struct PopoverViewSparklineTests {
     @Test("PopoverView renders with StatusMessage and sparkline together")
     func rendersWithStatusMessageAndSparkline() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.disconnected)  // Will show status message
 
         let now = Int64(Date().timeIntervalSince1970 * 1000)
@@ -287,6 +298,7 @@ struct PopoverViewSparklineTests {
     @Test("PopoverView renders with UpdateBadge and sparkline together")
     func rendersWithUpdateBadgeAndSparkline() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
         appState.updateWindows(
             fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
@@ -317,6 +329,7 @@ struct PopoverViewSparklineTests {
     @Test("Sparkline onTap toggles AnalyticsWindow (AC 3)")
     func sparklineOnTapTogglesAnalyticsWindow() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
         appState.updateWindows(
             fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),

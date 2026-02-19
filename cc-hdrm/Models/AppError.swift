@@ -13,6 +13,9 @@ enum AppError: Error, Sendable, Equatable {
     case databaseOpenFailed(path: String)
     case databaseSchemaFailed(underlying: any Error & Sendable)
     case databaseQueryFailed(underlying: any Error & Sendable)
+    case oauthAuthorizationFailed(String)
+    case oauthTokenExchangeFailed(underlying: any Error & Sendable)
+    case oauthCallbackTimeout
 
     static func == (lhs: AppError, rhs: AppError) -> Bool {
         switch (lhs, rhs) {
@@ -20,7 +23,8 @@ enum AppError: Error, Sendable, Equatable {
              (.keychainAccessDenied, .keychainAccessDenied),
              (.keychainInvalidFormat, .keychainInvalidFormat),
              (.tokenExpired, .tokenExpired),
-             (.networkUnreachable, .networkUnreachable):
+             (.networkUnreachable, .networkUnreachable),
+             (.oauthCallbackTimeout, .oauthCallbackTimeout):
             return true
         case (.tokenRefreshFailed, .tokenRefreshFailed):
             return true
@@ -33,6 +37,10 @@ enum AppError: Error, Sendable, Equatable {
         case (.databaseSchemaFailed, .databaseSchemaFailed):
             return true
         case (.databaseQueryFailed, .databaseQueryFailed):
+            return true
+        case let (.oauthAuthorizationFailed(lMsg), .oauthAuthorizationFailed(rMsg)):
+            return lMsg == rMsg
+        case (.oauthTokenExchangeFailed, .oauthTokenExchangeFailed):
             return true
         default:
             return false

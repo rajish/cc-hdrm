@@ -151,3 +151,6 @@ development_status:
   17-3-analytics-extra-usage-crossover-visualization: done
   17-4-extra-usage-alerts-configuration: done
   epic-17-retrospective: optional
+
+  epic-18: in-progress  # Independent OAuth Authentication
+  18-1-independent-oauth-authentication: done

@@ -33,6 +33,13 @@ enum DisplayedWindow: Sendable, Equatable {
     case sevenDay
 }
 
+/// OAuth authentication state — tracks whether the user has signed in.
+enum OAuthState: String, Sendable {
+    case unauthenticated
+    case authorizing
+    case authenticated
+}
+
 /// Single source of truth for all application state.
 /// Views observe this directly. Services write via methods only.
 @Observable
@@ -41,6 +48,7 @@ final class AppState {
     private(set) var fiveHour: WindowState?
     private(set) var sevenDay: WindowState?
     private(set) var connectionStatus: ConnectionStatus = .disconnected
+    private(set) var oauthState: OAuthState = .unauthenticated
     private(set) var lastUpdated: Date?
     private(set) var subscriptionTier: String?
     private(set) var statusMessage: StatusMessage?
@@ -242,6 +250,11 @@ final class AppState {
     /// Updates the connection status.
     func updateConnectionStatus(_ status: ConnectionStatus) {
         self.connectionStatus = status
+    }
+
+    /// Updates the OAuth authentication state.
+    func updateOAuthState(_ state: OAuthState) {
+        self.oauthState = state
     }
 
     /// Updates the subscription tier.

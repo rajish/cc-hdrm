@@ -20,12 +20,6 @@ final class PollingEngine: PollingEngineProtocol {
     private var pollingTask: Task<Void, Never>?
     private var sparklineRefreshTask: Task<Void, Never>?
 
-    /// In-memory cache for refreshed credentials. Avoids writing to Claude Code's
-    /// Keychain item, which would trigger ACL re-evaluation and repeated password prompts.
-    /// Set on successful token refresh; cleared on refresh failure so the next cycle
-    /// falls back to a Keychain read (e.g. if Claude Code refreshed externally).
-    private var cachedCredentials: KeychainCredentials?
-
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
         category: "polling"
@@ -83,35 +77,17 @@ final class PollingEngine: PollingEngineProtocol {
 
     // MARK: - Internal (exposed for testing)
 
-    /// Executes a single poll cycle: read credentials → check token → fetch usage → update state.
+    /// Executes a single poll cycle: read credentials → fetch usage → handle 401 with refresh.
     func performPollCycle() async {
         do {
-            // Prefer in-memory cached credentials (from a prior token refresh) over
-            // Keychain reads. This avoids repeated Keychain access prompts.
-            // IMPORTANT: Always prefer cache even when the access token is expired,
-            // because the cache holds the rotated refresh token. Anthropic's OAuth
-            // invalidates old refresh tokens on rotation, so the Keychain's refresh
-            // token is stale after a successful refresh. The token expiry check below
-            // will trigger attemptTokenRefresh() with the cached (rotated) refresh token.
-            let credentials: KeychainCredentials
-            if let cached = cachedCredentials {
-                credentials = cached
-            } else {
-                credentials = try await keychainService.readCredentials()
-            }
+            let credentials = try await keychainService.readCredentials()
             appState.updateSubscriptionTier(credentials.subscriptionType)
-
-            let status = TokenExpiryChecker.tokenStatus(for: credentials)
-
-            switch status {
-            case .valid:
-                Self.logger.debug("Token valid — fetching usage data")
-                await fetchUsageData(credentials: credentials)
-
-            case .expired, .expiringSoon:
-                Self.logger.info("Token \(status == .expired ? "expired" : "expiring soon") — attempting refresh")
-                await attemptTokenRefresh(credentials: credentials)
+            if appState.oauthState != .authenticated {
+                appState.updateOAuthState(.authenticated)
             }
+
+            Self.logger.debug("Credentials loaded — fetching usage data")
+            await fetchUsageData(credentials: credentials)
         } catch {
             handleCredentialError(error)
         }
@@ -121,11 +97,12 @@ final class PollingEngine: PollingEngineProtocol {
 
     private func attemptTokenRefresh(credentials: KeychainCredentials) async {
         guard let refreshToken = credentials.refreshToken else {
-            Self.logger.info("No refresh token available — setting token expired status")
+            Self.logger.info("No refresh token available — triggering re-authentication")
+            appState.updateOAuthState(.unauthenticated)
             appState.updateConnectionStatus(.tokenExpired)
             appState.updateStatusMessage(StatusMessage(
-                title: "Token expired",
-                detail: "Run any Claude Code command to refresh"
+                title: "Session expired",
+                detail: "Sign in again to continue"
             ))
             return
         }
@@ -143,23 +120,19 @@ final class PollingEngine: PollingEngineProtocol {
                 scopes: credentials.scopes
             )
 
-            // Cache in memory instead of writing to Keychain. Writing to Claude Code's
-            // Keychain item triggers ACL re-evaluation, causing repeated password prompts
-            // even after the user clicks "Always Allow".
-            cachedCredentials = mergedCredentials
+            // Write refreshed tokens to our own Keychain item (safe — no ACL contention)
+            try await keychainService.writeCredentials(mergedCredentials)
 
             appState.updateConnectionStatus(.connected)
             appState.updateStatusMessage(nil)
-            Self.logger.info("Token refresh succeeded — credentials cached in memory")
+            Self.logger.info("Token refresh succeeded — credentials persisted to Keychain")
         } catch {
             Self.logger.error("Token refresh failed: \(error.localizedDescription)")
-            // Clear cache so next cycle reads from Keychain — Claude Code may have
-            // refreshed externally, providing a valid token.
-            cachedCredentials = nil
+            appState.updateOAuthState(.unauthenticated)
             appState.updateConnectionStatus(.tokenExpired)
             appState.updateStatusMessage(StatusMessage(
-                title: "Token expired",
-                detail: "Run any Claude Code command to refresh"
+                title: "Session expired",
+                detail: "Sign in again to continue"
             ))
         }
     }
@@ -339,16 +312,17 @@ final class PollingEngine: PollingEngineProtocol {
     private func handleCredentialError(_ error: any Error) {
         appState.updateCreditLimits(nil)
         appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
+        appState.updateOAuthState(.unauthenticated)
         appState.updateConnectionStatus(.noCredentials)
         appState.updateStatusMessage(StatusMessage(
-            title: "No Claude credentials found",
-            detail: "Run Claude Code to create them"
+            title: "Not signed in",
+            detail: "Click Sign In to authenticate"
         ))
 
         if let appError = error as? AppError {
             switch appError {
             case .keychainNotFound:
-                Self.logger.info("No credentials in Keychain — waiting for user to run Claude Code")
+                Self.logger.info("No OAuth credentials in Keychain — user needs to sign in")
             case .keychainAccessDenied:
                 Self.logger.error("Keychain access denied")
             case .keychainInvalidFormat:

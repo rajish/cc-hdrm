@@ -10,6 +10,12 @@ struct APIClient: APIClientProtocol, @unchecked Sendable {
 
     private static let usageEndpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
+    /// User-Agent header: cc-hdrm/{version} read from Info.plist, fallback to "cc-hdrm/unknown".
+    private static let userAgent: String = {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+        return "cc-hdrm/\(version)"
+    }()
+
     typealias DataLoader = @Sendable (URLRequest) async throws -> (Data, URLResponse)
 
     private let dataLoader: DataLoader
@@ -33,7 +39,7 @@ struct APIClient: APIClientProtocol, @unchecked Sendable {
         request.httpMethod = "GET"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
-        request.setValue("claude-code/1.0", forHTTPHeaderField: "User-Agent")
+        request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 10
 
         let data: Data

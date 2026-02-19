@@ -9,6 +9,7 @@ struct PopoverFooterView: View {
     var historicalDataService: (any HistoricalDataServiceProtocol)?
     var onThresholdChange: (() -> Void)?
     var onClearHistory: (() -> Void)?
+    var onSignOut: (() -> Void)?
 
     var body: some View {
         // Access countdownTick to register observation for periodic re-renders
@@ -28,7 +29,7 @@ struct PopoverFooterView: View {
             Spacer()
 
             // Right: gear menu (AC #3)
-            GearMenuView(preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, historicalDataService: historicalDataService, appState: appState, onThresholdChange: onThresholdChange, onClearHistory: onClearHistory)
+            GearMenuView(preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, historicalDataService: historicalDataService, appState: appState, onThresholdChange: onThresholdChange, onClearHistory: onClearHistory, onSignOut: onSignOut)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)

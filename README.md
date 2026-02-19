@@ -14,7 +14,7 @@ cc-hdrm sits in your menu bar and shows your remaining headroom — the percenta
 
 ### Zero Overhead
 
-- **Zero configuration** — reads OAuth credentials directly from macOS Keychain (from your existing Claude Code login)
+- **One-click sign-in** — authenticate via your browser with Anthropic's OAuth, no API keys or config files needed
 - **Zero dependencies** — pure Swift/SwiftUI, no third-party libraries
 - **Zero tokens spent** — polls the API for quota data, not the chat API
 
@@ -82,11 +82,18 @@ cc-hdrm sits in your menu bar and shows your remaining headroom — the percenta
 - **Custom credit limits** — override 5h and 7d limits for unrecognized subscription tiers
 - **Billing cycle day** — set your billing date (1-28) for accurate proration and reset tracking
 
+## Getting Started
+
+1. **Install** — via Homebrew or download from Releases (see below)
+2. **Launch** — cc-hdrm appears in your menu bar
+3. **Sign In** — click the menu bar icon, then "Sign In" to authenticate via your browser
+4. **Approve** — log in to Anthropic in the browser and approve the authorization
+5. **Done** — cc-hdrm starts showing your headroom immediately
+
 ## Requirements
 
 - macOS 14.0 (Sonoma) or later
 - An active [Claude Pro or Max](https://claude.ai/upgrade) subscription
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed and logged in at least once (this creates the Keychain credentials cc-hdrm reads)
 
 ## Install
 
@@ -129,14 +136,22 @@ xcodebuild -project cc-hdrm.xcodeproj -scheme cc-hdrm -configuration Release bui
 
 ```mermaid
 sequenceDiagram
+    participant B as Browser
     participant K as macOS Keychain
     participant A as cc-hdrm
     participant API as Anthropic API
     participant DB as SQLite
 
-    A->>K: Read OAuth credentials
-    K-->>A: Access token + refresh token
+    Note over B,A: First launch / sign-in
+    A->>B: Open OAuth authorize page (PKCE)
+    B-->>A: Redirect to localhost callback with code
+    A->>API: POST /v1/oauth/token (exchange code)
+    API-->>A: Access + refresh tokens
+    A->>K: Store tokens in cc-hdrm Keychain item
+
     loop Every 30 seconds
+        A->>K: Read OAuth credentials
+        K-->>A: Access token + refresh token
         A->>API: GET /api/oauth/usage
         API-->>A: Quota data (5h, 7d)
         A->>A: Compute headroom, slope, update display
@@ -144,13 +159,14 @@ sequenceDiagram
     end
     Note over A,API: Token expired?
     A->>API: POST /v1/oauth/token (refresh)
-    API-->>A: New access token
+    API-->>A: New access + refresh tokens
+    A->>K: Persist rotated tokens
     Note over A,DB: Analytics opened?
     A->>DB: Query with tiered rollups
     DB-->>A: Historical data at appropriate resolution
 ```
 
-cc-hdrm reads the OAuth credentials that Claude Code stores in macOS Keychain. It never stores tokens on disk, never caches them between poll cycles, and never prompts you to log in. If you're logged into Claude Code, cc-hdrm works automatically. Poll snapshots are persisted locally to SQLite for historical analytics.
+cc-hdrm authenticates directly with Anthropic using its own OAuth flow. On first launch, you sign in via your browser — cc-hdrm starts a temporary localhost server, opens Anthropic's authorization page, and exchanges the callback code for tokens using PKCE. Tokens are stored in cc-hdrm's own Keychain item, automatically refreshed when they expire, and never written to disk outside the Keychain. Poll snapshots are persisted locally to SQLite for historical analytics.
 
 ## Versioning
 
