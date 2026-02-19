@@ -14,12 +14,18 @@ struct GearMenuView: View {
     var appState: AppState?
     var onThresholdChange: (() -> Void)?
     var onClearHistory: (() -> Void)?
+    var onSignOut: (() -> Void)?
     @State private var showingSettings = false
 
     var body: some View {
         Menu {
             Button("Settings...") {
                 showingSettings = true
+            }
+            if appState?.oauthState == .authenticated {
+                Button("Sign Out") {
+                    onSignOut?()
+                }
             }
             Divider()
             Button("Quit cc-hdrm") {

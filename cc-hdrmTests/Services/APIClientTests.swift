@@ -137,7 +137,7 @@ struct APIClientTests {
 
         #expect(capture.request?.value(forHTTPHeaderField: "Authorization") == "Bearer my-token")
         #expect(capture.request?.value(forHTTPHeaderField: "anthropic-beta") == "oauth-2025-04-20")
-        #expect(capture.request?.value(forHTTPHeaderField: "User-Agent") == "claude-code/1.0")
+        #expect(capture.request?.value(forHTTPHeaderField: "User-Agent")?.hasPrefix("cc-hdrm/") == true)
     }
 
     @Test("request URL is exactly https://api.anthropic.com/api/oauth/usage")

@@ -14,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     internal var launchAtLoginService: (any LaunchAtLoginServiceProtocol)?
     private var notificationService: (any NotificationServiceProtocol)?
     private var updateCheckService: (any UpdateCheckServiceProtocol)?
+    private var oauthService: OAuthService?
+    private var oauthKeychainService: OAuthKeychainService?
     private var slopeCalculationService: SlopeCalculationService?
     private var historicalDataServiceRef: HistoricalDataService?
     private var headroomAnalysisServiceRef: (any HeadroomAnalysisServiceProtocol)?
@@ -119,8 +121,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 preferencesManager: preferences
             )
 
+            let oauthKC = OAuthKeychainService()
+            self.oauthKeychainService = oauthKC
+            self.oauthService = OAuthService()
+
             pollingEngine = PollingEngine(
-                keychainService: KeychainService(),
+                keychainService: oauthKC,
                 tokenRefreshService: TokenRefreshService(),
                 apiClient: APIClient(),
                 appState: state,
@@ -168,6 +174,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }, onClearHistory: { [weak state] in
             state?.updateSparklineData([])
             AnalyticsWindow.shared.close()
+        }, onSignIn: { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in
+                await self.performSignIn()
+            }
+        }, onSignOut: { [weak self] in
+            guard let self else { return }
+            self.performSignOut()
         }))
         pop.animates = true
         self.popover = pop
@@ -235,6 +249,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task {
             await updateCheckService?.checkForUpdate()
         }
+    }
+
+    // MARK: - OAuth Sign In / Sign Out
+
+    private func performSignIn() async {
+        guard let appState, let oauthService, let oauthKeychainService else { return }
+
+        appState.updateOAuthState(.authorizing)
+        Self.logger.info("Starting OAuth sign-in flow")
+
+        do {
+            let credentials = try await oauthService.authorize()
+            try await oauthKeychainService.writeCredentials(credentials)
+
+            appState.updateOAuthState(.authenticated)
+            appState.updateConnectionStatus(.connected)
+            appState.updateStatusMessage(nil)
+            Self.logger.info("OAuth sign-in succeeded")
+
+            // Restart polling — stop first to avoid duplicate polling tasks
+            pollingEngine?.stop()
+            await pollingEngine?.start()
+        } catch is CancellationError {
+            Self.logger.info("OAuth sign-in cancelled")
+            appState.updateOAuthState(.unauthenticated)
+        } catch {
+            Self.logger.error("OAuth sign-in failed: \(error.localizedDescription)")
+            appState.updateOAuthState(.unauthenticated)
+
+            if let appError = error as? AppError {
+                switch appError {
+                case .oauthCallbackTimeout:
+                    appState.updateStatusMessage(StatusMessage(
+                        title: "Authentication timed out",
+                        detail: "Try again when ready"
+                    ))
+                default:
+                    appState.updateStatusMessage(StatusMessage(
+                        title: "Sign-in failed",
+                        detail: "Please try again"
+                    ))
+                }
+            }
+        }
+    }
+
+    private func performSignOut() {
+        guard let appState, let oauthKeychainService else { return }
+
+        Self.logger.info("Signing out — clearing credentials")
+
+        try? oauthKeychainService.deleteCredentials()
+
+        // Clear all session state to prevent stale data flash on re-sign-in
+        appState.updateOAuthState(.unauthenticated)
+        appState.updateConnectionStatus(.noCredentials)
+        appState.updateWindows(fiveHour: nil, sevenDay: nil)
+        appState.updateSparklineData([])
+        appState.updateSubscriptionTier(nil)
+        appState.updateCreditLimits(nil)
+        appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
+        appState.updateStatusMessage(StatusMessage(
+            title: "Signed out",
+            detail: "Click Sign In to authenticate"
+        ))
+
+        // Stop polling since we have no credentials
+        pollingEngine?.stop()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

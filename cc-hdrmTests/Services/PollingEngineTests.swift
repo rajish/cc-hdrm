@@ -336,17 +336,16 @@ struct PollingEngineTests {
         await engine.performPollCycle()
 
         #expect(mockRefresh.refreshCallCount == 1, "Token refresh should be triggered on 401")
-        // Refreshed credentials should be cached in memory, NOT written to Keychain
-        // (writing to Claude Code's Keychain item triggers ACL re-evaluation and password prompts)
-        #expect(mockKeychain.writeCallCount == 0, "Refreshed credentials should NOT be written to Keychain")
+        // Refreshed credentials should be written to our own Keychain item (no ACL contention)
+        #expect(mockKeychain.writeCallCount == 1, "Refreshed credentials should be written to Keychain")
         #expect(appState.connectionStatus == .connected, "Connection status should be restored after refresh")
     }
 
-    @Test("after token refresh, subsequent polls use cached credentials instead of Keychain")
+    @Test("after token refresh, credentials are written to Keychain for next cycle")
     @MainActor
-    func refreshedCredentialsCachedInMemory() async {
-        // First cycle: expired token triggers refresh, which caches new credentials
-        let mockKeychain = PEMockKeychainService(credentials: expiredCredentials())
+    func refreshedCredentialsPersistedToKeychain() async {
+        // Cycle: API returns 401, triggers refresh, writes new credentials to Keychain
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
         let refreshedCreds = KeychainCredentials(
             accessToken: "new-token",
             refreshToken: "new-refresh",
@@ -354,7 +353,7 @@ struct PollingEngineTests {
             subscriptionType: nil, rateLimitTier: nil, scopes: nil
         )
         let mockRefresh = PEMockTokenRefreshService(result: refreshedCreds)
-        let mockAPI = PEMockAPIClient(result: successResponse())
+        let mockAPI = PEMockAPIClient(error: AppError.apiError(statusCode: 401, body: "Unauthorized"))
         let appState = AppState()
 
         let engine = PollingEngine(
@@ -364,25 +363,20 @@ struct PollingEngineTests {
             appState: appState
         )
 
-        // Cycle 1: reads from Keychain, finds expired, refreshes, caches
         await engine.performPollCycle()
-        #expect(mockKeychain.readCallCount == 1, "First cycle reads from Keychain")
-        #expect(mockRefresh.refreshCallCount == 1, "Token refresh should be triggered")
-        #expect(appState.connectionStatus == .connected)
 
-        // Cycle 2: should use cached credentials, NOT read from Keychain again
-        await engine.performPollCycle()
-        #expect(mockKeychain.readCallCount == 1, "Second cycle should use cache, not Keychain")
-        #expect(mockAPI.fetchCallCount == 1, "API should be called with cached credentials")
-        #expect(mockKeychain.writeCallCount == 0, "Credentials should never be written to Keychain")
+        #expect(mockKeychain.readCallCount == 1, "Cycle reads from Keychain")
+        #expect(mockRefresh.refreshCallCount == 1, "Token refresh should be triggered on 401")
+        #expect(mockKeychain.writeCallCount == 1, "Refreshed credentials should be written to Keychain")
+        #expect(appState.connectionStatus == .connected)
     }
 
-    @Test("token expired with no refresh token sets .tokenExpired status")
+    @Test("API 401 with no refresh token sets .tokenExpired status")
     @MainActor
-    func tokenExpiredNoRefreshToken() async {
+    func apiUnauthorizedNoRefreshToken() async {
         let mockKeychain = PEMockKeychainService(credentials: expiredCredentials(withRefreshToken: false))
         let mockRefresh = PEMockTokenRefreshService()
-        let mockAPI = PEMockAPIClient()
+        let mockAPI = PEMockAPIClient(error: AppError.apiError(statusCode: 401, body: "Unauthorized"))
         let appState = AppState()
 
         let engine = PollingEngine(
@@ -396,8 +390,8 @@ struct PollingEngineTests {
 
         #expect(appState.connectionStatus == .tokenExpired)
         #expect(appState.statusMessage == StatusMessage(
-            title: "Token expired",
-            detail: "Run any Claude Code command to refresh"
+            title: "Session expired",
+            detail: "Sign in again to continue"
         ))
         #expect(mockRefresh.refreshCallCount == 0, "Refresh should not be attempted without refresh token")
     }
@@ -421,8 +415,8 @@ struct PollingEngineTests {
 
         #expect(appState.connectionStatus == .noCredentials)
         #expect(appState.statusMessage == StatusMessage(
-            title: "No Claude credentials found",
-            detail: "Run Claude Code to create them"
+            title: "Not signed in",
+            detail: "Click Sign In to authenticate"
         ))
     }
 

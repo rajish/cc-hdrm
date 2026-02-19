@@ -34,14 +34,14 @@ final class TokenRefreshService: TokenRefreshServiceProtocol, @unchecked Sendabl
 
         var request = URLRequest(url: Self.tokenEndpoint)
         request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        guard let encodedToken = refreshToken.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
-            Self.logger.error("Failed to URL-encode refresh token")
-            throw AppError.tokenRefreshFailed(underlying: URLError(.badURL))
-        }
-        let body = "grant_type=refresh_token&refresh_token=\(encodedToken)&client_id=\(Self.clientId)"
-        request.httpBody = body.data(using: .utf8)
+        let body: [String: String] = [
+            "grant_type": "refresh_token",
+            "refresh_token": refreshToken,
+            "client_id": Self.clientId
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let data: Data
         let response: URLResponse

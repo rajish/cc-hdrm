@@ -10,6 +10,7 @@ struct PopoverViewTests {
     @MainActor
     func instantiationDoesNotCrash() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
         // Verify it produces a body (SwiftUI view renders without error)
         _ = view.body
@@ -19,6 +20,7 @@ struct PopoverViewTests {
     @MainActor
     func bodyRendersPlaceholderStructure() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
         // Verify the view can be hosted in an NSHostingController (the actual integration path)
         let hostingController = NSHostingController(rootView: view)
@@ -35,6 +37,7 @@ struct PopoverViewLiveUpdateTests {
     @MainActor
     func appStateObservationTriggersReRender() async {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
 
         // withObservationTracking proves the view body reads a tracked property,
         // so SwiftUI will re-render when that property changes.
@@ -62,6 +65,7 @@ struct PopoverViewLiveUpdateTests {
     @MainActor
     func footerRendersInBothStates() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         // Disconnected state — footer should render with "—" placeholders
         #expect(appState.connectionStatus == .disconnected)
         let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
@@ -86,6 +90,7 @@ struct PopoverViewLiveUpdateTests {
     @MainActor
     func footerRendersWithSubscriptionTier() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
         appState.updateSubscriptionTier("Max")
         appState.updateWindows(
@@ -102,6 +107,7 @@ struct PopoverViewLiveUpdateTests {
     @MainActor
     func observationTriggersOnSevenDayChange() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
 
         let expectation = OSAllocatedUnfairLock(initialState: false)
@@ -132,6 +138,7 @@ struct PopoverViewStatusMessageTests {
     @MainActor
     func rendersInDisconnectedState() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         // Default state is .disconnected
         #expect(appState.connectionStatus == .disconnected)
         let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
@@ -143,6 +150,7 @@ struct PopoverViewStatusMessageTests {
     @MainActor
     func rendersInTokenExpiredState() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.tokenExpired)
         let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
         let controller = NSHostingController(rootView: view)
@@ -153,6 +161,7 @@ struct PopoverViewStatusMessageTests {
     @MainActor
     func rendersInNoCredentialsState() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.noCredentials)
         let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
         let controller = NSHostingController(rootView: view)
@@ -163,6 +172,7 @@ struct PopoverViewStatusMessageTests {
     @MainActor
     func rendersWithVeryStaleData() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
         appState.updateWindows(
             fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
@@ -180,6 +190,7 @@ struct PopoverViewStatusMessageTests {
     @MainActor
     func rendersWithFreshDataNoStatusMessage() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
         appState.updateWindows(
             fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
@@ -195,6 +206,7 @@ struct PopoverViewStatusMessageTests {
     @MainActor
     func observationTriggersOnConnectionStatusChange() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         // Start disconnected (default)
 
         let expectation = OSAllocatedUnfairLock(initialState: false)
@@ -222,6 +234,7 @@ struct PopoverViewExtraUsageCardTests {
     @MainActor
     func rendersWithExtraUsageEnabled() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
         appState.updateWindows(
             fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
@@ -240,6 +253,7 @@ struct PopoverViewExtraUsageCardTests {
     @MainActor
     func rendersWithExtraUsageCollapsed() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
         appState.updateWindows(
             fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
@@ -256,6 +270,7 @@ struct PopoverViewExtraUsageCardTests {
     @MainActor
     func rendersWithExtraUsageDisabled() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
         appState.updateWindows(
             fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
@@ -272,6 +287,7 @@ struct PopoverViewExtraUsageCardTests {
     @MainActor
     func observationTriggersOnExtraUsageChange() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
         appState.updateWindows(
             fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
@@ -303,6 +319,7 @@ struct PopoverView5hGaugeTests {
     @MainActor
     func validFiveHourData() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
         appState.updateWindows(
             fiveHour: WindowState(utilization: 17.0, resetsAt: Date().addingTimeInterval(47 * 60)),
@@ -318,6 +335,7 @@ struct PopoverView5hGaugeTests {
     @MainActor
     func nilFiveHourData() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         // Default: no fiveHour data, disconnected
         let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
         let controller = NSHostingController(rootView: view)
@@ -329,6 +347,7 @@ struct PopoverView5hGaugeTests {
     @MainActor
     func fiveHourObservation() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
 
         // Track observation at FiveHourGaugeSection level — this view directly reads fiveHour
@@ -360,6 +379,7 @@ struct PopoverView7dGaugeTests {
     @MainActor
     func validSevenDayData() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
         appState.updateWindows(
             fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
@@ -375,6 +395,7 @@ struct PopoverView7dGaugeTests {
     @MainActor
     func nilSevenDayData() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
         appState.updateWindows(
             fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
@@ -390,6 +411,7 @@ struct PopoverView7dGaugeTests {
     @MainActor
     func sevenDayObservation() {
         let appState = AppState()
+        appState.updateOAuthState(.authenticated)
         appState.updateConnectionStatus(.connected)
         // Start with nil sevenDay
         appState.updateWindows(

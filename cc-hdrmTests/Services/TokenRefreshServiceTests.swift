@@ -203,13 +203,18 @@ struct TokenRefreshServiceTests {
         // Verify endpoint URL
         #expect(capturedRequest?.url == Self.tokenEndpointURL)
 
-        // Verify request body contains required fields
-        let bodyString = capturedRequest?.httpBody.flatMap { String(data: $0, encoding: .utf8) }
-        #expect(bodyString?.contains("grant_type=refresh_token") == true)
-        #expect(bodyString?.contains("refresh_token=test-refresh-token") == true)
-        #expect(bodyString?.contains("client_id=\(Self.expectedClientId)") == true)
+        // Verify request body contains required fields (JSON format)
+        let bodyData = capturedRequest?.httpBody
+        #expect(bodyData != nil)
+        if let data = bodyData, let json = try? JSONSerialization.jsonObject(with: data) as? [String: String] {
+            #expect(json["grant_type"] == "refresh_token")
+            #expect(json["refresh_token"] == "test-refresh-token")
+            #expect(json["client_id"] == Self.expectedClientId)
+        } else {
+            #expect(Bool(false), "Request body should be valid JSON")
+        }
 
         // Verify Content-Type header
-        #expect(capturedRequest?.value(forHTTPHeaderField: "Content-Type") == "application/x-www-form-urlencoded")
+        #expect(capturedRequest?.value(forHTTPHeaderField: "Content-Type") == "application/json")
     }
 }
