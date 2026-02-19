@@ -860,6 +860,12 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             let sevenDayPeak = sevenDayValues.max()
             let sevenDayMin = sevenDayValues.min()
 
+            // Extra usage: MAX across polls (cumulative within billing cycle)
+            let extraUsageCreditsValues = bucketPolls.compactMap { $0.extraUsageUsedCredits }
+            let extraUsageUsedCredits = extraUsageCreditsValues.isEmpty ? nil : extraUsageCreditsValues.max()
+            let extraUsageUtilValues = bucketPolls.compactMap { $0.extraUsageUtilization }
+            let extraUsageUtilization = extraUsageUtilValues.isEmpty ? nil : extraUsageUtilValues.max()
+
             // Count reset events in this bucket
             let resetCount = try countResetEvents(from: bucketStart, to: bucketEnd, connection: connection)
 
@@ -876,6 +882,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 sevenDayMin: sevenDayMin,
                 resetCount: resetCount,
                 unusedCredits: nil,
+                extraUsageUsedCredits: extraUsageUsedCredits,
+                extraUsageUtilization: extraUsageUtilization,
                 connection: connection
             )
         }
@@ -983,6 +991,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         sevenDayMin: Double?,
         resetCount: Int,
         unusedCredits: Double?,
+        extraUsageUsedCredits: Double? = nil,
+        extraUsageUtilization: Double? = nil,
         connection: OpaquePointer
     ) throws {
         let sql = """
@@ -990,8 +1000,9 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 period_start, period_end, resolution,
                 five_hour_avg, five_hour_peak, five_hour_min,
                 seven_day_avg, seven_day_peak, seven_day_min,
-                reset_count, waste_credits
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                reset_count, waste_credits,
+                extra_usage_used_credits, extra_usage_utilization
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
 
         var statement: OpaquePointer?
@@ -1035,6 +1046,12 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
 
         if let unused = unusedCredits { sqlite3_bind_double(statement, 11, unused) }
         else { sqlite3_bind_null(statement, 11) }
+
+        if let extra = extraUsageUsedCredits { sqlite3_bind_double(statement, 12, extra) }
+        else { sqlite3_bind_null(statement, 12) }
+
+        if let extraUtil = extraUsageUtilization { sqlite3_bind_double(statement, 13, extraUtil) }
+        else { sqlite3_bind_null(statement, 13) }
 
         let stepResult = sqlite3_step(statement)
         guard stepResult == SQLITE_DONE else {
@@ -1120,6 +1137,12 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             // Sum reset counts
             let resetCount = bucketRollups.reduce(0) { $0 + $1.resetCount }
 
+            // Extra usage: MAX across sub-rollups
+            let extraUsageCreditsValues = bucketRollups.compactMap { $0.extraUsageUsedCredits }
+            let extraUsageUsedCredits = extraUsageCreditsValues.isEmpty ? nil : extraUsageCreditsValues.max()
+            let extraUsageUtilValues = bucketRollups.compactMap { $0.extraUsageUtilization }
+            let extraUsageUtilization = extraUsageUtilValues.isEmpty ? nil : extraUsageUtilValues.max()
+
             try insertRollup(
                 periodStart: bucketStart,
                 periodEnd: bucketEnd,
@@ -1132,6 +1155,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 sevenDayMin: sevenDayMin,
                 resetCount: resetCount,
                 unusedCredits: nil,
+                extraUsageUsedCredits: extraUsageUsedCredits,
+                extraUsageUtilization: extraUsageUtilization,
                 connection: connection
             )
         }
@@ -1203,6 +1228,12 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 totalUnusedCredits = nil
             }
 
+            // Extra usage: MAX across sub-rollups
+            let extraUsageCreditsValues = bucketRollups.compactMap { $0.extraUsageUsedCredits }
+            let extraUsageUsedCredits = extraUsageCreditsValues.isEmpty ? nil : extraUsageCreditsValues.max()
+            let extraUsageUtilValues = bucketRollups.compactMap { $0.extraUsageUtilization }
+            let extraUsageUtilization = extraUsageUtilValues.isEmpty ? nil : extraUsageUtilValues.max()
+
             try insertRollup(
                 periodStart: bucketStart,
                 periodEnd: bucketEnd,
@@ -1215,6 +1246,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 sevenDayMin: sevenDayMin,
                 resetCount: resetCount,
                 unusedCredits: totalUnusedCredits,
+                extraUsageUsedCredits: extraUsageUsedCredits,
+                extraUsageUtilization: extraUsageUtilization,
                 connection: connection
             )
         }
@@ -1236,7 +1269,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             SELECT id, period_start, period_end, resolution,
                    five_hour_avg, five_hour_peak, five_hour_min,
                    seven_day_avg, seven_day_peak, seven_day_min,
-                   reset_count, waste_credits
+                   reset_count, waste_credits,
+                   extra_usage_used_credits, extra_usage_utilization
             FROM usage_rollups
             WHERE resolution = ? AND period_start >= ? AND period_start < ?
             ORDER BY period_start ASC
@@ -1283,6 +1317,10 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             let resetCount = Int(sqlite3_column_int(statement, 10))
             let unusedCredits: Double? = sqlite3_column_type(statement, 11) == SQLITE_NULL
                 ? nil : sqlite3_column_double(statement, 11)
+            let extraUsageUsedCredits: Double? = sqlite3_column_type(statement, 12) == SQLITE_NULL
+                ? nil : sqlite3_column_double(statement, 12)
+            let extraUsageUtilization: Double? = sqlite3_column_type(statement, 13) == SQLITE_NULL
+                ? nil : sqlite3_column_double(statement, 13)
 
             rollups.append(UsageRollup(
                 id: id,
@@ -1296,7 +1334,9 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 sevenDayPeak: sevenDayPeak,
                 sevenDayMin: sevenDayMin,
                 resetCount: resetCount,
-                unusedCredits: unusedCredits
+                unusedCredits: unusedCredits,
+                extraUsageUsedCredits: extraUsageUsedCredits,
+                extraUsageUtilization: extraUsageUtilization
             ))
         }
 
