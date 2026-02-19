@@ -3,7 +3,7 @@ import os
 import SQLite3
 
 /// Current database schema version. Increment when schema changes require migration.
-private let currentSchemaVersion: Int = 3
+private let currentSchemaVersion: Int = 4
 
 /// SQLITE_TRANSIENT tells SQLite to make its own copy of the string data.
 /// Required when binding strings from Swift's withCString which uses temporary buffers.
@@ -154,6 +154,13 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
             Self.logger.info("Migration v2->v3: added extra_usage columns to usage_polls")
         }
 
+        if existingVersion < 4 {
+            let connection = try getConnection()
+            try executeSQL("ALTER TABLE usage_rollups ADD COLUMN extra_usage_used_credits REAL", on: connection)
+            try executeSQL("ALTER TABLE usage_rollups ADD COLUMN extra_usage_utilization REAL", on: connection)
+            Self.logger.info("Migration v3->v4: added extra_usage columns to usage_rollups")
+        }
+
         Self.logger.info("Migrations complete: \(existingVersion) -> \(currentSchemaVersion)")
         try setSchemaVersion(currentSchemaVersion)
     }
@@ -265,7 +272,9 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
                 seven_day_peak REAL,
                 seven_day_min REAL,
                 reset_count INTEGER DEFAULT 0,
-                waste_credits REAL
+                waste_credits REAL,
+                extra_usage_used_credits REAL,
+                extra_usage_utilization REAL
             )
             """
         try executeSQL(createTable, on: connection)
