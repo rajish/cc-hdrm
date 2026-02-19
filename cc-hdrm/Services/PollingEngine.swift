@@ -22,7 +22,8 @@ final class PollingEngine: PollingEngineProtocol {
 
     /// In-memory cache for refreshed credentials. Avoids writing to Claude Code's
     /// Keychain item, which would trigger ACL re-evaluation and repeated password prompts.
-    /// Invalidated on keychain read success (fresh credentials from Claude Code) or on errors.
+    /// Set on successful token refresh; cleared on refresh failure so the next cycle
+    /// falls back to a Keychain read (e.g. if Claude Code refreshed externally).
     private var cachedCredentials: KeychainCredentials?
 
     private static let logger = Logger(
