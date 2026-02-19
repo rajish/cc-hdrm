@@ -87,18 +87,14 @@ final class PollingEngine: PollingEngineProtocol {
         do {
             // Prefer in-memory cached credentials (from a prior token refresh) over
             // Keychain reads. This avoids repeated Keychain access prompts.
-            // When Keychain read succeeds, it means Claude Code wrote fresh credentials,
-            // so we discard the cache and use those instead.
+            // IMPORTANT: Always prefer cache even when the access token is expired,
+            // because the cache holds the rotated refresh token. Anthropic's OAuth
+            // invalidates old refresh tokens on rotation, so the Keychain's refresh
+            // token is stale after a successful refresh. The token expiry check below
+            // will trigger attemptTokenRefresh() with the cached (rotated) refresh token.
             let credentials: KeychainCredentials
             if let cached = cachedCredentials {
-                let status = TokenExpiryChecker.tokenStatus(for: cached)
-                if status == .valid {
-                    credentials = cached
-                } else {
-                    // Cached token is expired/expiring — try keychain for fresh ones
-                    cachedCredentials = nil
-                    credentials = try await keychainService.readCredentials()
-                }
+                credentials = cached
             } else {
                 credentials = try await keychainService.readCredentials()
             }
@@ -156,6 +152,9 @@ final class PollingEngine: PollingEngineProtocol {
             Self.logger.info("Token refresh succeeded — credentials cached in memory")
         } catch {
             Self.logger.error("Token refresh failed: \(error.localizedDescription)")
+            // Clear cache so next cycle reads from Keychain — Claude Code may have
+            // refreshed externally, providing a valid token.
+            cachedCredentials = nil
             appState.updateConnectionStatus(.tokenExpired)
             appState.updateStatusMessage(StatusMessage(
                 title: "Token expired",
