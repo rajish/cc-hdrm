@@ -345,7 +345,7 @@ struct PollingEngineTests {
     @Test("after token refresh, subsequent polls use cached credentials instead of Keychain")
     @MainActor
     func refreshedCredentialsCachedInMemory() async {
-        // First cycle: expired token triggers refresh, which caches new credentials
+        // First cycle: expired token → API returns 401 → refresh → cache new credentials
         let mockKeychain = PEMockKeychainService(credentials: expiredCredentials())
         let refreshedCreds = KeychainCredentials(
             accessToken: "new-token",
@@ -354,7 +354,11 @@ struct PollingEngineTests {
             subscriptionType: nil, rateLimitTier: nil, scopes: nil
         )
         let mockRefresh = PEMockTokenRefreshService(result: refreshedCreds)
-        let mockAPI = PEMockAPIClient(result: successResponse())
+        // First call returns 401 (expired token), second call succeeds (cached refreshed token)
+        let mockAPI = PEMockAPIClient(results: [
+            .failure(AppError.apiError(statusCode: 401, body: "Unauthorized")),
+            .success(successResponse())
+        ])
         let appState = AppState()
 
         let engine = PollingEngine(
@@ -364,16 +368,16 @@ struct PollingEngineTests {
             appState: appState
         )
 
-        // Cycle 1: reads from Keychain, finds expired, refreshes, caches
+        // Cycle 1: reads from Keychain, tries API → 401 → refreshes → caches
         await engine.performPollCycle()
         #expect(mockKeychain.readCallCount == 1, "First cycle reads from Keychain")
-        #expect(mockRefresh.refreshCallCount == 1, "Token refresh should be triggered")
+        #expect(mockRefresh.refreshCallCount == 1, "Token refresh should be triggered on 401")
         #expect(appState.connectionStatus == .connected)
 
         // Cycle 2: should use cached credentials, NOT read from Keychain again
         await engine.performPollCycle()
         #expect(mockKeychain.readCallCount == 1, "Second cycle should use cache, not Keychain")
-        #expect(mockAPI.fetchCallCount == 1, "API should be called with cached credentials")
+        #expect(mockAPI.fetchCallCount == 2, "API should be called with cached credentials")
         #expect(mockKeychain.writeCallCount == 0, "Credentials should never be written to Keychain")
     }
 
@@ -382,7 +386,8 @@ struct PollingEngineTests {
     func tokenExpiredNoRefreshToken() async {
         let mockKeychain = PEMockKeychainService(credentials: expiredCredentials(withRefreshToken: false))
         let mockRefresh = PEMockTokenRefreshService()
-        let mockAPI = PEMockAPIClient()
+        // API returns 401 for the expired token, triggering the refresh path
+        let mockAPI = PEMockAPIClient(error: AppError.apiError(statusCode: 401, body: "Unauthorized"))
         let appState = AppState()
 
         let engine = PollingEngine(

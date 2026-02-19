@@ -101,17 +101,11 @@ final class PollingEngine: PollingEngineProtocol {
             }
             appState.updateSubscriptionTier(credentials.subscriptionType)
 
-            let status = TokenExpiryChecker.tokenStatus(for: credentials)
-
-            switch status {
-            case .valid:
-                Self.logger.debug("Token valid — fetching usage data")
-                await fetchUsageData(credentials: credentials)
-
-            case .expired, .expiringSoon:
-                Self.logger.info("Token \(status == .expired ? "expired" : "expiring soon") — attempting refresh")
-                await attemptTokenRefresh(credentials: credentials)
-            }
+            // Always try the API call first, even if expiresAt says expired.
+            // Claude Code may have refreshed the access token externally without
+            // updating expiresAt in the Keychain. The 401 handler in fetchUsageData
+            // will trigger token refresh if the access token is truly invalid.
+            await fetchUsageData(credentials: credentials)
         } catch {
             handleCredentialError(error)
         }
