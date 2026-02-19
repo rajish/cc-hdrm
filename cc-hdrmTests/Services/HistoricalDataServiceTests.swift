@@ -1451,6 +1451,401 @@ struct HistoricalDataServiceTests {
         #expect(events.isEmpty)
     }
 
+    // MARK: - Story 17.5: Extra Usage Rollup Data Repair (Purge Migration) Tests
+
+    @Test("purge migration deletes all existing rollups (AC 1)")
+    func purgeMigrationDeletesAllExistingRollups() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+        let connection = try dbManager.getConnection()
+
+        // Insert tainted rollups with NULL extra_usage columns
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let bucketStart = now - (25 * 60 * 60 * 1000) // 25h ago
+        var stmt: OpaquePointer?
+
+        let insertSQL = "INSERT INTO usage_rollups (period_start, period_end, resolution, five_hour_avg, five_hour_peak, five_hour_min, reset_count) VALUES (?, ?, '5min', 50.0, 60.0, 40.0, 0)"
+        sqlite3_prepare_v2(connection, insertSQL, -1, &stmt, nil)
+        sqlite3_bind_int64(stmt, 1, bucketStart)
+        sqlite3_bind_int64(stmt, 2, bucketStart + 300000)
+        sqlite3_step(stmt)
+        sqlite3_finalize(stmt)
+
+        sqlite3_prepare_v2(connection, insertSQL, -1, &stmt, nil)
+        sqlite3_bind_int64(stmt, 1, bucketStart + 300000)
+        sqlite3_bind_int64(stmt, 2, bucketStart + 600000)
+        sqlite3_step(stmt)
+        sqlite3_finalize(stmt)
+
+        // Verify rollups exist before migration
+        sqlite3_prepare_v2(connection, "SELECT COUNT(*) FROM usage_rollups", -1, &stmt, nil)
+        sqlite3_step(stmt)
+        let countBefore = sqlite3_column_int(stmt, 0)
+        sqlite3_finalize(stmt)
+        #expect(countBefore == 2, "Expected 2 rollups before migration")
+
+        // Run ensureRollupsUpToDate (triggers purge migration)
+        try await service.ensureRollupsUpToDate()
+
+        // Verify old rollups are deleted
+        sqlite3_prepare_v2(connection, "SELECT COUNT(*) FROM usage_rollups WHERE period_start = ?", -1, &stmt, nil)
+        sqlite3_bind_int64(stmt, 1, bucketStart)
+        sqlite3_step(stmt)
+        let oldRollup1 = sqlite3_column_int(stmt, 0)
+        sqlite3_finalize(stmt)
+        #expect(oldRollup1 == 0, "Old tainted rollup should be deleted by purge")
+    }
+
+    @Test("purge migration resets last_rollup_timestamp (AC 1)")
+    func purgeMigrationResetsLastRollupTimestamp() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+        let connection = try dbManager.getConnection()
+
+        // Set a non-zero last_rollup_timestamp to simulate previous rollup state
+        var stmt: OpaquePointer?
+        let setSQL = "INSERT OR REPLACE INTO rollup_metadata (key, value) VALUES ('last_rollup_timestamp', '1700000000000')"
+        sqlite3_prepare_v2(connection, setSQL, -1, &stmt, nil)
+        sqlite3_step(stmt)
+        sqlite3_finalize(stmt)
+
+        // Verify timestamp is set
+        let tsBefore = try dbManager.getLastRollupTimestamp()
+        #expect(tsBefore == 1700000000000, "Expected pre-set timestamp before migration")
+
+        // Capture time before call to verify timestamp was updated to current time
+        let nowBefore = Int64(Date().timeIntervalSince1970 * 1000)
+
+        // Run ensureRollupsUpToDate (triggers purge migration then pipeline)
+        try await service.ensureRollupsUpToDate()
+
+        // After migration + pipeline, last_rollup_timestamp should be approximately current time
+        let tsAfter = try dbManager.getLastRollupTimestamp()
+        #expect(tsAfter != nil, "last_rollup_timestamp should exist after pipeline run")
+        #expect(tsAfter! >= nowBefore, "last_rollup_timestamp should be updated to current time, not the old value")
+    }
+
+    @Test("purge migration runs only once (AC 3)")
+    func purgeMigrationRunsOnlyOnce() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+        let connection = try dbManager.getConnection()
+
+        // First call: triggers purge migration
+        try await service.ensureRollupsUpToDate()
+
+        // Verify purge flag is set
+        var stmt: OpaquePointer?
+        sqlite3_prepare_v2(connection, "SELECT value FROM rollup_metadata WHERE key = 'extra_usage_purge_completed'", -1, &stmt, nil)
+        let stepResult = sqlite3_step(stmt)
+        #expect(stepResult == SQLITE_ROW, "Purge flag should exist after first run")
+        let flagValue = String(cString: sqlite3_column_text(stmt, 0))
+        sqlite3_finalize(stmt)
+        #expect(flagValue == "1", "Purge flag should be '1'")
+
+        // Insert new rollups manually (simulating normal pipeline output)
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let insertSQL = "INSERT INTO usage_rollups (period_start, period_end, resolution, five_hour_avg, five_hour_peak, five_hour_min, reset_count) VALUES (?, ?, '5min', 70.0, 80.0, 60.0, 0)"
+        sqlite3_prepare_v2(connection, insertSQL, -1, &stmt, nil)
+        sqlite3_bind_int64(stmt, 1, now)
+        sqlite3_bind_int64(stmt, 2, now + 300000)
+        sqlite3_step(stmt)
+        sqlite3_finalize(stmt)
+
+        // Second call: should NOT purge again
+        try await service.ensureRollupsUpToDate()
+
+        // The manually-inserted rollup should still exist (not purged)
+        sqlite3_prepare_v2(connection, "SELECT COUNT(*) FROM usage_rollups WHERE period_start = ?", -1, &stmt, nil)
+        sqlite3_bind_int64(stmt, 1, now)
+        sqlite3_step(stmt)
+        let manualRollupCount = sqlite3_column_int(stmt, 0)
+        sqlite3_finalize(stmt)
+        #expect(manualRollupCount == 1, "Manually-inserted rollup should survive second run (purge should not re-run)")
+    }
+
+    @Test("after purge, surviving raw polls rolled up with correct extra usage (AC 2)")
+    func purgeMigrationRebuildsWithExtraUsage() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+        let connection = try dbManager.getConnection()
+
+        // Insert raw polls with extra usage data in the 24h-7d window (eligible for rollup)
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let baseTimestamp = now - (25 * 60 * 60 * 1000) // 25h ago
+        let fiveMinutesMs: Int64 = 5 * 60 * 1000
+        let bucketStart = (baseTimestamp / fiveMinutesMs) * fiveMinutesMs
+
+        // Two polls in the same 5-min bucket with different extra usage values
+        var stmt: OpaquePointer?
+        let pollSQL = "INSERT INTO usage_polls (timestamp, five_hour_util, seven_day_util, extra_usage_used_credits, extra_usage_utilization) VALUES (?, ?, ?, ?, ?)"
+
+        sqlite3_prepare_v2(connection, pollSQL, -1, &stmt, nil)
+        sqlite3_bind_int64(stmt, 1, bucketStart)
+        sqlite3_bind_double(stmt, 2, 50.0)
+        sqlite3_bind_double(stmt, 3, 40.0)
+        sqlite3_bind_double(stmt, 4, 10.5)
+        sqlite3_bind_double(stmt, 5, 0.15)
+        sqlite3_step(stmt)
+        sqlite3_finalize(stmt)
+
+        sqlite3_prepare_v2(connection, pollSQL, -1, &stmt, nil)
+        sqlite3_bind_int64(stmt, 1, bucketStart + 30000)
+        sqlite3_bind_double(stmt, 2, 55.0)
+        sqlite3_bind_double(stmt, 3, 42.0)
+        sqlite3_bind_double(stmt, 4, 15.0)
+        sqlite3_bind_double(stmt, 5, 0.25)
+        sqlite3_step(stmt)
+        sqlite3_finalize(stmt)
+
+        // Also insert a tainted rollup (will be purged)
+        let rollupSQL = "INSERT INTO usage_rollups (period_start, period_end, resolution, five_hour_avg, five_hour_peak, five_hour_min, reset_count) VALUES (?, ?, '5min', 30.0, 35.0, 25.0, 0)"
+        sqlite3_prepare_v2(connection, rollupSQL, -1, &stmt, nil)
+        sqlite3_bind_int64(stmt, 1, bucketStart - 300000)
+        sqlite3_bind_int64(stmt, 2, bucketStart)
+        sqlite3_step(stmt)
+        sqlite3_finalize(stmt)
+
+        // Run ensureRollupsUpToDate (purges tainted + rebuilds from raw polls)
+        try await service.ensureRollupsUpToDate()
+
+        // Query 5-min rollups to verify extra usage was propagated
+        let rollups = try await service.getRolledUpData(range: .week)
+        let fiveMinRollups = rollups.filter {
+            $0.resolution == .fiveMin && $0.periodStart == bucketStart
+        }
+
+        #expect(!fiveMinRollups.isEmpty, "Expected rebuilt 5-min rollup for bucket \(bucketStart)")
+
+        if let rollup = fiveMinRollups.first {
+            // MAX aggregation: max(10.5, 15.0) = 15.0
+            #expect(rollup.extraUsageUsedCredits == 15.0, "Expected extraUsageUsedCredits MAX = 15.0, got \(String(describing: rollup.extraUsageUsedCredits))")
+            // MAX aggregation: max(0.15, 0.25) = 0.25
+            #expect(rollup.extraUsageUtilization == 0.25, "Expected extraUsageUtilization MAX = 0.25, got \(String(describing: rollup.extraUsageUtilization))")
+        }
+    }
+
+    // MARK: - Story 17.5: End-to-End Forward Pipeline with Extra Usage
+
+    @Test("end-to-end rollup pipeline propagates extra usage through all tiers (AC 2, 4)")
+    func endToEndRollupPipelineExtraUsage() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+        let connection = try dbManager.getConnection()
+
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let fiveMinMs: Int64 = 5 * 60 * 1000
+        let hourMs: Int64 = 60 * 60 * 1000
+        let dayMs: Int64 = 24 * hourMs
+
+        // Pre-set the purge flag so the migration doesn't delete our staged data
+        var stmt: OpaquePointer?
+        let flagSQL = "INSERT OR REPLACE INTO rollup_metadata (key, value) VALUES ('extra_usage_purge_completed', '1')"
+        sqlite3_prepare_v2(connection, flagSQL, -1, &stmt, nil)
+        sqlite3_step(stmt)
+        sqlite3_finalize(stmt)
+
+        // === TIER 1: Raw polls → 5-min rollups (24h-7d window) ===
+        let rawBase = now - (25 * hourMs) // 25h ago
+        let rawBucket = (rawBase / fiveMinMs) * fiveMinMs
+
+        let pollSQL = "INSERT INTO usage_polls (timestamp, five_hour_util, seven_day_util, extra_usage_used_credits, extra_usage_utilization) VALUES (?, ?, ?, ?, ?)"
+
+        // Two polls in the same 5-min bucket
+        sqlite3_prepare_v2(connection, pollSQL, -1, &stmt, nil)
+        sqlite3_bind_int64(stmt, 1, rawBucket)
+        sqlite3_bind_double(stmt, 2, 50.0)
+        sqlite3_bind_double(stmt, 3, 40.0)
+        sqlite3_bind_double(stmt, 4, 10.5)
+        sqlite3_bind_double(stmt, 5, 0.15)
+        sqlite3_step(stmt)
+        sqlite3_finalize(stmt)
+
+        sqlite3_prepare_v2(connection, pollSQL, -1, &stmt, nil)
+        sqlite3_bind_int64(stmt, 1, rawBucket + 60000)
+        sqlite3_bind_double(stmt, 2, 55.0)
+        sqlite3_bind_double(stmt, 3, 42.0)
+        sqlite3_bind_double(stmt, 4, 15.0)
+        sqlite3_bind_double(stmt, 5, 0.25)
+        sqlite3_step(stmt)
+        sqlite3_finalize(stmt)
+
+        // === TIER 2: Pre-insert 5-min rollups in 7d-30d window → hourly ===
+        let hourlyBase = now - (10 * dayMs) // 10 days ago
+        let hourlyHourStart = (hourlyBase / hourMs) * hourMs
+        let rollup5SQL = "INSERT INTO usage_rollups (period_start, period_end, resolution, five_hour_avg, five_hour_peak, five_hour_min, reset_count, extra_usage_used_credits, extra_usage_utilization) VALUES (?, ?, '5min', 50.0, 60.0, 40.0, 0, ?, ?)"
+
+        // Two 5-min rollups in the same hour
+        sqlite3_prepare_v2(connection, rollup5SQL, -1, &stmt, nil)
+        sqlite3_bind_int64(stmt, 1, hourlyHourStart)
+        sqlite3_bind_int64(stmt, 2, hourlyHourStart + fiveMinMs)
+        sqlite3_bind_double(stmt, 3, 18.0)
+        sqlite3_bind_double(stmt, 4, 0.36)
+        sqlite3_step(stmt)
+        sqlite3_finalize(stmt)
+
+        sqlite3_prepare_v2(connection, rollup5SQL, -1, &stmt, nil)
+        sqlite3_bind_int64(stmt, 1, hourlyHourStart + fiveMinMs)
+        sqlite3_bind_int64(stmt, 2, hourlyHourStart + 2 * fiveMinMs)
+        sqlite3_bind_double(stmt, 3, 25.0)
+        sqlite3_bind_double(stmt, 4, 0.50)
+        sqlite3_step(stmt)
+        sqlite3_finalize(stmt)
+
+        // === TIER 3: Pre-insert hourly rollups in 30d+ window → daily ===
+        let dailyBase = now - (35 * dayMs) // 35 days ago
+        let dailyDayStart = (dailyBase / dayMs) * dayMs
+        let rollupHrSQL = "INSERT INTO usage_rollups (period_start, period_end, resolution, five_hour_avg, five_hour_peak, five_hour_min, reset_count, extra_usage_used_credits, extra_usage_utilization) VALUES (?, ?, 'hourly', 50.0, 60.0, 40.0, 0, ?, ?)"
+
+        // Two hourly rollups in the same day
+        sqlite3_prepare_v2(connection, rollupHrSQL, -1, &stmt, nil)
+        sqlite3_bind_int64(stmt, 1, dailyDayStart)
+        sqlite3_bind_int64(stmt, 2, dailyDayStart + hourMs)
+        sqlite3_bind_double(stmt, 3, 30.0)
+        sqlite3_bind_double(stmt, 4, 0.60)
+        sqlite3_step(stmt)
+        sqlite3_finalize(stmt)
+
+        sqlite3_prepare_v2(connection, rollupHrSQL, -1, &stmt, nil)
+        sqlite3_bind_int64(stmt, 1, dailyDayStart + hourMs)
+        sqlite3_bind_int64(stmt, 2, dailyDayStart + 2 * hourMs)
+        sqlite3_bind_double(stmt, 3, 40.0)
+        sqlite3_bind_double(stmt, 4, 0.80)
+        sqlite3_step(stmt)
+        sqlite3_finalize(stmt)
+
+        // Run the full rollup pipeline
+        try await service.ensureRollupsUpToDate()
+
+        // === VERIFY TIER 1: 5-min rollups from raw polls ===
+        let weekRollups = try await service.getRolledUpData(range: .week)
+        let fiveMinRollups = weekRollups.filter { $0.resolution == .fiveMin }
+        let rawRollup = fiveMinRollups.first { $0.periodStart == rawBucket }
+
+        #expect(rawRollup != nil, "Expected 5-min rollup from raw polls")
+        if let r = rawRollup {
+            // MAX(10.5, 15.0) = 15.0
+            #expect(r.extraUsageUsedCredits == 15.0, "5-min: expected MAX extra_usage_used_credits = 15.0, got \(String(describing: r.extraUsageUsedCredits))")
+            // MAX(0.15, 0.25) = 0.25
+            #expect(r.extraUsageUtilization == 0.25, "5-min: expected MAX extra_usage_utilization = 0.25, got \(String(describing: r.extraUsageUtilization))")
+        }
+
+        // === VERIFY TIER 2: Hourly rollups from 5-min ===
+        let monthRollups = try await service.getRolledUpData(range: .month)
+        let hourlyRollups = monthRollups.filter { $0.resolution == .hourly }
+        let hourRollup = hourlyRollups.first { $0.periodStart == hourlyHourStart }
+
+        #expect(hourRollup != nil, "Expected hourly rollup from 5-min rollups")
+        if let r = hourRollup {
+            // MAX(18.0, 25.0) = 25.0
+            #expect(r.extraUsageUsedCredits == 25.0, "Hourly: expected MAX extra_usage_used_credits = 25.0, got \(String(describing: r.extraUsageUsedCredits))")
+            // MAX(0.36, 0.50) = 0.50
+            #expect(r.extraUsageUtilization == 0.50, "Hourly: expected MAX extra_usage_utilization = 0.50, got \(String(describing: r.extraUsageUtilization))")
+        }
+
+        // === VERIFY TIER 3: Daily rollups from hourly ===
+        let allRollups = try await service.getRolledUpData(range: .all)
+        let dailyRollups = allRollups.filter { $0.resolution == .daily }
+        let dayRollup = dailyRollups.first { $0.periodStart == dailyDayStart }
+
+        #expect(dayRollup != nil, "Expected daily rollup from hourly rollups")
+        if let r = dayRollup {
+            // MAX(30.0, 40.0) = 40.0
+            #expect(r.extraUsageUsedCredits == 40.0, "Daily: expected MAX extra_usage_used_credits = 40.0, got \(String(describing: r.extraUsageUsedCredits))")
+            // MAX(0.60, 0.80) = 0.80
+            #expect(r.extraUsageUtilization == 0.80, "Daily: expected MAX extra_usage_utilization = 0.80, got \(String(describing: r.extraUsageUtilization))")
+        }
+    }
+
+    @Test("purge + full pipeline rebuilds only tier 1 from surviving raw polls (AC 1, 2)")
+    func purgeFollowedByFullPipelineRebuildsOnlyTier1() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+
+        try dbManager.ensureSchema()
+
+        let service = HistoricalDataService(databaseManager: dbManager)
+        let connection = try dbManager.getConnection()
+
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let fiveMinMs: Int64 = 5 * 60 * 1000
+        let hourMs: Int64 = 60 * 60 * 1000
+        let dayMs: Int64 = 24 * hourMs
+
+        // Insert tainted rollups at all tiers (will be purged)
+        var stmt: OpaquePointer?
+
+        // Tainted 5-min rollup in 7d-30d window
+        let tainted5min = now - (10 * dayMs)
+        let insert5SQL = "INSERT INTO usage_rollups (period_start, period_end, resolution, five_hour_avg, five_hour_peak, five_hour_min, reset_count) VALUES (?, ?, '5min', 50.0, 60.0, 40.0, 0)"
+        sqlite3_prepare_v2(connection, insert5SQL, -1, &stmt, nil)
+        sqlite3_bind_int64(stmt, 1, tainted5min)
+        sqlite3_bind_int64(stmt, 2, tainted5min + fiveMinMs)
+        sqlite3_step(stmt)
+        sqlite3_finalize(stmt)
+
+        // Tainted hourly rollup in 30d+ window
+        let taintedHourly = now - (35 * dayMs)
+        let insertHrSQL = "INSERT INTO usage_rollups (period_start, period_end, resolution, five_hour_avg, five_hour_peak, five_hour_min, reset_count) VALUES (?, ?, 'hourly', 50.0, 60.0, 40.0, 0)"
+        sqlite3_prepare_v2(connection, insertHrSQL, -1, &stmt, nil)
+        sqlite3_bind_int64(stmt, 1, taintedHourly)
+        sqlite3_bind_int64(stmt, 2, taintedHourly + hourMs)
+        sqlite3_step(stmt)
+        sqlite3_finalize(stmt)
+
+        // Insert raw polls with extra usage in 24h-7d window (survive purge)
+        let rawBase = now - (25 * hourMs)
+        let rawBucket = (rawBase / fiveMinMs) * fiveMinMs
+        let pollSQL = "INSERT INTO usage_polls (timestamp, five_hour_util, seven_day_util, extra_usage_used_credits, extra_usage_utilization) VALUES (?, ?, ?, ?, ?)"
+        sqlite3_prepare_v2(connection, pollSQL, -1, &stmt, nil)
+        sqlite3_bind_int64(stmt, 1, rawBucket)
+        sqlite3_bind_double(stmt, 2, 50.0)
+        sqlite3_bind_double(stmt, 3, 40.0)
+        sqlite3_bind_double(stmt, 4, 12.0)
+        sqlite3_bind_double(stmt, 5, 0.30)
+        sqlite3_step(stmt)
+        sqlite3_finalize(stmt)
+
+        // Run full pipeline (purge fires, then all 3 rollup stages)
+        try await service.ensureRollupsUpToDate()
+
+        // Verify: tainted rollups are gone
+        let allData = try await service.getRolledUpData(range: .all)
+        let hourlyRollups = allData.filter { $0.resolution == .hourly }
+        let dailyRollups = allData.filter { $0.resolution == .daily }
+        #expect(hourlyRollups.isEmpty, "Tainted hourly rollups should be purged, no source data for new ones")
+        #expect(dailyRollups.isEmpty, "No daily rollups expected — no hourly source data after purge")
+
+        // Verify: new 5-min rollup was rebuilt with correct extra usage
+        let weekData = try await service.getRolledUpData(range: .week)
+        let rebuilt5min = weekData.filter { $0.resolution == .fiveMin && $0.periodStart == rawBucket }
+        #expect(!rebuilt5min.isEmpty, "Expected rebuilt 5-min rollup from surviving raw polls")
+        if let r = rebuilt5min.first {
+            #expect(r.extraUsageUsedCredits == 12.0, "Rebuilt 5-min rollup should have extra usage from raw poll")
+            #expect(r.extraUsageUtilization == 0.30, "Rebuilt 5-min rollup should have extra usage utilization from raw poll")
+        }
+    }
+
     // MARK: - getExtraUsagePerCycle Tests (Story 17.3)
 
     @Test("getExtraUsagePerCycle returns empty when no extra usage data exists")

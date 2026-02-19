@@ -706,6 +706,98 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         }
     }
 
+    // MARK: - One-Time Purge Migration (Story 17.5)
+
+    /// Purges tainted rollup data created before extra usage columns were populated.
+    /// Runs once: checks `extra_usage_purge_completed` flag in rollup_metadata.
+    /// After purge, the normal rollup pipeline rebuilds from surviving raw polls.
+    private func migrateExtraUsagePurge(connection: OpaquePointer) throws {
+        // Check if migration already completed
+        let checkSQL = "SELECT value FROM rollup_metadata WHERE key = 'extra_usage_purge_completed'"
+
+        var checkStmt: OpaquePointer?
+        defer {
+            if let checkStmt = checkStmt {
+                sqlite3_finalize(checkStmt)
+            }
+        }
+
+        let prepareResult = sqlite3_prepare_v2(connection, checkSQL, -1, &checkStmt, nil)
+        guard prepareResult == SQLITE_OK else {
+            throw AppError.databaseQueryFailed(underlying: SQLiteError.prepareFailed(code: prepareResult))
+        }
+
+        if sqlite3_step(checkStmt) == SQLITE_ROW,
+           sqlite3_column_type(checkStmt, 0) != SQLITE_NULL {
+            let value = String(cString: sqlite3_column_text(checkStmt, 0))
+            if value == "1" {
+                return // Already completed
+            }
+        }
+
+        // Purge all tainted rollup data
+        do {
+            let sql = "DELETE FROM usage_rollups"
+            var stmt: OpaquePointer?
+            defer {
+                if let stmt = stmt {
+                    sqlite3_finalize(stmt)
+                }
+            }
+            let prepResult = sqlite3_prepare_v2(connection, sql, -1, &stmt, nil)
+            guard prepResult == SQLITE_OK else {
+                throw AppError.databaseQueryFailed(underlying: SQLiteError.prepareFailed(code: prepResult))
+            }
+            let stepResult = sqlite3_step(stmt)
+            guard stepResult == SQLITE_DONE else {
+                let errorMessage = String(cString: sqlite3_errmsg(connection))
+                throw AppError.databaseQueryFailed(underlying: SQLiteError.execFailed(message: errorMessage))
+            }
+        }
+
+        // Reset last_rollup_timestamp so pipeline reprocesses from scratch
+        do {
+            let sql = "INSERT OR REPLACE INTO rollup_metadata (key, value) VALUES ('last_rollup_timestamp', '0')"
+            var stmt: OpaquePointer?
+            defer {
+                if let stmt = stmt {
+                    sqlite3_finalize(stmt)
+                }
+            }
+            let prepResult = sqlite3_prepare_v2(connection, sql, -1, &stmt, nil)
+            guard prepResult == SQLITE_OK else {
+                throw AppError.databaseQueryFailed(underlying: SQLiteError.prepareFailed(code: prepResult))
+            }
+            let stepResult = sqlite3_step(stmt)
+            guard stepResult == SQLITE_DONE else {
+                let errorMessage = String(cString: sqlite3_errmsg(connection))
+                throw AppError.databaseQueryFailed(underlying: SQLiteError.execFailed(message: errorMessage))
+            }
+        }
+
+        // Mark migration as completed
+        do {
+            let sql = "INSERT OR REPLACE INTO rollup_metadata (key, value) VALUES ('extra_usage_purge_completed', '1')"
+            var stmt: OpaquePointer?
+            defer {
+                if let stmt = stmt {
+                    sqlite3_finalize(stmt)
+                }
+            }
+            let prepResult = sqlite3_prepare_v2(connection, sql, -1, &stmt, nil)
+            guard prepResult == SQLITE_OK else {
+                throw AppError.databaseQueryFailed(underlying: SQLiteError.prepareFailed(code: prepResult))
+            }
+            let stepResult = sqlite3_step(stmt)
+            guard stepResult == SQLITE_DONE else {
+                let errorMessage = String(cString: sqlite3_errmsg(connection))
+                throw AppError.databaseQueryFailed(underlying: SQLiteError.execFailed(message: errorMessage))
+            }
+        }
+
+        Self.logger.info("Migration: purged tainted rollups for extra usage rebuild")
+    }
+
     func ensureRollupsUpToDate() async throws {
         guard databaseManager.isAvailable else {
             Self.logger.debug("Database unavailable - skipping rollup")
@@ -727,6 +819,9 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         }
 
         do {
+            // One-time purge of tainted rollups missing extra usage data (Story 17.5)
+            try migrateExtraUsagePurge(connection: connection)
+
             // Execute rollups in order: raw->5min, 5min->hourly, hourly->daily (Task 7.2)
             try await performRawTo5MinRollup(connection: connection)
             try await perform5MinToHourlyRollup(connection: connection)
@@ -771,6 +866,9 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         }
         let connection = try databaseManager.getConnection()
 
+        // Note: deleting rollup_metadata clears the extra_usage_purge_completed flag,
+        // so the purge migration will re-run on the next ensureRollupsUpToDate() call.
+        // This is harmless (DELETE on empty usage_rollups) and self-correcting.
         let tables = ["usage_polls", "usage_rollups", "reset_events", "rollup_metadata"]
         for table in tables {
             let result = sqlite3_exec(connection, "DELETE FROM \(table)", nil, nil, nil)
