@@ -78,6 +78,18 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         let extraUsageUsedCredits = response.extraUsage?.usedCredits
         let extraUsageUtilization = response.extraUsage?.utilization
 
+        // Compute extra usage delta from previous poll (before INSERT so we can include it)
+        let extraUsageDelta: Double?
+        if let currentCredits = extraUsageUsedCredits {
+            if let prevCredits = previousPoll?.extraUsageUsedCredits {
+                extraUsageDelta = max(0, currentCredits - prevCredits)
+            } else {
+                extraUsageDelta = 0
+            }
+        } else {
+            extraUsageDelta = nil
+        }
+
         // Prepare INSERT statement
         let sql = """
             INSERT INTO usage_polls (
@@ -89,8 +101,9 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 extra_usage_enabled,
                 extra_usage_monthly_limit,
                 extra_usage_used_credits,
-                extra_usage_utilization
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                extra_usage_utilization,
+                extra_usage_delta
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
 
         var statement: OpaquePointer?
@@ -158,6 +171,12 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             sqlite3_bind_null(statement, 9)
         }
 
+        if let delta = extraUsageDelta {
+            sqlite3_bind_double(statement, 10, delta)
+        } else {
+            sqlite3_bind_null(statement, 10)
+        }
+
         // Execute
         let stepResult = sqlite3_step(statement)
         guard stepResult == SQLITE_DONE else {
@@ -200,7 +219,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
 
         let sql = """
             SELECT id, timestamp, five_hour_util, five_hour_resets_at, seven_day_util, seven_day_resets_at,
-                   extra_usage_enabled, extra_usage_monthly_limit, extra_usage_used_credits, extra_usage_utilization
+                   extra_usage_enabled, extra_usage_monthly_limit, extra_usage_used_credits, extra_usage_utilization,
+                   extra_usage_delta
             FROM usage_polls
             WHERE timestamp >= ?
             ORDER BY timestamp ASC
@@ -259,7 +279,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
 
         let sql = """
             SELECT id, timestamp, five_hour_util, five_hour_resets_at, seven_day_util, seven_day_resets_at,
-                   extra_usage_enabled, extra_usage_monthly_limit, extra_usage_used_credits, extra_usage_utilization
+                   extra_usage_enabled, extra_usage_monthly_limit, extra_usage_used_credits, extra_usage_utilization,
+                   extra_usage_delta
             FROM usage_polls
             ORDER BY timestamp DESC
             LIMIT 1
@@ -386,7 +407,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
     /// Reads a UsagePoll from the current row of a prepared statement.
     /// Expects columns: id(0), timestamp(1), five_hour_util(2), five_hour_resets_at(3),
     /// seven_day_util(4), seven_day_resets_at(5), extra_usage_enabled(6),
-    /// extra_usage_monthly_limit(7), extra_usage_used_credits(8), extra_usage_utilization(9).
+    /// extra_usage_monthly_limit(7), extra_usage_used_credits(8), extra_usage_utilization(9),
+    /// extra_usage_delta(10).
     private static func readPollRow(_ statement: OpaquePointer) -> UsagePoll {
         let id = sqlite3_column_int64(statement, 0)
         let timestamp = sqlite3_column_int64(statement, 1)
@@ -406,6 +428,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             ? nil : sqlite3_column_double(statement, 8)
         let extraUsageUtilization: Double? = sqlite3_column_type(statement, 9) == SQLITE_NULL
             ? nil : sqlite3_column_double(statement, 9)
+        let extraUsageDelta: Double? = sqlite3_column_type(statement, 10) == SQLITE_NULL
+            ? nil : sqlite3_column_double(statement, 10)
 
         return UsagePoll(
             id: id,
@@ -417,7 +441,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             extraUsageEnabled: extraUsageEnabled,
             extraUsageMonthlyLimit: extraUsageMonthlyLimit,
             extraUsageUsedCredits: extraUsageUsedCredits,
-            extraUsageUtilization: extraUsageUtilization
+            extraUsageUtilization: extraUsageUtilization,
+            extraUsageDelta: extraUsageDelta
         )
     }
 
@@ -866,6 +891,10 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             let extraUsageUtilValues = bucketPolls.compactMap { $0.extraUsageUtilization }
             let extraUsageUtilization = extraUsageUtilValues.isEmpty ? nil : extraUsageUtilValues.max()
 
+            // Extra usage delta: SUM across polls (total credits drained in this period)
+            let deltaValues = bucketPolls.compactMap { $0.extraUsageDelta }
+            let extraUsageDelta = deltaValues.isEmpty ? nil : deltaValues.reduce(0, +)
+
             // Count reset events in this bucket
             let resetCount = try countResetEvents(from: bucketStart, to: bucketEnd, connection: connection)
 
@@ -884,6 +913,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 unusedCredits: nil,
                 extraUsageUsedCredits: extraUsageUsedCredits,
                 extraUsageUtilization: extraUsageUtilization,
+                extraUsageDelta: extraUsageDelta,
                 connection: connection
             )
         }
@@ -898,7 +928,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
     private func queryRawPollsForRollup(from: Int64, to: Int64, connection: OpaquePointer) throws -> [UsagePoll] {
         let sql = """
             SELECT id, timestamp, five_hour_util, five_hour_resets_at, seven_day_util, seven_day_resets_at,
-                   extra_usage_enabled, extra_usage_monthly_limit, extra_usage_used_credits, extra_usage_utilization
+                   extra_usage_enabled, extra_usage_monthly_limit, extra_usage_used_credits, extra_usage_utilization,
+                   extra_usage_delta
             FROM usage_polls
             WHERE timestamp >= ? AND timestamp < ?
             ORDER BY timestamp ASC
@@ -993,6 +1024,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         unusedCredits: Double?,
         extraUsageUsedCredits: Double? = nil,
         extraUsageUtilization: Double? = nil,
+        extraUsageDelta: Double? = nil,
         connection: OpaquePointer
     ) throws {
         let sql = """
@@ -1001,8 +1033,9 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 five_hour_avg, five_hour_peak, five_hour_min,
                 seven_day_avg, seven_day_peak, seven_day_min,
                 reset_count, waste_credits,
-                extra_usage_used_credits, extra_usage_utilization
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                extra_usage_used_credits, extra_usage_utilization,
+                extra_usage_delta
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
 
         var statement: OpaquePointer?
@@ -1052,6 +1085,9 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
 
         if let extraUtil = extraUsageUtilization { sqlite3_bind_double(statement, 13, extraUtil) }
         else { sqlite3_bind_null(statement, 13) }
+
+        if let delta = extraUsageDelta { sqlite3_bind_double(statement, 14, delta) }
+        else { sqlite3_bind_null(statement, 14) }
 
         let stepResult = sqlite3_step(statement)
         guard stepResult == SQLITE_DONE else {
@@ -1143,6 +1179,10 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             let extraUsageUtilValues = bucketRollups.compactMap { $0.extraUsageUtilization }
             let extraUsageUtilization = extraUsageUtilValues.isEmpty ? nil : extraUsageUtilValues.max()
 
+            // Extra usage delta: SUM across sub-rollups
+            let deltaValues = bucketRollups.compactMap { $0.extraUsageDelta }
+            let extraUsageDelta = deltaValues.isEmpty ? nil : deltaValues.reduce(0, +)
+
             try insertRollup(
                 periodStart: bucketStart,
                 periodEnd: bucketEnd,
@@ -1157,6 +1197,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 unusedCredits: nil,
                 extraUsageUsedCredits: extraUsageUsedCredits,
                 extraUsageUtilization: extraUsageUtilization,
+                extraUsageDelta: extraUsageDelta,
                 connection: connection
             )
         }
@@ -1234,6 +1275,10 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             let extraUsageUtilValues = bucketRollups.compactMap { $0.extraUsageUtilization }
             let extraUsageUtilization = extraUsageUtilValues.isEmpty ? nil : extraUsageUtilValues.max()
 
+            // Extra usage delta: SUM across sub-rollups
+            let deltaValues = bucketRollups.compactMap { $0.extraUsageDelta }
+            let extraUsageDelta = deltaValues.isEmpty ? nil : deltaValues.reduce(0, +)
+
             try insertRollup(
                 periodStart: bucketStart,
                 periodEnd: bucketEnd,
@@ -1248,6 +1293,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 unusedCredits: totalUnusedCredits,
                 extraUsageUsedCredits: extraUsageUsedCredits,
                 extraUsageUtilization: extraUsageUtilization,
+                extraUsageDelta: extraUsageDelta,
                 connection: connection
             )
         }
@@ -1270,7 +1316,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                    five_hour_avg, five_hour_peak, five_hour_min,
                    seven_day_avg, seven_day_peak, seven_day_min,
                    reset_count, waste_credits,
-                   extra_usage_used_credits, extra_usage_utilization
+                   extra_usage_used_credits, extra_usage_utilization,
+                   extra_usage_delta
             FROM usage_rollups
             WHERE resolution = ? AND period_start >= ? AND period_start < ?
             ORDER BY period_start ASC
@@ -1321,6 +1368,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 ? nil : sqlite3_column_double(statement, 12)
             let extraUsageUtilization: Double? = sqlite3_column_type(statement, 13) == SQLITE_NULL
                 ? nil : sqlite3_column_double(statement, 13)
+            let extraUsageDelta: Double? = sqlite3_column_type(statement, 14) == SQLITE_NULL
+                ? nil : sqlite3_column_double(statement, 14)
 
             rollups.append(UsageRollup(
                 id: id,
@@ -1336,7 +1385,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 resetCount: resetCount,
                 unusedCredits: unusedCredits,
                 extraUsageUsedCredits: extraUsageUsedCredits,
-                extraUsageUtilization: extraUsageUtilization
+                extraUsageUtilization: extraUsageUtilization,
+                extraUsageDelta: extraUsageDelta
             ))
         }
 
@@ -1430,7 +1480,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             resetCount: 0,
             unusedCredits: nil,
             extraUsageUsedCredits: poll.extraUsageUsedCredits,
-            extraUsageUtilization: poll.extraUsageUtilization
+            extraUsageUtilization: poll.extraUsageUtilization,
+            extraUsageDelta: poll.extraUsageDelta
         )
     }
 
@@ -1470,7 +1521,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                     resetCount: count,
                     unusedCredits: rollup.unusedCredits,
                     extraUsageUsedCredits: rollup.extraUsageUsedCredits,
-                    extraUsageUtilization: rollup.extraUsageUtilization
+                    extraUsageUtilization: rollup.extraUsageUtilization,
+                    extraUsageDelta: rollup.extraUsageDelta
                 )
             }
             return rollup

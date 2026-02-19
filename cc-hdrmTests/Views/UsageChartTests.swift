@@ -1107,80 +1107,69 @@ struct UsageChartTests {
         #expect(barPoints.count == 1)
     }
 
-    // MARK: - Extra Usage Annotations (Story 17.3)
+    // MARK: - Extra Usage Annotations (Story 17.5: delta-based detection)
 
-    @Test("makeChartPoints populates extraUsageActive=true when extraUsageEnabled and util >= 99.5")
-    func extraUsageActiveWhenEnabled() {
+    @Test("makeChartPoints sets extraUsageActive=true when delta > 0 (regardless of utilization)")
+    func extraUsageActiveWhenDeltaPositive() {
         let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
         let polls = [
-            UsagePoll(id: 1, timestamp: nowMs - 60_000, fiveHourUtil: 99.8,
+            UsagePoll(id: 1, timestamp: nowMs - 60_000, fiveHourUtil: 30.0,
                       fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil,
                       extraUsageEnabled: true, extraUsageMonthlyLimit: 100,
-                      extraUsageUsedCredits: 12.50, extraUsageUtilization: 0.125)
+                      extraUsageUsedCredits: 12.50, extraUsageUtilization: 12.5,
+                      extraUsageDelta: 5.0)
         ]
         let points = StepAreaChartView.makeChartPoints(from: polls)
         #expect(points.count == 1)
         #expect(points[0].extraUsageActive == true)
-        #expect(points[0].extraUsageUsedCredits == 12.50)
+        #expect(points[0].extraUsageDelta == 5.0)
     }
 
-    @Test("makeChartPoints sets extraUsageActive=false when extraUsageEnabled=false even at 100% util")
-    func extraUsageInactiveWhenDisabled() {
+    @Test("makeChartPoints sets extraUsageActive=false when delta is 0")
+    func extraUsageInactiveWhenDeltaZero() {
         let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
         let polls = [
             UsagePoll(id: 1, timestamp: nowMs, fiveHourUtil: 100.0,
                       fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil,
-                      extraUsageEnabled: false, extraUsageMonthlyLimit: nil,
-                      extraUsageUsedCredits: nil, extraUsageUtilization: nil)
+                      extraUsageEnabled: true, extraUsageMonthlyLimit: 100,
+                      extraUsageUsedCredits: 50.0, extraUsageUtilization: 50.0,
+                      extraUsageDelta: 0.0)
         ]
         let points = StepAreaChartView.makeChartPoints(from: polls)
         #expect(points.count == 1)
         #expect(points[0].extraUsageActive == false)
     }
 
-    @Test("makeChartPoints sets extraUsageActive=false when util below 99.5 even if extra usage enabled")
-    func extraUsageInactiveWhenUtilLow() {
+    @Test("makeChartPoints sets extraUsageActive=false when delta is nil")
+    func extraUsageInactiveWhenDeltaNil() {
         let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
         let polls = [
             UsagePoll(id: 1, timestamp: nowMs, fiveHourUtil: 85.0,
                       fiveHourResetsAt: nil, sevenDayUtil: 40.0, sevenDayResetsAt: nil,
                       extraUsageEnabled: true, extraUsageMonthlyLimit: 100,
-                      extraUsageUsedCredits: 5.0, extraUsageUtilization: 0.05)
+                      extraUsageUsedCredits: 5.0, extraUsageUtilization: 5.0)
         ]
         let points = StepAreaChartView.makeChartPoints(from: polls)
         #expect(points.count == 1)
         #expect(points[0].extraUsageActive == false)
     }
 
-    @Test("makeChartPoints sets extraUsageActive=true when sevenDayUtil >= 99.5 even if fiveHourUtil is low")
-    func extraUsageActiveWhenSevenDayUtilHigh() {
+    @Test("makeChartPoints sets extraUsageActive=true at low utilization when delta > 0 (AC 6)")
+    func extraUsageActiveAtLowUtilWithDelta() {
         let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
         let polls = [
-            UsagePoll(id: 1, timestamp: nowMs, fiveHourUtil: 50.0,
-                      fiveHourResetsAt: nil, sevenDayUtil: 100.0, sevenDayResetsAt: nil,
+            UsagePoll(id: 1, timestamp: nowMs, fiveHourUtil: 30.0,
+                      fiveHourResetsAt: nil, sevenDayUtil: 20.0, sevenDayResetsAt: nil,
                       extraUsageEnabled: true, extraUsageMonthlyLimit: 100,
-                      extraUsageUsedCredits: 10.0, extraUsageUtilization: 0.10)
+                      extraUsageUsedCredits: 10.0, extraUsageUtilization: 10.0,
+                      extraUsageDelta: 10.0)
         ]
         let points = StepAreaChartView.makeChartPoints(from: polls)
         #expect(points.count == 1)
-        #expect(points[0].extraUsageActive == true)
+        #expect(points[0].extraUsageActive == true, "Delta > 0 should trigger at any utilization level")
     }
 
-    @Test("makeChartPoints sets extraUsageActive=false when both fiveHourUtil and sevenDayUtil below 99.5")
-    func extraUsageNilWhenBothUtilBelow995() {
-        let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
-        let polls = [
-            UsagePoll(id: 1, timestamp: nowMs, fiveHourUtil: 90.0,
-                      fiveHourResetsAt: nil, sevenDayUtil: 85.0, sevenDayResetsAt: nil,
-                      extraUsageEnabled: true, extraUsageMonthlyLimit: 100,
-                      extraUsageUsedCredits: 5.0, extraUsageUtilization: 0.05)
-        ]
-        let points = StepAreaChartView.makeChartPoints(from: polls)
-        #expect(points.count == 1)
-        #expect(points[0].extraUsageActive == false)
-    }
-
-    @Test("makeChartPoints sets extraUsageActive=nil when extraUsageEnabled is nil (pre-schema-v3)")
+    @Test("makeChartPoints sets extraUsageActive=false when no extra usage fields (pre-schema-v5)")
     func extraUsageNilWhenFieldsNil() {
         let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
         let polls = [
@@ -1189,8 +1178,55 @@ struct UsageChartTests {
         ]
         let points = StepAreaChartView.makeChartPoints(from: polls)
         #expect(points.count == 1)
-        // extraUsageEnabled defaults to nil → condition is false
         #expect(points[0].extraUsageActive == false)
+    }
+
+    @Test("makeBarPoints SUMs extraUsageDelta across rollups in bar period (AC 5)")
+    func barPointDeltaSumAggregation() {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let calendar = Calendar.current
+        let hourStart = calendar.dateInterval(
+            of: .hour,
+            for: Date(timeIntervalSince1970: Double(nowMs) / 1000.0)
+        )!.start
+        let hourStartMs = Int64(hourStart.timeIntervalSince1970 * 1000)
+        let fiveMinMs: Int64 = 300_000
+
+        let rollups = [
+            UsageRollup(
+                id: 1, periodStart: hourStartMs, periodEnd: hourStartMs + fiveMinMs,
+                resolution: .fiveMin,
+                fiveHourAvg: 30.0, fiveHourPeak: 45.0, fiveHourMin: 20.0,
+                sevenDayAvg: 15.0, sevenDayPeak: 25.0, sevenDayMin: 10.0,
+                resetCount: 0, unusedCredits: nil,
+                extraUsageUsedCredits: 20.0, extraUsageUtilization: 4.0, extraUsageDelta: 5.0
+            ),
+            UsageRollup(
+                id: 2, periodStart: hourStartMs + fiveMinMs, periodEnd: hourStartMs + 2 * fiveMinMs,
+                resolution: .fiveMin,
+                fiveHourAvg: 35.0, fiveHourPeak: 50.0, fiveHourMin: 25.0,
+                sevenDayAvg: 18.0, sevenDayPeak: 30.0, sevenDayMin: 12.0,
+                resetCount: 0, unusedCredits: nil,
+                extraUsageUsedCredits: 35.0, extraUsageUtilization: 7.0, extraUsageDelta: 15.0
+            ),
+            UsageRollup(
+                id: 3, periodStart: hourStartMs + 2 * fiveMinMs, periodEnd: hourStartMs + 3 * fiveMinMs,
+                resolution: .fiveMin,
+                fiveHourAvg: 25.0, fiveHourPeak: 40.0, fiveHourMin: 15.0,
+                sevenDayAvg: 12.0, sevenDayPeak: 20.0, sevenDayMin: 8.0,
+                resetCount: 0, unusedCredits: nil,
+                extraUsageUsedCredits: 40.0, extraUsageUtilization: 8.0, extraUsageDelta: 5.0
+            ),
+        ]
+
+        let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .week)
+        #expect(barPoints.count == 1)
+        // Delta should be SUM (5 + 15 + 5 = 25)
+        #expect(barPoints[0].extraUsageDelta == 25.0, "Expected delta SUM 25.0, got \(String(describing: barPoints[0].extraUsageDelta))")
+        // Spend should be MAX (cumulative, so max = 40.0)
+        #expect(barPoints[0].extraUsageSpend == 40.0)
+        // Utilization should be MAX (8.0)
+        #expect(barPoints[0].extraUsageUtilization == 8.0)
     }
 
     @Test("BarPoint extraUsageSpend defaults to nil")

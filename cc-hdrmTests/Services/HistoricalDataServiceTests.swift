@@ -1575,6 +1575,126 @@ struct HistoricalDataServiceTests {
         let result = try await service.getExtraUsagePerCycle(billingCycleDay: nil)
         #expect(result.isEmpty)
     }
+
+    // MARK: - Story 17.5: Extra Usage Delta Tests
+
+    @Test("persistPoll computes normal delta from previous poll (AC 1)")
+    func persistPollComputesNormalDelta() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+        try dbManager.ensureSchema()
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        let response1 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 50.0, resetsAt: nil),
+            sevenDay: nil, sevenDaySonnet: nil,
+            extraUsage: ExtraUsage(isEnabled: true, monthlyLimit: 500.0, usedCredits: 10.0, utilization: 2.0)
+        )
+        try await service.persistPoll(response1)
+
+        let response2 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 55.0, resetsAt: nil),
+            sevenDay: nil, sevenDaySonnet: nil,
+            extraUsage: ExtraUsage(isEnabled: true, monthlyLimit: 500.0, usedCredits: 25.0, utilization: 5.0)
+        )
+        try await service.persistPoll(response2)
+
+        let polls = try await service.getRecentPolls(hours: 1)
+        #expect(polls.count == 2)
+        #expect(polls[0].extraUsageDelta == 0.0, "First poll delta should be 0")
+        #expect(polls[1].extraUsageDelta == 15.0, "Second poll delta should be 15.0")
+    }
+
+    @Test("persistPoll clamps negative delta to 0 on billing reset (AC 2)")
+    func persistPollClampsBillingReset() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+        try dbManager.ensureSchema()
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        let response1 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 80.0, resetsAt: nil),
+            sevenDay: nil, sevenDaySonnet: nil,
+            extraUsage: ExtraUsage(isEnabled: true, monthlyLimit: 500.0, usedCredits: 50.0, utilization: 10.0)
+        )
+        try await service.persistPoll(response1)
+
+        let response2 = UsageResponse(
+            fiveHour: WindowUsage(utilization: 85.0, resetsAt: nil),
+            sevenDay: nil, sevenDaySonnet: nil,
+            extraUsage: ExtraUsage(isEnabled: true, monthlyLimit: 500.0, usedCredits: 5.0, utilization: 1.0)
+        )
+        try await service.persistPoll(response2)
+
+        let polls = try await service.getRecentPolls(hours: 1)
+        #expect(polls.count == 2)
+        #expect(polls[1].extraUsageDelta == 0.0, "Billing reset delta should be clamped to 0")
+    }
+
+    @Test("persistPoll sets nil delta when no extra usage data")
+    func persistPollNilDeltaNoExtraUsage() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+        try dbManager.ensureSchema()
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        let response = UsageResponse(
+            fiveHour: WindowUsage(utilization: 50.0, resetsAt: nil),
+            sevenDay: nil, sevenDaySonnet: nil,
+            extraUsage: nil
+        )
+        try await service.persistPoll(response)
+
+        let polls = try await service.getRecentPolls(hours: 1)
+        #expect(polls.count == 1)
+        #expect(polls[0].extraUsageDelta == nil, "Delta should be nil when no extra usage data")
+    }
+
+    @Test("Rollup SUM aggregation for extra_usage_delta (AC 3)")
+    func rollupSumsExtraUsageDelta() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+        try dbManager.ensureSchema()
+        let service = HistoricalDataService(databaseManager: dbManager)
+        let connection = try dbManager.getConnection()
+
+        let baseTimestamp = Int64(Date().timeIntervalSince1970 * 1000) - (25 * 60 * 60 * 1000)
+        let fiveMinutesMs: Int64 = 5 * 60 * 1000
+        let bucketStart = (baseTimestamp / fiveMinutesMs) * fiveMinutesMs
+
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util, extra_usage_used_credits, extra_usage_utilization, extra_usage_delta) VALUES (\(bucketStart), 50.0, 10.0, 2.0, 5.0)", nil, nil, &errorMessage)
+        sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util, extra_usage_used_credits, extra_usage_utilization, extra_usage_delta) VALUES (\(bucketStart + 30000), 55.0, 25.0, 5.0, 15.0)", nil, nil, &errorMessage)
+        sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util, extra_usage_used_credits, extra_usage_utilization, extra_usage_delta) VALUES (\(bucketStart + 60000), 60.0, 30.0, 6.0, 5.0)", nil, nil, &errorMessage)
+
+        try await service.ensureRollupsUpToDate()
+
+        let rollups = try await service.getRolledUpData(range: .week)
+        let fiveMinRollups = rollups.filter { $0.resolution == .fiveMin && $0.periodStart == bucketStart }
+
+        #expect(!fiveMinRollups.isEmpty, "Expected 5-minute rollup for test bucket")
+        if let rollup = fiveMinRollups.first {
+            #expect(rollup.extraUsageDelta == 25.0, "Rollup delta SUM should be 25.0, got \(String(describing: rollup.extraUsageDelta))")
+            #expect(rollup.extraUsageUsedCredits == 30.0)
+        }
+    }
+
+    @Test("extraUsageDelta passes through raw poll to rollup query (AC 8)")
+    func extraUsageDeltaInQueryResults() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+        try dbManager.ensureSchema()
+        let service = HistoricalDataService(databaseManager: dbManager)
+        let connection = try dbManager.getConnection()
+
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util, extra_usage_delta) VALUES (\(now - 60000), 50.0, 7.5)", nil, nil, &errorMessage)
+
+        let rollups = try await service.getRolledUpData(range: .day)
+        #expect(rollups.count == 1)
+        #expect(rollups[0].extraUsageDelta == 7.5, "Raw poll delta should pass through")
+    }
 }
 
 // MARK: - Mock DatabaseManager for Graceful Degradation Tests

@@ -45,6 +45,8 @@ struct BarChartView: View {
         var extraUsageSpend: Double? = nil
         /// Extra usage utilization percentage 0-100 for this period (nil if unavailable)
         var extraUsageUtilization: Double? = nil
+        /// Extra usage delta: SUM of credits consumed in this period (nil if unavailable)
+        var extraUsageDelta: Double? = nil
     }
 
     // MARK: - Init
@@ -137,6 +139,10 @@ struct BarChartView: View {
             let extraUtilValues = rollups.compactMap(\.extraUsageUtilization)
             let extraUsageUtil: Double? = extraUtilValues.isEmpty ? nil : extraUtilValues.max()
 
+            // Extra usage delta: SUM across rollups in this period
+            let deltaValues = rollups.compactMap(\.extraUsageDelta)
+            let extraUsageDelta: Double? = deltaValues.isEmpty ? nil : deltaValues.reduce(0, +)
+
             return BarPoint(
                 id: Int(periodStart.timeIntervalSince1970),
                 periodStart: periodStart,
@@ -150,7 +156,8 @@ struct BarChartView: View {
                 sevenDayMin: sevenDayMins.isEmpty ? nil : sevenDayMins.min(),
                 resetCount: totalResets,
                 extraUsageSpend: extraUsageSpend,
-                extraUsageUtilization: extraUsageUtil
+                extraUsageUtilization: extraUsageUtil,
+                extraUsageDelta: extraUsageDelta
             )
         }
     }
@@ -430,9 +437,39 @@ private struct StaticBarChartContent: View {
                 }
             }
 
-            // Extra usage cap overlay — proportional height above 100% for bars with active extra usage
+            // Extra usage faint background — cumulative utilization band (opacity 0.15)
+            // Visible for all bars where extraUsageUtilization > 0
             ForEach(barPoints) { point in
                 if let util = point.extraUsageUtilization, util > 0 {
+                    let capTop = 100.0 + min(util / 100.0 * 5.0, 5.0)
+                    if fiveHourVisible {
+                        let bounds = barBounds(for: point, series: .fiveHour)
+                        RectangleMark(
+                            xStart: .value("Start", bounds.start),
+                            xEnd: .value("End", bounds.end),
+                            yStart: .value("Bottom", 100),
+                            yEnd: .value("Top", capTop)
+                        )
+                        .foregroundStyle(Color.extraUsageCool.opacity(0.15))
+                    }
+                    if sevenDayVisible {
+                        let bounds = barBounds(for: point, series: .sevenDay)
+                        RectangleMark(
+                            xStart: .value("Start", bounds.start),
+                            xEnd: .value("End", bounds.end),
+                            yStart: .value("Bottom", 100),
+                            yEnd: .value("Top", capTop)
+                        )
+                        .foregroundStyle(Color.extraUsageCool.opacity(0.15))
+                    }
+                }
+            }
+
+            // Extra usage prominent foreground — active drain periods (opacity 0.6)
+            // Only for bars where extraUsageDelta > 0 (credits actively consumed)
+            ForEach(barPoints) { point in
+                if let delta = point.extraUsageDelta, delta > 0,
+                   let util = point.extraUsageUtilization {
                     let capTop = 100.0 + min(util / 100.0 * 5.0, 5.0)
                     if fiveHourVisible {
                         let bounds = barBounds(for: point, series: .fiveHour)

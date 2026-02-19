@@ -20,6 +20,9 @@ struct UsagePoll: Sendable, Equatable {
     var extraUsageMonthlyLimit: Double? = nil
     /// Extra usage credits consumed this month, nil if not reported
     var extraUsageUsedCredits: Double? = nil
-    /// Extra usage utilization fraction (0-1), nil if not reported
+    /// Extra usage utilization percentage (0-100), nil if not reported
     var extraUsageUtilization: Double? = nil
+    /// Extra usage delta: credits consumed between this poll and the previous poll.
+    /// Computed as max(0, current.usedCredits - previous.usedCredits). Nil for first poll or no data.
+    var extraUsageDelta: Double? = nil
 }

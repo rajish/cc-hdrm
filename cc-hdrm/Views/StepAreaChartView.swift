@@ -17,8 +17,10 @@ struct StepAreaChartView: View {
     let fiveHourPoints: [ChartPoint]
     /// Flat array of points with non-nil sevenDayUtil
     let sevenDayPoints: [ChartPoint]
-    /// Flat array of points where extra usage is active (for step-end line above 100%)
+    /// Flat array of points where extra usage is active (delta > 0, prominent layer)
     let extraUsagePoints: [ChartPoint]
+    /// Flat array of points where extraUsageUtilization > 0 (faint cumulative background)
+    let extraUsageBackgroundPoints: [ChartPoint]
     let resetTimestamps: [Date]
     /// Time ranges where no data exists (gaps between segments).
     let gapRanges: [GapRange]
@@ -51,6 +53,7 @@ struct StepAreaChartView: View {
         self.fiveHourPoints = cleanedPoints.filter { $0.fiveHourUtil != nil }
         self.sevenDayPoints = cleanedPoints.filter { $0.sevenDayUtil != nil }
         self.extraUsagePoints = cleanedPoints.filter { $0.extraUsageActive == true }
+        self.extraUsageBackgroundPoints = cleanedPoints.filter { ($0.extraUsageUtilization ?? 0) > 0 }
         self.gapRanges = Self.findGapRanges(in: cleanedPoints)
     }
 
@@ -138,7 +141,8 @@ struct StepAreaChartView: View {
                     extraUsageActive: nil,
                     extraUsageUsedCredits: nil,
                     extraUsageUtilization: nil,
-                    extraUsageMonthlyLimit: nil
+                    extraUsageMonthlyLimit: nil,
+                    extraUsageDelta: nil
                 )
             }
             return point
@@ -153,6 +157,7 @@ struct StepAreaChartView: View {
             fiveHourPoints: fiveHourPoints,
             sevenDayPoints: sevenDayPoints,
             extraUsagePoints: extraUsagePoints,
+            extraUsageBackgroundPoints: extraUsageBackgroundPoints,
             resetTimestamps: resetTimestamps,
             gapRanges: gapRanges,
             fiveHourVisible: fiveHourVisible,
@@ -174,6 +179,7 @@ struct StepAreaChartView: View {
         var extraUsageUsedCredits: Double? = nil
         var extraUsageUtilization: Double? = nil
         var extraUsageMonthlyLimit: Double? = nil
+        var extraUsageDelta: Double? = nil
     }
 
     /// A time range where no poll data exists (sleep, system off, etc.)
@@ -200,8 +206,8 @@ struct StepAreaChartView: View {
                 }
             }
 
-            let isExtraUsageActive = poll.extraUsageEnabled == true
-                && ((poll.fiveHourUtil ?? 0) >= 99.5 || (poll.sevenDayUtil ?? 0) >= 99.5)
+            // Prominent layer: delta > 0 means credits were actively draining (fires at any utilization)
+            let isExtraUsageActive = poll.extraUsageDelta != nil && poll.extraUsageDelta! > 0
 
             return ChartPoint(
                 id: index,
@@ -213,7 +219,8 @@ struct StepAreaChartView: View {
                 extraUsageActive: isExtraUsageActive,
                 extraUsageUsedCredits: poll.extraUsageUsedCredits,
                 extraUsageUtilization: poll.extraUsageUtilization,
-                extraUsageMonthlyLimit: poll.extraUsageMonthlyLimit
+                extraUsageMonthlyLimit: poll.extraUsageMonthlyLimit,
+                extraUsageDelta: poll.extraUsageDelta
             )
         }
     }
@@ -372,7 +379,8 @@ struct StepAreaChartView: View {
                     extraUsageActive: point.extraUsageActive,
                     extraUsageUsedCredits: point.extraUsageUsedCredits,
                     extraUsageUtilization: point.extraUsageUtilization,
-                    extraUsageMonthlyLimit: point.extraUsageMonthlyLimit
+                    extraUsageMonthlyLimit: point.extraUsageMonthlyLimit,
+                    extraUsageDelta: point.extraUsageDelta
                 ))
             }
         }
@@ -391,6 +399,7 @@ private struct ChartWithHoverOverlay: View {
     let fiveHourPoints: [StepAreaChartView.ChartPoint]
     let sevenDayPoints: [StepAreaChartView.ChartPoint]
     let extraUsagePoints: [StepAreaChartView.ChartPoint]
+    let extraUsageBackgroundPoints: [StepAreaChartView.ChartPoint]
     let resetTimestamps: [Date]
     let gapRanges: [StepAreaChartView.GapRange]
     let fiveHourVisible: Bool
@@ -405,6 +414,7 @@ private struct ChartWithHoverOverlay: View {
             fiveHourPoints: fiveHourPoints,
             sevenDayPoints: sevenDayPoints,
             extraUsagePoints: extraUsagePoints,
+            extraUsageBackgroundPoints: extraUsageBackgroundPoints,
             resetTimestamps: resetTimestamps,
             gapRanges: gapRanges,
             fiveHourVisible: fiveHourVisible,
@@ -492,6 +502,7 @@ private struct StaticChartContent: View {
     let fiveHourPoints: [StepAreaChartView.ChartPoint]
     let sevenDayPoints: [StepAreaChartView.ChartPoint]
     let extraUsagePoints: [StepAreaChartView.ChartPoint]
+    let extraUsageBackgroundPoints: [StepAreaChartView.ChartPoint]
     let resetTimestamps: [Date]
     let gapRanges: [StepAreaChartView.GapRange]
     let fiveHourVisible: Bool
@@ -556,8 +567,11 @@ private struct StaticChartContent: View {
                 }
             }
 
-            // Extra usage line — step-end line above 100% showing extra usage budget consumption
-            // Y-value maps 0-100% utilization to y=100-105
+            // Extra usage faint background — cumulative utilization band (opacity ~0.15)
+            // Visible for ALL points where extraUsageUtilization > 0
+            extraUsageBackgroundMarks
+
+            // Extra usage prominent foreground — spike markers where delta > 0 (opacity ~0.6)
             extraUsageMarks
 
             // Reset boundaries — orange so they're visually distinct from grey grid lines
@@ -590,8 +604,25 @@ private struct StaticChartContent: View {
         }
     }
 
-    /// Extra usage step-end line marks extracted to help the Swift type checker.
-    /// Maps 0-100% extra usage utilization to y=100-105 on the chart.
+    /// Faint cumulative background — extraUsageUtilization band at low opacity.
+    /// Visible for ALL points where extraUsageUtilization > 0, regardless of delta.
+    @ChartContentBuilder
+    private var extraUsageBackgroundMarks: some ChartContent {
+        ForEach(extraUsageBackgroundPoints) { point in
+            let yValue = Self.extraUsageY(for: point)
+            AreaMark(
+                x: .value("Time", point.date),
+                yStart: .value("Base", 100),
+                yEnd: .value("Utilization", yValue),
+                series: .value("Seg", "exbg-\(point.segment)")
+            )
+            .foregroundStyle(Color.extraUsageCool.opacity(0.15))
+            .interpolationMethod(.stepEnd)
+        }
+    }
+
+    /// Prominent delta foreground — spike markers where extra_usage_delta > 0.
+    /// Higher opacity, fires at ANY utilization level.
     @ChartContentBuilder
     private var extraUsageMarks: some ChartContent {
         ForEach(extraUsagePoints) { point in
@@ -602,7 +633,7 @@ private struct StaticChartContent: View {
                 yEnd: .value("Utilization", yValue),
                 series: .value("Seg", "ex-\(point.segment)")
             )
-            .foregroundStyle(Color.extraUsageCool.opacity(0.5))
+            .foregroundStyle(Color.extraUsageCool.opacity(0.6))
             .interpolationMethod(.stepEnd)
         }
     }
