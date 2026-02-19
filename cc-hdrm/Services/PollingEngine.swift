@@ -20,6 +20,11 @@ final class PollingEngine: PollingEngineProtocol {
     private var pollingTask: Task<Void, Never>?
     private var sparklineRefreshTask: Task<Void, Never>?
 
+    /// In-memory cache for refreshed credentials. Avoids writing to Claude Code's
+    /// Keychain item, which would trigger ACL re-evaluation and repeated password prompts.
+    /// Invalidated on keychain read success (fresh credentials from Claude Code) or on errors.
+    private var cachedCredentials: KeychainCredentials?
+
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
         category: "polling"
@@ -80,7 +85,23 @@ final class PollingEngine: PollingEngineProtocol {
     /// Executes a single poll cycle: read credentials → check token → fetch usage → update state.
     func performPollCycle() async {
         do {
-            let credentials = try await keychainService.readCredentials()
+            // Prefer in-memory cached credentials (from a prior token refresh) over
+            // Keychain reads. This avoids repeated Keychain access prompts.
+            // When Keychain read succeeds, it means Claude Code wrote fresh credentials,
+            // so we discard the cache and use those instead.
+            let credentials: KeychainCredentials
+            if let cached = cachedCredentials {
+                let status = TokenExpiryChecker.tokenStatus(for: cached)
+                if status == .valid {
+                    credentials = cached
+                } else {
+                    // Cached token is expired/expiring — try keychain for fresh ones
+                    cachedCredentials = nil
+                    credentials = try await keychainService.readCredentials()
+                }
+            } else {
+                credentials = try await keychainService.readCredentials()
+            }
             appState.updateSubscriptionTier(credentials.subscriptionType)
 
             let status = TokenExpiryChecker.tokenStatus(for: credentials)
@@ -125,11 +146,14 @@ final class PollingEngine: PollingEngineProtocol {
                 scopes: credentials.scopes
             )
 
-            try await keychainService.writeCredentials(mergedCredentials)
+            // Cache in memory instead of writing to Keychain. Writing to Claude Code's
+            // Keychain item triggers ACL re-evaluation, causing repeated password prompts
+            // even after the user clicks "Always Allow".
+            cachedCredentials = mergedCredentials
 
             appState.updateConnectionStatus(.connected)
             appState.updateStatusMessage(nil)
-            Self.logger.info("Token refresh succeeded — credentials updated in Keychain")
+            Self.logger.info("Token refresh succeeded — credentials cached in memory")
         } catch {
             Self.logger.error("Token refresh failed: \(error.localizedDescription)")
             appState.updateConnectionStatus(.tokenExpired)

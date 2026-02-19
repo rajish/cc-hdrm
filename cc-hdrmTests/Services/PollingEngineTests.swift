@@ -336,12 +336,45 @@ struct PollingEngineTests {
         await engine.performPollCycle()
 
         #expect(mockRefresh.refreshCallCount == 1, "Token refresh should be triggered on 401")
-        // Verify merged credentials preserve original subscriptionType/rateLimitTier/scopes
-        #expect(mockKeychain.writeCallCount == 1, "Refreshed credentials should be written to Keychain")
-        #expect(mockKeychain.lastWrittenCredentials?.subscriptionType == "pro", "Merge must preserve original subscriptionType")
-        #expect(mockKeychain.lastWrittenCredentials?.rateLimitTier == "tier_1", "Merge must preserve original rateLimitTier")
-        #expect(mockKeychain.lastWrittenCredentials?.scopes == ["user:inference"], "Merge must preserve original scopes")
-        #expect(mockKeychain.lastWrittenCredentials?.accessToken == "new-token", "Merged credentials should use refreshed accessToken")
+        // Refreshed credentials should be cached in memory, NOT written to Keychain
+        // (writing to Claude Code's Keychain item triggers ACL re-evaluation and password prompts)
+        #expect(mockKeychain.writeCallCount == 0, "Refreshed credentials should NOT be written to Keychain")
+        #expect(appState.connectionStatus == .connected, "Connection status should be restored after refresh")
+    }
+
+    @Test("after token refresh, subsequent polls use cached credentials instead of Keychain")
+    @MainActor
+    func refreshedCredentialsCachedInMemory() async {
+        // First cycle: expired token triggers refresh, which caches new credentials
+        let mockKeychain = PEMockKeychainService(credentials: expiredCredentials())
+        let refreshedCreds = KeychainCredentials(
+            accessToken: "new-token",
+            refreshToken: "new-refresh",
+            expiresAt: (Date().timeIntervalSince1970 + 3600) * 1000,
+            subscriptionType: nil, rateLimitTier: nil, scopes: nil
+        )
+        let mockRefresh = PEMockTokenRefreshService(result: refreshedCreds)
+        let mockAPI = PEMockAPIClient(result: successResponse())
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState
+        )
+
+        // Cycle 1: reads from Keychain, finds expired, refreshes, caches
+        await engine.performPollCycle()
+        #expect(mockKeychain.readCallCount == 1, "First cycle reads from Keychain")
+        #expect(mockRefresh.refreshCallCount == 1, "Token refresh should be triggered")
+        #expect(appState.connectionStatus == .connected)
+
+        // Cycle 2: should use cached credentials, NOT read from Keychain again
+        await engine.performPollCycle()
+        #expect(mockKeychain.readCallCount == 1, "Second cycle should use cache, not Keychain")
+        #expect(mockAPI.fetchCallCount == 1, "API should be called with cached credentials")
+        #expect(mockKeychain.writeCallCount == 0, "Credentials should never be written to Keychain")
     }
 
     @Test("token expired with no refresh token sets .tokenExpired status")
