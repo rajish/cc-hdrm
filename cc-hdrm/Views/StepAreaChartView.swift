@@ -571,7 +571,7 @@ private struct StaticChartContent: View {
             // Visible for ALL points where extraUsageUtilization > 0
             extraUsageBackgroundMarks
 
-            // Extra usage prominent foreground — spike markers where delta > 0 (opacity ~0.5)
+            // Extra usage prominent foreground — spike markers where delta > 0 (opacity ~0.6)
             extraUsageMarks
 
             // Reset boundaries — orange so they're visually distinct from grey grid lines
