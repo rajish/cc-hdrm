@@ -301,8 +301,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Self.logger.info("Signing out — clearing credentials")
 
         try? oauthKeychainService.deleteCredentials()
+
+        // Clear in-memory session state (database/history preserved)
         appState.updateOAuthState(.unauthenticated)
         appState.updateConnectionStatus(.noCredentials)
+        appState.updateWindows(fiveHour: nil, sevenDay: nil)
+        appState.updateSparklineData([])
+        appState.updateSubscriptionTier(nil)
+        appState.updateCreditLimits(nil)
+        appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
         appState.updateStatusMessage(StatusMessage(
             title: "Signed out",
             detail: "Click Sign In to authenticate"
