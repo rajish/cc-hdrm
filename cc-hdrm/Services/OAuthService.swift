@@ -105,7 +105,8 @@ final class OAuthService: OAuthServiceProtocol, @unchecked Sendable {
     /// Generates a code verifier: 32 random bytes, base64url-encoded (43 chars).
     static func generateCodeVerifier() -> String {
         var bytes = [UInt8](repeating: 0, count: 32)
-        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        precondition(status == errSecSuccess, "SecRandomCopyBytes failed with status \(status)")
         return Data(bytes).base64URLEncodedString()
     }
 
@@ -118,7 +119,8 @@ final class OAuthService: OAuthServiceProtocol, @unchecked Sendable {
     /// Generates a random state parameter: 32 random bytes, hex-encoded.
     static func generateState() -> String {
         var bytes = [UInt8](repeating: 0, count: 32)
-        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        precondition(status == errSecSuccess, "SecRandomCopyBytes failed with status \(status)")
         return bytes.map { String(format: "%02x", $0) }.joined()
     }
 

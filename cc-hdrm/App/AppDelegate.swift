@@ -278,19 +278,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Self.logger.error("OAuth sign-in failed: \(error.localizedDescription)")
             appState.updateOAuthState(.unauthenticated)
 
-            if let appError = error as? AppError {
-                switch appError {
-                case .oauthCallbackTimeout:
-                    appState.updateStatusMessage(StatusMessage(
-                        title: "Authentication timed out",
-                        detail: "Try again when ready"
-                    ))
-                default:
-                    appState.updateStatusMessage(StatusMessage(
-                        title: "Sign-in failed",
-                        detail: "Please try again"
-                    ))
-                }
+            if let appError = error as? AppError, case .oauthCallbackTimeout = appError {
+                appState.updateStatusMessage(StatusMessage(
+                    title: "Authentication timed out",
+                    detail: "Try again when ready"
+                ))
+            } else {
+                appState.updateStatusMessage(StatusMessage(
+                    title: "Sign-in failed",
+                    detail: "Please try again"
+                ))
             }
         }
     }
