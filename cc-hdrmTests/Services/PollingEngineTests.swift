@@ -175,6 +175,7 @@ private final class PEMockHistoricalDataService: HistoricalDataServiceProtocol, 
 private struct PEMockAPIClient: APIClientProtocol {
     private let resultProvider: ResultProvider
     private let callTracker: APICallTracker
+    private let profileResultProvider: ProfileResultProvider
 
     final class ResultProvider: @unchecked Sendable {
         var results: [Result<UsageResponse, any Error>]
@@ -204,28 +205,62 @@ private struct PEMockAPIClient: APIClientProtocol {
         }
     }
 
+    final class ProfileResultProvider: @unchecked Sendable {
+        var result: Result<ProfileResponse, any Error>
+        var callCount = 0
+        var lastToken: String?
+
+        init(result: ProfileResponse? = nil, error: (any Error)? = nil) {
+            if let error {
+                self.result = .failure(error)
+            } else if let result {
+                self.result = .success(result)
+            } else {
+                // Default: return empty profile (non-fatal, no tier)
+                self.result = .success(ProfileResponse(organization: nil))
+            }
+        }
+
+        func next(token: String) throws -> ProfileResponse {
+            callCount += 1
+            lastToken = token
+            switch result {
+            case .success(let r): return r
+            case .failure(let e): throw e
+            }
+        }
+    }
+
     final class APICallTracker: @unchecked Sendable {
         var callCount = 0
         var lastToken: String?
     }
 
-    init(result: UsageResponse? = nil, error: (any Error)? = nil) {
+    init(result: UsageResponse? = nil, error: (any Error)? = nil, profileResult: ProfileResponse? = nil, profileError: (any Error)? = nil) {
         self.resultProvider = ResultProvider(result: result, error: error)
         self.callTracker = APICallTracker()
+        self.profileResultProvider = ProfileResultProvider(result: profileResult, error: profileError)
     }
 
-    init(results: [Result<UsageResponse, any Error>]) {
+    init(results: [Result<UsageResponse, any Error>], profileResult: ProfileResponse? = nil, profileError: (any Error)? = nil) {
         self.resultProvider = ResultProvider(results: results)
         self.callTracker = APICallTracker()
+        self.profileResultProvider = ProfileResultProvider(result: profileResult, error: profileError)
     }
 
     var fetchCallCount: Int { callTracker.callCount }
     var lastToken: String? { callTracker.lastToken }
+    var profileFetchCallCount: Int { profileResultProvider.callCount }
+    var lastProfileToken: String? { profileResultProvider.lastToken }
 
     func fetchUsage(token: String) async throws -> UsageResponse {
         callTracker.callCount += 1
         callTracker.lastToken = token
         return try resultProvider.next()
+    }
+
+    func fetchProfile(token: String) async throws -> ProfileResponse {
+        return try profileResultProvider.next(token: token)
     }
 }
 
@@ -776,5 +811,300 @@ struct PollingEngineSparklineTests {
         // All 3 polls should be present, including the one with nil fiveHourUtil
         #expect(appState.sparklineData.count == 3)
         #expect(appState.sparklineData[1].fiveHourUtil == nil)
+    }
+}
+
+// MARK: - PollingEngine Profile Fetch Tests (Story 18.2)
+
+@Suite("PollingEngine Profile Fetch Tests")
+struct PollingEngineProfileFetchTests {
+
+    @Test("token refresh fetches profile and updates tier in credentials (AC 2)")
+    @MainActor
+    func tokenRefreshFetchesProfile() async {
+        let originalCreds = KeychainCredentials(
+            accessToken: "old-token",
+            refreshToken: "refresh-token",
+            expiresAt: (Date().timeIntervalSince1970 + 7200) * 1000,
+            subscriptionType: "pro",
+            rateLimitTier: "default_claude_pro",
+            scopes: ["user:inference"]
+        )
+        let mockKeychain = PEMockKeychainService(credentials: originalCreds)
+        let refreshedCreds = KeychainCredentials(
+            accessToken: "new-token",
+            refreshToken: "new-refresh",
+            expiresAt: (Date().timeIntervalSince1970 + 3600) * 1000,
+            subscriptionType: nil, rateLimitTier: nil, scopes: nil
+        )
+        let mockRefresh = PEMockTokenRefreshService(result: refreshedCreds)
+
+        // Profile returns upgraded tier
+        let profileResult = ProfileResponse(
+            organization: .init(organizationType: "claude_max", rateLimitTier: "default_claude_max_5x")
+        )
+        let mockAPI = PEMockAPIClient(
+            error: AppError.apiError(statusCode: 401, body: "Unauthorized"),
+            profileResult: profileResult
+        )
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState
+        )
+
+        await engine.performPollCycle()
+
+        // Profile should have been fetched during token refresh with the NEW token
+        #expect(mockAPI.profileFetchCallCount == 1)
+        #expect(mockAPI.lastProfileToken == "new-token", "Profile must be fetched with the refreshed token, not the old one")
+
+        // Written credentials should have the upgraded tier
+        let written = mockKeychain.lastWrittenCredentials
+        #expect(written?.rateLimitTier == "default_claude_max_5x")
+        #expect(written?.subscriptionType == "max")
+    }
+
+    @Test("token refresh profile failure is non-fatal — preserves original tier (AC 4)")
+    @MainActor
+    func tokenRefreshProfileFailureNonFatal() async {
+        let originalCreds = KeychainCredentials(
+            accessToken: "old-token",
+            refreshToken: "refresh-token",
+            expiresAt: (Date().timeIntervalSince1970 + 7200) * 1000,
+            subscriptionType: "pro",
+            rateLimitTier: "default_claude_pro",
+            scopes: ["user:inference"]
+        )
+        let mockKeychain = PEMockKeychainService(credentials: originalCreds)
+        let refreshedCreds = KeychainCredentials(
+            accessToken: "new-token",
+            refreshToken: "new-refresh",
+            expiresAt: (Date().timeIntervalSince1970 + 3600) * 1000,
+            subscriptionType: nil, rateLimitTier: nil, scopes: nil
+        )
+        let mockRefresh = PEMockTokenRefreshService(result: refreshedCreds)
+
+        // Profile fetch will fail
+        let mockAPI = PEMockAPIClient(
+            error: AppError.apiError(statusCode: 401, body: "Unauthorized"),
+            profileError: AppError.networkUnreachable
+        )
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState
+        )
+
+        await engine.performPollCycle()
+
+        // Should still succeed — profile failure is non-fatal
+        #expect(appState.connectionStatus == .connected)
+
+        // Written credentials should preserve original tier
+        let written = mockKeychain.lastWrittenCredentials
+        #expect(written?.rateLimitTier == "default_claude_pro")
+        #expect(written?.subscriptionType == "pro")
+    }
+
+    @Test("nil tier triggers profile backfill during poll cycle (AC 3)")
+    @MainActor
+    func nilTierTriggersBackfill() async {
+        let credsWithNilTier = KeychainCredentials(
+            accessToken: "valid-token",
+            refreshToken: "refresh-token",
+            expiresAt: (Date().timeIntervalSince1970 + 7200) * 1000,
+            subscriptionType: nil,
+            rateLimitTier: nil,
+            scopes: ["user:inference"]
+        )
+        let mockKeychain = PEMockKeychainService(credentials: credsWithNilTier)
+        let mockRefresh = PEMockTokenRefreshService()
+
+        let profileResult = ProfileResponse(
+            organization: .init(organizationType: "claude_pro", rateLimitTier: "default_claude_pro")
+        )
+        let mockAPI = PEMockAPIClient(
+            result: successResponse(),
+            profileResult: profileResult
+        )
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState
+        )
+
+        await engine.performPollCycle()
+
+        // Profile should have been fetched for backfill
+        #expect(mockAPI.profileFetchCallCount == 1)
+
+        // Backfilled credentials should be written to Keychain
+        let written = mockKeychain.lastWrittenCredentials
+        #expect(written?.rateLimitTier == "default_claude_pro")
+        #expect(written?.subscriptionType == "pro")
+
+        // Credit limits should be resolved
+        #expect(appState.creditLimits != nil)
+    }
+
+    @Test("non-nil tier does NOT trigger profile backfill")
+    @MainActor
+    func nonNilTierSkipsBackfill() async {
+        let credsWithTier = validCredentials()
+        let mockKeychain = PEMockKeychainService(credentials: credsWithTier)
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(result: successResponse())
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState
+        )
+
+        await engine.performPollCycle()
+
+        // Profile should NOT have been fetched (tier already present)
+        #expect(mockAPI.profileFetchCallCount == 0)
+    }
+
+    @Test("backfill is not retried on subsequent cycles after profile returned no tier")
+    @MainActor
+    func backfillNotRetriedWhenProfileHasNoTier() async {
+        let credsWithNilTier = KeychainCredentials(
+            accessToken: "valid-token",
+            refreshToken: "refresh-token",
+            expiresAt: (Date().timeIntervalSince1970 + 7200) * 1000,
+            subscriptionType: nil,
+            rateLimitTier: nil,
+            scopes: ["user:inference"]
+        )
+        let mockKeychain = PEMockKeychainService(credentials: credsWithNilTier)
+        let mockRefresh = PEMockTokenRefreshService()
+
+        // Profile returns successfully but with NO tier (e.g., free account)
+        let emptyProfile = ProfileResponse(organization: .init(organizationType: nil, rateLimitTier: nil))
+        let mockAPI = PEMockAPIClient(
+            result: successResponse(),
+            profileResult: emptyProfile
+        )
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState
+        )
+
+        // First cycle — backfill attempted, profile has no tier
+        await engine.performPollCycle()
+        #expect(mockAPI.profileFetchCallCount == 1)
+
+        // Second cycle — should NOT retry backfill
+        await engine.performPollCycle()
+        #expect(mockAPI.profileFetchCallCount == 1, "Backfill should not retry after profile returned no tier")
+    }
+
+    @Test("backfill guard resets after token refresh, allowing retry")
+    @MainActor
+    func backfillGuardResetsAfterTokenRefresh() async {
+        let credsWithNilTier = KeychainCredentials(
+            accessToken: "old-token",
+            refreshToken: "refresh-token",
+            expiresAt: (Date().timeIntervalSince1970 + 7200) * 1000,
+            subscriptionType: nil,
+            rateLimitTier: nil,
+            scopes: ["user:inference"]
+        )
+        let mockKeychain = PEMockKeychainService(credentials: credsWithNilTier)
+        let refreshedCreds = KeychainCredentials(
+            accessToken: "new-token",
+            refreshToken: "new-refresh",
+            expiresAt: (Date().timeIntervalSince1970 + 3600) * 1000,
+            subscriptionType: nil, rateLimitTier: nil, scopes: nil
+        )
+        let mockRefresh = PEMockTokenRefreshService(result: refreshedCreds)
+
+        // Profile returns no tier initially, but will return tier after refresh
+        let emptyProfile = ProfileResponse(organization: .init(organizationType: nil, rateLimitTier: nil))
+        let mockAPI = PEMockAPIClient(
+            results: [
+                .success(successResponse()),
+                .failure(AppError.apiError(statusCode: 401, body: "Unauthorized")),
+                .success(successResponse())
+            ],
+            profileResult: emptyProfile
+        )
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState
+        )
+
+        // Cycle 1: backfill attempted (profile has no tier), guard set
+        await engine.performPollCycle()
+        #expect(mockAPI.profileFetchCallCount == 1)
+
+        // Cycle 2: 401 triggers token refresh, which resets the guard and fetches profile
+        await engine.performPollCycle()
+        // Profile called during refresh (guard was reset)
+        #expect(mockAPI.profileFetchCallCount == 2)
+
+        // Cycle 3: guard was reset by refresh, so backfill is attempted again
+        await engine.performPollCycle()
+        #expect(mockAPI.profileFetchCallCount == 3, "Backfill should retry after token refresh resets the guard")
+    }
+
+    @Test("backfill profile failure is non-fatal — poll cycle continues (AC 4)")
+    @MainActor
+    func backfillProfileFailureNonFatal() async {
+        let credsWithNilTier = KeychainCredentials(
+            accessToken: "valid-token",
+            refreshToken: "refresh-token",
+            expiresAt: (Date().timeIntervalSince1970 + 7200) * 1000,
+            subscriptionType: nil,
+            rateLimitTier: nil,
+            scopes: ["user:inference"]
+        )
+        let mockKeychain = PEMockKeychainService(credentials: credsWithNilTier)
+        let mockRefresh = PEMockTokenRefreshService()
+
+        // Profile will fail, but usage will succeed
+        let mockAPI = PEMockAPIClient(
+            result: successResponse(),
+            profileError: AppError.networkUnreachable
+        )
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState
+        )
+
+        await engine.performPollCycle()
+
+        // Poll cycle should still complete successfully
+        #expect(appState.connectionStatus == .connected)
+        #expect(appState.fiveHour?.utilization == 18.0)
+
+        // Credit limits should be nil (no tier, no custom limits)
+        #expect(appState.creditLimits == nil)
     }
 }

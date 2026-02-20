@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var updateCheckService: (any UpdateCheckServiceProtocol)?
     private var oauthService: OAuthService?
     private var oauthKeychainService: OAuthKeychainService?
+    private var apiClient: (any APIClientProtocol)?
     private var slopeCalculationService: SlopeCalculationService?
     private var historicalDataServiceRef: HistoricalDataService?
     private var headroomAnalysisServiceRef: (any HeadroomAnalysisServiceProtocol)?
@@ -125,10 +126,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.oauthKeychainService = oauthKC
             self.oauthService = OAuthService()
 
+            let apiClientInstance = APIClient()
+            self.apiClient = apiClientInstance
+
             pollingEngine = PollingEngine(
                 keychainService: oauthKC,
                 tokenRefreshService: TokenRefreshService(),
-                apiClient: APIClient(),
+                apiClient: apiClientInstance,
                 appState: state,
                 notificationService: notificationService,
                 preferencesManager: preferences,
@@ -261,7 +265,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         do {
             let credentials = try await oauthService.authorize()
-            try await oauthKeychainService.writeCredentials(credentials)
+
+            // Fetch profile to enrich credentials with tier and subscription type
+            let enrichedCredentials = await enrichCredentialsWithProfile(credentials)
+            try await oauthKeychainService.writeCredentials(enrichedCredentials)
 
             appState.updateOAuthState(.authenticated)
             appState.updateConnectionStatus(.connected)
@@ -314,6 +321,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Stop polling since we have no credentials
         pollingEngine?.stop()
+    }
+
+    /// Attempts to fetch profile data and enrich credentials with `rateLimitTier` and `subscriptionType`.
+    /// Returns original credentials unchanged if profile fetch fails (non-fatal).
+    private func enrichCredentialsWithProfile(_ credentials: KeychainCredentials) async -> KeychainCredentials {
+        guard let apiClient else { return credentials }
+
+        do {
+            let profile = try await apiClient.fetchProfile(token: credentials.accessToken)
+            let enriched = credentials.applying(profile)
+
+            Self.logger.info("Profile fetched — tier: \(enriched.rateLimitTier ?? "nil", privacy: .public), subscription: \(enriched.subscriptionType ?? "nil", privacy: .public)")
+
+            return enriched
+        } catch {
+            Self.logger.warning("Profile fetch failed (non-fatal): \(error.localizedDescription)")
+            return credentials
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
