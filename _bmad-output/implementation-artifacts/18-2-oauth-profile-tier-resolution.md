@@ -216,11 +216,12 @@ N/A — no debug logging issues encountered.
 - `cc-hdrmTests/Models/ProfileResponseTests.swift`
 
 **Modified files:**
+- `cc-hdrm/Models/KeychainCredentials.swift` — added `applying(_:)` profile merge helper
 - `cc-hdrm/Services/APIClient.swift` — added `profileEndpoint`, `fetchProfile()`, extracted generic `fetch<T>()` helper
 - `cc-hdrm/Services/APIClientProtocol.swift` — added `fetchProfile` to protocol
 - `cc-hdrm/App/AppDelegate.swift` — added `apiClient` property, `enrichCredentialsWithProfile()`, updated `performSignIn()`
 - `cc-hdrm/Services/PollingEngine.swift` — profile fetch in `attemptTokenRefresh()`, backfill in `fetchUsageData()`, added `backfillTierFromProfile()`, `hasAttemptedProfileBackfill` guard
-- `cc-hdrmTests/Services/APIClientTests.swift` — added `APIClientFetchProfileTests` suite
+- `cc-hdrmTests/Services/APIClientTests.swift` — added `APIClientFetchProfileTests` suite, deduplicated `RequestCapture`
 - `cc-hdrmTests/Services/PollingEngineTests.swift` — updated `PEMockAPIClient` with `fetchProfile` token tracking, added `PollingEngineProfileFetchTests` suite (7 tests)
 
 ### Change Log
@@ -231,3 +232,8 @@ N/A — no debug logging issues encountered.
   - L1: Added profile parameters to `PEMockAPIClient(results:)` initializer
   - L2: Noted — AppDelegate.enrichCredentialsWithProfile untested directly (covered by PollingEngine pattern tests; full AppDelegate testability is a larger refactor)
   - 2 new tests added: backfill-not-retried, backfill-guard-resets-after-refresh (1233→1235 total)
+- **CodeRabbit Fixes (2026-02-20):** Addressed 3 valid findings (2 false positives dismissed):
+  - Moved `hasAttemptedProfileBackfill` flag to after success paths — Keychain write failure no longer suppresses retry
+  - Extracted `KeychainCredentials.applying(_:)` helper to eliminate profile-merge triplication across AppDelegate, PollingEngine.attemptTokenRefresh, and PollingEngine.backfillTierFromProfile
+  - Deduplicated `RequestCapture` in APIClientTests to single `fileprivate` file-scope type
+  - Dismissed: Info.plist version bump (automated by workflow, not manual) and xcodeproj file registration (XcodeGen project, xcodeproj gitignored)

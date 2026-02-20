@@ -2,6 +2,11 @@ import Foundation
 import Testing
 @testable import cc_hdrm
 
+/// Sendable wrapper for capturing URLRequest in concurrent contexts.
+fileprivate final class RequestCapture: @unchecked Sendable {
+    var request: URLRequest?
+}
+
 @Suite("APIClient Tests")
 struct APIClientTests {
 
@@ -120,11 +125,6 @@ struct APIClientTests {
 
     // MARK: - Request Validation
 
-    /// Sendable wrapper for capturing URLRequest in concurrent contexts.
-    private final class RequestCapture: @unchecked Sendable {
-        var request: URLRequest?
-    }
-
     @Test("request includes correct headers")
     func correctHeaders() async throws {
         let capture = RequestCapture()
@@ -229,11 +229,6 @@ struct APIClientFetchProfileTests {
             headerFields: nil
         )!
         return (data, response)
-    }
-
-    /// Sendable wrapper for capturing URLRequest in concurrent contexts.
-    private final class RequestCapture: @unchecked Sendable {
-        var request: URLRequest?
     }
 
     // MARK: - Success

@@ -330,19 +330,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         do {
             let profile = try await apiClient.fetchProfile(token: credentials.accessToken)
-            let tier = profile.organization?.rateLimitTier
-            let subType = profile.organization?.subscriptionTypeDisplay
+            let enriched = credentials.applying(profile)
 
-            Self.logger.info("Profile fetched — tier: \(tier ?? "nil", privacy: .public), subscription: \(subType ?? "nil", privacy: .public)")
+            Self.logger.info("Profile fetched — tier: \(enriched.rateLimitTier ?? "nil", privacy: .public), subscription: \(enriched.subscriptionType ?? "nil", privacy: .public)")
 
-            return KeychainCredentials(
-                accessToken: credentials.accessToken,
-                refreshToken: credentials.refreshToken,
-                expiresAt: credentials.expiresAt,
-                subscriptionType: subType ?? credentials.subscriptionType,
-                rateLimitTier: tier ?? credentials.rateLimitTier,
-                scopes: credentials.scopes
-            )
+            return enriched
         } catch {
             Self.logger.warning("Profile fetch failed (non-fatal): \(error.localizedDescription)")
             return credentials
