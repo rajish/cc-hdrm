@@ -155,3 +155,4 @@ development_status:
 
   epic-18: in-progress  # Independent OAuth Authentication
   18-1-independent-oauth-authentication: done
+  18-2-oauth-profile-tier-resolution: done

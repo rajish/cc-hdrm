@@ -9,6 +9,7 @@ struct APIClient: APIClientProtocol, @unchecked Sendable {
     )
 
     private static let usageEndpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
+    private static let profileEndpoint = URL(string: "https://api.anthropic.com/api/oauth/profile")!
 
     /// User-Agent header: cc-hdrm/{version} read from Info.plist, fallback to "cc-hdrm/unknown".
     private static let userAgent: String = {
@@ -33,9 +34,19 @@ struct APIClient: APIClientProtocol, @unchecked Sendable {
     }
 
     func fetchUsage(token: String) async throws -> UsageResponse {
-        Self.logger.info("Fetching usage data")
+        try await fetch(endpoint: Self.usageEndpoint, label: "Usage", token: token)
+    }
 
-        var request = URLRequest(url: Self.usageEndpoint)
+    func fetchProfile(token: String) async throws -> ProfileResponse {
+        try await fetch(endpoint: Self.profileEndpoint, label: "Profile", token: token)
+    }
+
+    // MARK: - Private
+
+    private func fetch<T: Decodable>(endpoint: URL, label: String, token: String) async throws -> T {
+        Self.logger.info("Fetching \(label, privacy: .public) data")
+
+        var request = URLRequest(url: endpoint)
         request.httpMethod = "GET"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
@@ -59,7 +70,7 @@ struct APIClient: APIClientProtocol, @unchecked Sendable {
             throw AppError.networkUnreachable
         }
 
-        Self.logger.info("Usage API responded with status \(httpResponse.statusCode)")
+        Self.logger.info("\(label, privacy: .public) API responded with status \(httpResponse.statusCode)")
 
         guard httpResponse.statusCode == 200 else {
             let body = String(data: data, encoding: .utf8)
@@ -67,11 +78,11 @@ struct APIClient: APIClientProtocol, @unchecked Sendable {
         }
 
         do {
-            let decoded = try JSONDecoder().decode(UsageResponse.self, from: data)
-            Self.logger.info("Usage data parsed successfully")
+            let decoded = try JSONDecoder().decode(T.self, from: data)
+            Self.logger.info("\(label, privacy: .public) data parsed successfully")
             return decoded
         } catch {
-            Self.logger.error("Failed to decode usage response: \(error.localizedDescription)")
+            Self.logger.error("Failed to decode \(label, privacy: .public) response: \(error.localizedDescription)")
             throw AppError.parseError(underlying: error)
         }
     }

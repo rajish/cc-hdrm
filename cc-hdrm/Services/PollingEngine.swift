@@ -19,6 +19,9 @@ final class PollingEngine: PollingEngineProtocol {
     private let extraUsageAlertService: (any ExtraUsageAlertServiceProtocol)?
     private var pollingTask: Task<Void, Never>?
     private var sparklineRefreshTask: Task<Void, Never>?
+    /// Guards against repeated profile backfill attempts when the profile genuinely has no tier.
+    /// Reset on token refresh (natural retry point for tier changes).
+    private var hasAttemptedProfileBackfill = false
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -111,12 +114,32 @@ final class PollingEngine: PollingEngineProtocol {
             let refreshedCredentials = try await tokenRefreshService.refreshToken(using: refreshToken)
 
             // Merge refreshed fields with original credentials to preserve subscriptionType, rateLimitTier, scopes
+            var mergedSubscriptionType = credentials.subscriptionType
+            var mergedRateLimitTier = credentials.rateLimitTier
+
+            // Reset backfill guard — fresh token is a natural retry point for tier resolution
+            hasAttemptedProfileBackfill = false
+
+            // Fetch profile with new token to catch subscription tier changes (e.g., Pro → Max upgrade)
+            do {
+                let profile = try await apiClient.fetchProfile(token: refreshedCredentials.accessToken)
+                if let tier = profile.organization?.rateLimitTier {
+                    mergedRateLimitTier = tier
+                }
+                if let subType = profile.organization?.subscriptionTypeDisplay {
+                    mergedSubscriptionType = subType
+                }
+                Self.logger.info("Profile fetched after token refresh — tier: \(mergedRateLimitTier ?? "nil", privacy: .public)")
+            } catch {
+                Self.logger.warning("Profile fetch after token refresh failed (non-fatal): \(error.localizedDescription)")
+            }
+
             let mergedCredentials = KeychainCredentials(
                 accessToken: refreshedCredentials.accessToken,
                 refreshToken: refreshedCredentials.refreshToken,
                 expiresAt: refreshedCredentials.expiresAt,
-                subscriptionType: credentials.subscriptionType,
-                rateLimitTier: credentials.rateLimitTier,
+                subscriptionType: mergedSubscriptionType,
+                rateLimitTier: mergedRateLimitTier,
                 scopes: credentials.scopes
             )
 
@@ -139,7 +162,15 @@ final class PollingEngine: PollingEngineProtocol {
 
     private func fetchUsageData(credentials: KeychainCredentials) async {
         do {
-            let response = try await apiClient.fetchUsage(token: credentials.accessToken)
+            // Backfill: if tier is nil, no custom limits configured, and we haven't already tried
+            var effectiveCredentials = credentials
+            if credentials.rateLimitTier == nil
+                && preferencesManager.customFiveHourCredits == nil
+                && !hasAttemptedProfileBackfill {
+                effectiveCredentials = await backfillTierFromProfile(credentials)
+            }
+
+            let response = try await apiClient.fetchUsage(token: effectiveCredentials.accessToken)
 
             let fiveHourState = response.fiveHour.map { window in
                 WindowState(
@@ -156,7 +187,7 @@ final class PollingEngine: PollingEngineProtocol {
 
             // Resolve credit limits from tier string each cycle (tier could change on subscription upgrade)
             let resolvedLimits = RateLimitTier.resolve(
-                tierString: credentials.rateLimitTier,
+                tierString: effectiveCredentials.rateLimitTier,
                 preferencesManager: preferencesManager
             )
             appState.updateCreditLimits(resolvedLimits)
@@ -194,7 +225,7 @@ final class PollingEngine: PollingEngineProtocol {
 
             // Persist to database asynchronously (fire-and-forget, does not block UI)
             // Pass tier for reset event recording, then run pattern analysis
-            let tier = credentials.rateLimitTier
+            let tier = effectiveCredentials.rateLimitTier
             Task { [patternDetector, patternNotificationService] in
                 do {
                     try await historicalDataService?.persistPoll(response, tier: tier)
@@ -330,6 +361,45 @@ final class PollingEngine: PollingEngineProtocol {
             default:
                 Self.logger.error("Unexpected error reading credentials: \(String(describing: appError))")
             }
+        }
+    }
+
+    /// Fetches profile to backfill nil `rateLimitTier` for existing users (migration path).
+    /// Returns enriched credentials on success, original credentials on failure (non-fatal).
+    private func backfillTierFromProfile(_ credentials: KeychainCredentials) async -> KeychainCredentials {
+        Self.logger.info("Tier is nil — attempting profile backfill")
+        hasAttemptedProfileBackfill = true
+
+        do {
+            let profile = try await apiClient.fetchProfile(token: credentials.accessToken)
+            let tier = profile.organization?.rateLimitTier
+            let subType = profile.organization?.subscriptionTypeDisplay
+
+            guard tier != nil || subType != nil else {
+                Self.logger.info("Profile returned but no tier or subscription type found")
+                return credentials
+            }
+
+            let enriched = KeychainCredentials(
+                accessToken: credentials.accessToken,
+                refreshToken: credentials.refreshToken,
+                expiresAt: credentials.expiresAt,
+                subscriptionType: subType ?? credentials.subscriptionType,
+                rateLimitTier: tier ?? credentials.rateLimitTier,
+                scopes: credentials.scopes
+            )
+
+            // Persist backfilled tier to Keychain so it's available for future cycles
+            try await keychainService.writeCredentials(enriched)
+            Self.logger.info("Tier backfilled from profile — tier: \(tier ?? "nil", privacy: .public)")
+
+            // Update subscription tier display immediately
+            appState.updateSubscriptionTier(enriched.subscriptionType)
+
+            return enriched
+        } catch {
+            Self.logger.warning("Profile backfill failed (non-fatal): \(error.localizedDescription)")
+            return credentials
         }
     }
 }

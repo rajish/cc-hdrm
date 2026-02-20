@@ -7,4 +7,10 @@ protocol APIClientProtocol: Sendable {
     /// - Returns: The parsed usage response.
     /// - Throws: `AppError.apiError`, `AppError.networkUnreachable`, or `AppError.parseError`.
     func fetchUsage(token: String) async throws -> UsageResponse
+
+    /// Fetches profile data (organization type, rate limit tier) using the provided OAuth token.
+    /// - Parameter token: A valid OAuth access token.
+    /// - Returns: The parsed profile response.
+    /// - Throws: `AppError.apiError`, `AppError.networkUnreachable`, or `AppError.parseError`.
+    func fetchProfile(token: String) async throws -> ProfileResponse
 }
