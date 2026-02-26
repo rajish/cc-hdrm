@@ -31,6 +31,8 @@ final class SubscriptionPatternDetector: SubscriptionPatternDetectorProtocol, @u
     static let persistentExtraUsageMinMonths = 2
     /// Threshold: extra usage must exceed this fraction of base price to be "persistent".
     static let persistentExtraUsageThreshold = 0.5
+    /// API returns monetary values in cents; divide by this to get dollars.
+    private static let centsPerDollar: Double = 100.0
 
     init(
         historicalDataService: any HistoricalDataServiceProtocol,
@@ -482,7 +484,9 @@ final class SubscriptionPatternDetector: SubscriptionPatternDetectorProtocol, @u
     /// Extra usage data aggregated per billing period.
     private struct MonthlyExtraUsageData {
         let yearMonth: Int
+        /// Peak cumulative credits value for this period, in **cents** (raw API units).
         let usedCredits: Double
+        /// Estimated cost for this period, in **dollars** (usedCredits / 100).
         let estimatedCost: Double
     }
 
@@ -506,10 +510,8 @@ final class SubscriptionPatternDetector: SubscriptionPatternDetectorProtocol, @u
 
         return monthlyMaxCredits.keys.sorted().map { key in
             let credits = monthlyMaxCredits[key]!
-            // Extra usage cost is the used_credits value (already in dollar-equivalent units
-            // based on API response format). If the API returns raw credits, this may need
-            // conversion. For now, use the value directly as it represents dollar spend.
-            return MonthlyExtraUsageData(yearMonth: key, usedCredits: credits, estimatedCost: credits)
+            // API returns usedCredits in cents — convert to dollars for cost comparison
+            return MonthlyExtraUsageData(yearMonth: key, usedCredits: credits, estimatedCost: credits / Self.centsPerDollar)
         }
     }
 

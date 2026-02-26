@@ -237,6 +237,53 @@ struct SubscriptionPatternDetectorTests {
         #expect(overpaying == nil)
     }
 
+    @Test("chronicOverpaying detected with extra usage factored into total cost")
+    func chronicOverpayingWithExtraUsage() async throws {
+        // Max 20x user ($200/mo) with very low usage that fits cheaper tiers and $5/mo extra usage
+        // Algorithm recommends closest cheaper tier first (Max 5x, not Pro)
+        // Total = $200 + $5 = $205 vs Max 5x at $100 = savings $105
+        // API returns cents: 500 = $5
+        var resetEvents: [ResetEvent] = []
+        for month in 0..<4 {
+            for week in 0..<4 {
+                let daysAgo = month * 30 + week * 7
+                resetEvents.append(makeResetEvent(
+                    daysAgo: daysAgo,
+                    fiveHourPeak: 3.0,
+                    sevenDayUtil: 2.0,
+                    tier: "default_claude_max_20x"
+                ))
+            }
+        }
+        mockHistorical.mockResetEvents = resetEvents.sorted { $0.timestamp < $1.timestamp }
+
+        var polls: [UsagePoll] = []
+        for day in 0..<120 {
+            polls.append(makePoll(
+                daysAgo: day,
+                fiveHourUtil: 3.0,
+                extraUsageEnabled: true,
+                extraUsageUsedCredits: 500.0
+            ))
+        }
+        mockHistorical.recentPollsToReturn = polls.sorted { $0.timestamp < $1.timestamp }
+
+        let findings = try await detector.analyzePatterns()
+        let overpaying = findings.first {
+            if case .chronicOverpaying = $0 { return true }
+            return false
+        }
+        #expect(overpaying != nil)
+
+        if case .chronicOverpaying(let current, let recommended, let savings) = overpaying {
+            #expect(current == "Max 20x")
+            // Algorithm picks closest cheaper tier: Max 5x ($100) not Pro ($20)
+            #expect(recommended == "Max 5x")
+            // Savings = $205 (base $200 + extra $5) - $100 = $105
+            #expect(savings == 105.0)
+        }
+    }
+
     // MARK: - AC 4: Chronic Underpowering
 
     @Test("chronicUnderpowering detected when rate-limited N+ times for 2+ cycles")
@@ -271,13 +318,14 @@ struct SubscriptionPatternDetectorTests {
     @Test("chronicUnderpowering cost-based trigger when extra usage enabled")
     func chronicUnderpoweringCostBased() async throws {
         // Pro user ($20/mo) with extra usage costing $90/mo = $110 total > Max 5x $100/mo
+        // API returns cents: 9000 = $90
         var polls: [UsagePoll] = []
         for day in 0..<60 {
             polls.append(makePoll(
                 daysAgo: day,
                 fiveHourUtil: 70.0,
                 extraUsageEnabled: true,
-                extraUsageUsedCredits: 90.0
+                extraUsageUsedCredits: 9000.0
             ))
         }
         mockHistorical.recentPollsToReturn = polls.sorted { $0.timestamp < $1.timestamp }
@@ -290,7 +338,9 @@ struct SubscriptionPatternDetectorTests {
         }
         #expect(underpowering != nil)
 
-        if case .chronicUnderpowering(_, let current, let suggested) = underpowering {
+        if case .chronicUnderpowering(let count, let current, let suggested) = underpowering {
+            // 9000 cents = $90/mo extra → Pro $20 + $90 = $110 total > Max 5x $100
+            #expect(count >= 0) // cost-based trigger, rate-limit count may be 0
             #expect(current == "Pro")
             #expect(suggested == "Max 5x")
         }
@@ -349,13 +399,14 @@ struct SubscriptionPatternDetectorTests {
     func extraUsageOverflowDetected() async throws {
         // Create polls with extra usage over 2+ months
         // Extra usage of $100/mo on Pro ($20) = $120 total > Max 5x ($100), so savings = $20
+        // API returns cents: 10000 = $100
         var polls: [UsagePoll] = []
         for day in 0..<60 {
             polls.append(makePoll(
                 daysAgo: day,
                 fiveHourUtil: 80.0,
                 extraUsageEnabled: true,
-                extraUsageUsedCredits: 100.0
+                extraUsageUsedCredits: 10000.0
             ))
         }
         mockHistorical.recentPollsToReturn = polls.sorted { $0.timestamp < $1.timestamp }
@@ -369,9 +420,10 @@ struct SubscriptionPatternDetectorTests {
         #expect(overflow != nil)
 
         if case .extraUsageOverflow(let avgExtra, let recommended, let savings) = overflow {
-            #expect(avgExtra > 0)
-            #expect(!recommended.isEmpty)
-            #expect(savings > 0)
+            // 10000 cents = $100/mo extra on Pro ($20) → total $120 > Max 5x ($100) → savings $20
+            #expect(avgExtra == 100.0)
+            #expect(recommended == "Max 5x")
+            #expect(savings == 20.0)
         }
     }
 
@@ -397,13 +449,14 @@ struct SubscriptionPatternDetectorTests {
     @Test("persistentExtraUsage detected when extra > 50% of base for 2+ months")
     func persistentExtraUsageDetected() async throws {
         // Pro at $20/mo with $15/mo extra usage (75% of base, > 50% threshold)
+        // API returns cents: 1500 = $15
         var polls: [UsagePoll] = []
         for day in 0..<60 {
             polls.append(makePoll(
                 daysAgo: day,
                 fiveHourUtil: 70.0,
                 extraUsageEnabled: true,
-                extraUsageUsedCredits: 15.0
+                extraUsageUsedCredits: 1500.0
             ))
         }
         mockHistorical.recentPollsToReturn = polls.sorted { $0.timestamp < $1.timestamp }
@@ -417,9 +470,10 @@ struct SubscriptionPatternDetectorTests {
         #expect(persistent != nil)
 
         if case .persistentExtraUsage(let avgExtra, let base, let recommended) = persistent {
-            #expect(avgExtra > 0)
+            // 1500 cents = $15/mo extra on Pro ($20) → 75% of base, > 50% threshold
+            #expect(avgExtra == 15.0)
             #expect(base == 20.0)
-            #expect(!recommended.isEmpty)
+            #expect(recommended == "Max 5x")
         }
     }
 
@@ -445,13 +499,14 @@ struct SubscriptionPatternDetectorTests {
     @Test("analyzePatterns returns multiple findings when multiple patterns match")
     func multipleFindings() async throws {
         // Set up data that triggers both forgotten subscription AND extra usage
+        // API returns cents: 1500 = $15
         var polls: [UsagePoll] = []
         for day in 0..<21 {
             polls.append(makePoll(
                 daysAgo: day,
                 fiveHourUtil: 2.0,
                 extraUsageEnabled: true,
-                extraUsageUsedCredits: 15.0
+                extraUsageUsedCredits: 1500.0
             ))
         }
         mockHistorical.recentPollsToReturn = polls.sorted { $0.timestamp < $1.timestamp }

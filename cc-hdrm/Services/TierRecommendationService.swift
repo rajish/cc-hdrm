@@ -29,6 +29,9 @@ final class TierRecommendationService: TierRecommendationServiceProtocol, @unche
     /// A 5h peak at or above this percentage is considered rate-limited.
     private let rateLimitThreshold: Double = 95.0
 
+    /// API returns monetary values in cents; divide by this to get dollars.
+    private static let centsPerDollar: Double = 100.0
+
     init(
         historicalDataService: any HistoricalDataServiceProtocol,
         preferencesManager: any PreferencesManagerProtocol
@@ -218,6 +221,7 @@ final class TierRecommendationService: TierRecommendationServiceProtocol, @unche
     }
 
     /// Estimates monthly extra usage by aggregating peak values per billing cycle.
+    /// Returns the average monthly extra usage in **dollars**.
     private func estimateMonthlyExtraUsageWithBillingCycle(polls: [UsagePoll], cycleDay: Int) -> Double {
         // Group polls by billing period
         var periodPeaks: [String: Double] = [:]
@@ -231,17 +235,22 @@ final class TierRecommendationService: TierRecommendationServiceProtocol, @unche
 
         // Average the peak values across complete periods (exclude current partial period)
         let completePeriods = periodPeaks.filter { !isCurrentPeriod(key: $0.key, cycleDay: cycleDay) }
-        guard !completePeriods.isEmpty else {
+        let averageCents: Double
+        if !completePeriods.isEmpty {
+            let total = completePeriods.values.reduce(0, +)
+            averageCents = total / Double(completePeriods.count)
+        } else {
             // Only current period data — use it as provisional estimate
             let total = periodPeaks.values.reduce(0, +)
-            return total / Double(max(periodPeaks.count, 1))
+            averageCents = total / Double(max(periodPeaks.count, 1))
         }
 
-        let total = completePeriods.values.reduce(0, +)
-        return total / Double(completePeriods.count)
+        // API returns usedCredits in cents — convert to dollars for cost comparison
+        return averageCents / Self.centsPerDollar
     }
 
     /// Estimates monthly extra usage using calendar months when billing cycle is not configured.
+    /// Returns the average monthly extra usage in **dollars**.
     private func estimateMonthlyExtraUsageCalendarMonth(polls: [UsagePoll]) -> Double {
         let calendar = Calendar.current
         var monthPeaks: [String: Double] = [:]
@@ -261,15 +270,19 @@ final class TierRecommendationService: TierRecommendationServiceProtocol, @unche
         let currentComponents = calendar.dateComponents([.year, .month], from: now)
         let currentKey = "\(currentComponents.year ?? 0)-\(currentComponents.month ?? 0)"
 
+        let averageCents: Double
         let completeMonths = monthPeaks.filter { $0.key != currentKey }
         if !completeMonths.isEmpty {
             let total = completeMonths.values.reduce(0, +)
-            return total / Double(completeMonths.count)
+            averageCents = total / Double(completeMonths.count)
+        } else {
+            // Only current month data — use as provisional
+            let total = monthPeaks.values.reduce(0, +)
+            averageCents = total / Double(monthPeaks.count)
         }
 
-        // Only current month data — use as provisional
-        let total = monthPeaks.values.reduce(0, +)
-        return total / Double(monthPeaks.count)
+        // API returns usedCredits in cents — convert to dollars for cost comparison
+        return averageCents / Self.centsPerDollar
     }
 
     /// Returns a billing period key string for grouping polls.

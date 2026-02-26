@@ -38,7 +38,9 @@ struct CycleOverCycleBar: View {
             // Extra usage stacked segment (Story 17.3)
             if let spend = cycle.extraUsageSpend, spend > 0, let dollarValue = cycle.dollarValue, dollarValue > 0, cycle.utilizationPercent > 0 {
                 let baseCost = dollarValue / (cycle.utilizationPercent / 100.0)
-                let extraPercent = (spend / baseCost) * 100.0
+                // spend is in cents (from API) — convert to dollars before computing percentage
+                let spendDollars = spend / 100.0
+                let extraPercent = (spendDollars / baseCost) * 100.0
                 BarMark(
                     x: .value("Month", cycle.id),
                     y: .value("Extra", extraPercent)
