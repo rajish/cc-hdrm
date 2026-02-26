@@ -181,11 +181,11 @@ struct TierRecommendationServiceTests {
             makeResetEvent(id: 4, timestamp: daysAgo(15), fiveHourPeak: 97.0, sevenDayUtil: 83.0, tier: RateLimitTier.pro.rawValue),
         ]
 
-        // Polls show $47/mo in extra usage
+        // Polls show $47/mo in extra usage (API returns cents: 4700)
         let oneMonthAgo = daysAgo(30)
         mockHistorical.recentPollsToReturn = [
-            makePoll(id: 1, timestamp: oneMonthAgo, extraUsageEnabled: true, extraUsageUsedCredits: 47.0),
-            makePoll(id: 2, timestamp: daysAgo(15), extraUsageEnabled: true, extraUsageUsedCredits: 47.0),
+            makePoll(id: 1, timestamp: oneMonthAgo, extraUsageEnabled: true, extraUsageUsedCredits: 4700.0),
+            makePoll(id: 2, timestamp: daysAgo(15), extraUsageEnabled: true, extraUsageUsedCredits: 4700.0),
         ]
 
         let service = TierRecommendationService(
@@ -299,9 +299,9 @@ struct TierRecommendationServiceTests {
             makeResetEvent(id: 4, timestamp: daysAgo(15), fiveHourPeak: 99.0, sevenDayUtil: 90.0, tier: RateLimitTier.pro.rawValue),
         ]
 
-        // Extra usage to make upgrade recommendation
+        // Extra usage to make upgrade recommendation (API returns cents: 15000 = $150)
         mockHistorical.recentPollsToReturn = [
-            makePoll(id: 1, timestamp: daysAgo(30), extraUsageEnabled: true, extraUsageUsedCredits: 150.0),
+            makePoll(id: 1, timestamp: daysAgo(30), extraUsageEnabled: true, extraUsageUsedCredits: 15000.0),
         ]
 
         let service = TierRecommendationService(
@@ -331,7 +331,7 @@ struct TierRecommendationServiceTests {
         ]
 
         mockHistorical.recentPollsToReturn = [
-            makePoll(id: 1, timestamp: daysAgo(30), extraUsageEnabled: true, extraUsageUsedCredits: 120.0),
+            makePoll(id: 1, timestamp: daysAgo(30), extraUsageEnabled: true, extraUsageUsedCredits: 12000.0),
         ]
 
         let service = TierRecommendationService(
@@ -366,10 +366,10 @@ struct TierRecommendationServiceTests {
             makeResetEvent(id: 2, timestamp: daysAgo(15), fiveHourPeak: 45.0, sevenDayUtil: 22.0, tier: RateLimitTier.pro.rawValue),
         ]
 
-        // Extra usage polls to verify billing cycle grouping
+        // Extra usage polls to verify billing cycle grouping (API returns cents)
         mockHistorical.recentPollsToReturn = [
-            makePoll(id: 1, timestamp: daysAgo(30), extraUsageEnabled: true, extraUsageUsedCredits: 10.0),
-            makePoll(id: 2, timestamp: daysAgo(15), extraUsageEnabled: true, extraUsageUsedCredits: 15.0),
+            makePoll(id: 1, timestamp: daysAgo(30), extraUsageEnabled: true, extraUsageUsedCredits: 1000.0),
+            makePoll(id: 2, timestamp: daysAgo(15), extraUsageEnabled: true, extraUsageUsedCredits: 1500.0),
         ]
 
         let service = TierRecommendationService(
