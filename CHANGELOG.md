@@ -24,31 +24,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Release 1.4.3
+- fix: correct extra usage cents-to-dollars conversion in cost calculations (#89)
 
 ## [1.4.2] - 2026-02-20
 
 ### Changed
 
-- Release 1.4.2
+- feat: OAuth profile fetch for tier resolution (#88)
 
 ## [1.4.1] - 2026-02-19
 
 ### Changed
 
-- Release 1.4.1
+- feat: delta-based extra usage chart rendering with two-layer visualization (#87)
 
 ## [1.4.0] - 2026-02-19
 
 ### Changed
 
-- Release 1.4.0
+- feat: independent OAuth authentication with browser sign-in (#85)
 
 ## [1.3.2] - 2026-02-19
 
 ### Changed
 
-- Release 1.3.2
+- fix: persist extra usage data through rollup pipeline (#83)
 
 ## [1.3.1] - 2026-02-19
 
@@ -125,7 +125,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Release 1.1.3
+- fix: eliminate sparkline spikes from API jitter and Power Nap wakes (#27)
 
 ## [1.1.2] - 2026-02-05
 

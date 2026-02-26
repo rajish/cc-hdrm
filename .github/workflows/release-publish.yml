@@ -117,10 +117,15 @@ jobs:
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)
 
           # Get commit subjects since previous tag, excluding automation commits
-          ENTRIES=$(git log "${PREV_TAG}..HEAD^" --oneline --no-merges \
+          # Use HEAD (not HEAD^) — the merged PR commit is at HEAD or between
+          # PREV_TAG and HEAD. The grep -v filters strip automation commits.
+          ENTRIES=$(git log "${PREV_TAG}..HEAD" --oneline --no-merges \
             | grep -v 'chore: bump version to' \
             | grep -v 'chore: update changelog' \
-            | sed 's/^[a-f0-9]* /- /' || true)
+            | sed 's/^[a-f0-9]* /- /' \
+            | sed 's/- \[patch\] /- /' \
+            | sed 's/- \[minor\] /- /' \
+            | sed 's/- \[major\] /- /' || true)
 
           PREAMBLE=$(cat /tmp/release-preamble.txt)
 
