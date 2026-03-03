@@ -216,6 +216,7 @@ final class PollingEngine: PollingEngineProtocol {
 
             appState.updateConnectionStatus(.connected)
             appState.updateStatusMessage(nil)
+            await notificationService?.evaluateConnectivity(apiReachable: true)
 
             // Persist to database asynchronously (fire-and-forget, does not block UI)
             // Pass tier for reset event recording, then run pattern analysis
@@ -291,6 +292,7 @@ final class PollingEngine: PollingEngineProtocol {
                 title: "Unexpected error",
                 detail: "Will retry automatically"
             ))
+            await notificationService?.evaluateConnectivity(apiReachable: false)
         }
     }
 
@@ -307,6 +309,7 @@ final class PollingEngine: PollingEngineProtocol {
                 title: "Unable to reach Claude API",
                 detail: "Will retry automatically"
             ))
+            await notificationService?.evaluateConnectivity(apiReachable: false)
         case .apiError(let statusCode, let body):
             Self.logger.error("API error \(statusCode): \(body ?? "no body")")
             appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
@@ -315,6 +318,7 @@ final class PollingEngine: PollingEngineProtocol {
                 title: "API error (\(statusCode))",
                 detail: body ?? "Unknown error"
             ))
+            await notificationService?.evaluateConnectivity(apiReachable: false)
         case .parseError:
             Self.logger.error("Failed to parse API response")
             appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
@@ -323,6 +327,7 @@ final class PollingEngine: PollingEngineProtocol {
                 title: "Unexpected API response format",
                 detail: "Will retry automatically"
             ))
+            await notificationService?.evaluateConnectivity(apiReachable: false)
         default:
             Self.logger.error("Unexpected error during usage fetch: \(String(describing: error))")
             appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
@@ -331,6 +336,7 @@ final class PollingEngine: PollingEngineProtocol {
                 title: "Unexpected error",
                 detail: "Will retry automatically"
             ))
+            await notificationService?.evaluateConnectivity(apiReachable: false)
         }
     }
 

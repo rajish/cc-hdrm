@@ -13,6 +13,11 @@ final class NotificationService: NotificationServiceProtocol {
     private var lastWarningThreshold: Double
     private var lastCriticalThreshold: Double
 
+    // MARK: - Connectivity State (Story 5.4)
+    private var consecutiveFailureCount: Int = 0
+    private var outageDetected: Bool = false
+    private var outageNotificationDelivered: Bool = false
+
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
         category: "notification"
@@ -210,6 +215,63 @@ final class NotificationService: NotificationServiceProtocol {
             sound: nil,
             identifierPrefix: "headroom-warning"
         )
+    }
+
+    // MARK: - Connectivity Evaluation (Story 5.4)
+
+    func evaluateConnectivity(apiReachable: Bool) async {
+        if apiReachable {
+            if outageNotificationDelivered {
+                await sendConnectivityNotification(
+                    title: "Claude API is back",
+                    body: "Service restored — usage data is current",
+                    identifier: "api-recovered"
+                )
+            }
+            consecutiveFailureCount = 0
+            outageDetected = false
+            outageNotificationDelivered = false
+        } else {
+            consecutiveFailureCount += 1
+            Self.logger.debug("Consecutive API failure count: \(self.consecutiveFailureCount)")
+            if consecutiveFailureCount >= 2 && !outageDetected {
+                outageDetected = true
+                if await sendConnectivityNotification(
+                    title: "Claude API unreachable",
+                    body: "Monitoring continues — you'll be notified when it recovers",
+                    identifier: "api-outage"
+                ) {
+                    outageNotificationDelivered = true
+                }
+            }
+        }
+    }
+
+    @discardableResult
+    private func sendConnectivityNotification(title: String, body: String, identifier: String) async -> Bool {
+        guard isAuthorized else {
+            Self.logger.info("Skipping connectivity notification — not authorized")
+            return false
+        }
+        guard preferencesManager.apiStatusAlertsEnabled else {
+            Self.logger.info("Skipping connectivity notification — API status alerts disabled")
+            return false
+        }
+
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+
+        do {
+            try await notificationCenter.add(request)
+            Self.logger.info("Connectivity notification delivered: \(identifier, privacy: .public)")
+            return true
+        } catch {
+            Self.logger.error("Failed to deliver connectivity notification: \(error.localizedDescription)")
+            return false
+        }
     }
 
     // MARK: - Authorization
