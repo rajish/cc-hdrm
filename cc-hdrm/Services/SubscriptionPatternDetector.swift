@@ -235,11 +235,19 @@ final class SubscriptionPatternDetector: SubscriptionPatternDetectorProtocol, @u
         }
 
         // Get polls to check for rate-limit events (utilization >= 100%)
-        let polls = try await historicalDataService.getRecentPolls(hours: 24 * 60) // 60 days
+        // Use 90 days to ensure 2+ complete months even after excluding the current partial month
+        let allPolls = try await historicalDataService.getRecentPolls(hours: 24 * 90)
+
+        // Exclude the current (incomplete) month — a partial month with few days
+        // can fall below the rate-limit threshold, causing false negatives early in a new month
+        let startOfMonth = Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: Date()))!
+        let cutoff = Int64(startOfMonth.timeIntervalSince1970 * 1000)
+        let polls = allPolls.filter { $0.timestamp < cutoff }
+
         let monthlyRateLimits = countMonthlyRateLimits(polls)
 
         guard monthlyRateLimits.count >= Self.chronicUnderpoweringMinMonths else {
-            Self.logger.debug("Chronic underpowering: insufficient data (\(monthlyRateLimits.count) months < \(Self.chronicUnderpoweringMinMonths))")
+            Self.logger.debug("Chronic underpowering: insufficient data (\(monthlyRateLimits.count) complete months < \(Self.chronicUnderpoweringMinMonths))")
             return nil
         }
 
