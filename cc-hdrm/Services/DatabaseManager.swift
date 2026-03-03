@@ -3,7 +3,7 @@ import os
 import SQLite3
 
 /// Current database schema version. Increment when schema changes require migration.
-private let currentSchemaVersion: Int = 5
+private let currentSchemaVersion: Int = 6
 
 /// SQLITE_TRANSIENT tells SQLite to make its own copy of the string data.
 /// Required when binding strings from Swift's withCString which uses temporary buffers.
@@ -116,6 +116,7 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
             try createUsageRollupsTable(connection)
             try createResetEventsTable(connection)
             try createRollupMetadataTable(connection)
+            try createApiOutagesTable(connection)
             try setSchemaVersion(currentSchemaVersion)
             Self.logger.info("Database schema created successfully")
         } else if existingVersion < currentSchemaVersion {
@@ -167,6 +168,12 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
             try executeSQL("ALTER TABLE usage_rollups ADD COLUMN extra_usage_delta REAL", on: connection)
             try backfillExtraUsageDeltas(connection: connection)
             Self.logger.info("Migration v4->v5: added extra_usage_delta columns and backfilled deltas")
+        }
+
+        if existingVersion < 6 {
+            let connection = try getConnection()
+            try createApiOutagesTable(connection)
+            Self.logger.info("Migration v5->v6: created api_outages table")
         }
 
         Self.logger.info("Migrations complete: \(existingVersion) -> \(currentSchemaVersion)")
@@ -329,6 +336,23 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
         try executeSQL(createTable, on: connection)
 
         Self.logger.info("Created rollup_metadata table")
+    }
+
+    private func createApiOutagesTable(_ connection: OpaquePointer) throws {
+        let createTable = """
+            CREATE TABLE IF NOT EXISTS api_outages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                started_at INTEGER NOT NULL,
+                ended_at INTEGER,
+                failure_reason TEXT NOT NULL
+            )
+            """
+        try executeSQL(createTable, on: connection)
+
+        let createIndex = "CREATE INDEX IF NOT EXISTS idx_api_outages_started_at ON api_outages(started_at)"
+        try executeSQL(createIndex, on: connection)
+
+        Self.logger.info("Created api_outages table and index")
     }
 
     // MARK: - Rollup Metadata Helpers

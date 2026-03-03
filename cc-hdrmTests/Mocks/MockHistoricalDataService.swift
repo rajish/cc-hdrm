@@ -117,4 +117,33 @@ final class MockHistoricalDataService: HistoricalDataServiceProtocol, @unchecked
     func getExtraUsagePerCycle(billingCycleDay: Int?) async throws -> [String: Double] {
         return mockExtraUsagePerCycle
     }
+
+    // MARK: - Story 10.6: API Outage Period Tracking
+
+    var evaluateOutageStateCallCount = 0
+    var lastEvaluateOutageApiReachable: Bool?
+    var lastEvaluateOutageFailureReason: String?
+
+    func evaluateOutageState(apiReachable: Bool, failureReason: String?) async {
+        evaluateOutageStateCallCount += 1
+        lastEvaluateOutageApiReachable = apiReachable
+        lastEvaluateOutageFailureReason = failureReason
+    }
+
+    var mockOutagePeriods: [OutagePeriod] = []
+    var getOutagePeriodsCallCount = 0
+    func getOutagePeriods(from: Date?, to: Date?) async throws -> [OutagePeriod] {
+        getOutagePeriodsCallCount += 1
+        return mockOutagePeriods
+    }
+
+    var closeOpenOutagesCallCount = 0
+    func closeOpenOutages(endedAt: Date) async throws {
+        closeOpenOutagesCallCount += 1
+    }
+
+    var loadOutageStateCallCount = 0
+    func loadOutageState() async throws {
+        loadOutageStateCallCount += 1
+    }
 }

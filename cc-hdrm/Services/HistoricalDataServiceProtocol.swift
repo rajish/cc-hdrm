@@ -66,7 +66,7 @@ protocol HistoricalDataServiceProtocol: Sendable {
     /// - Parameter retentionDays: Maximum age of data to retain
     func pruneOldData(retentionDays: Int) async throws
 
-    /// Deletes all historical data (usage_polls, usage_rollups, reset_events, rollup_metadata)
+    /// Deletes all historical data (usage_polls, usage_rollups, reset_events, rollup_metadata, api_outages)
     /// and reclaims disk space via VACUUM.
     /// - Throws: Database errors (caller should handle gracefully)
     func clearAllData() async throws
@@ -76,4 +76,34 @@ protocol HistoricalDataServiceProtocol: Sendable {
     /// - Parameter billingCycleDay: User-configured billing day (1-28), nil for calendar month grouping
     /// - Returns: Dictionary mapping cycle keys (e.g., "2026-Jan") to total extra usage spend
     func getExtraUsagePerCycle(billingCycleDay: Int?) async throws -> [String: Double]
+
+    // MARK: - Story 10.6: API Outage Period Tracking
+
+    /// Evaluates the current API connectivity state and manages outage records.
+    /// Called after every poll cycle (success or failure). Uses a 2-failure threshold
+    /// to start an outage and closes it on the first success.
+    /// Handles errors internally (log and continue) — never throws.
+    /// - Parameters:
+    ///   - apiReachable: Whether the API responded successfully
+    ///   - failureReason: The failure reason string (nil on success)
+    func evaluateOutageState(apiReachable: Bool, failureReason: String?) async
+
+    /// Retrieves outage periods that overlap the requested time range.
+    /// - Parameters:
+    ///   - from: Optional start of range (inclusive), nil for no lower bound
+    ///   - to: Optional end of range (inclusive), nil for no upper bound
+    /// - Returns: Array of outage periods ordered by started_at ascending
+    func getOutagePeriods(from: Date?, to: Date?) async throws -> [OutagePeriod]
+
+    /// Closes all open outage records by setting ended_at.
+    /// Not currently called in production — `evaluateOutageState(apiReachable: true)` handles
+    /// recovery inline. Retained for Story 13.8 (outage background rendering) which may need
+    /// explicit cleanup of stale outage records.
+    /// - Parameter endedAt: The timestamp to set as the outage end time
+    func closeOpenOutages(endedAt: Date) async throws
+
+    /// Restores in-memory outage tracking state from the database on startup.
+    /// If an open outage record exists, sets outageActive = true so the next
+    /// evaluateOutageState call can properly close it on success or continue it on failure.
+    func loadOutageState() async throws
 }

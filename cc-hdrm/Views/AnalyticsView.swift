@@ -481,5 +481,9 @@ private struct PreviewHistoricalDataService: HistoricalDataServiceProtocol {
     func pruneOldData(retentionDays: Int) async throws {}
     func clearAllData() async throws {}
     func getExtraUsagePerCycle(billingCycleDay: Int?) async throws -> [String: Double] { [:] }
+    func evaluateOutageState(apiReachable: Bool, failureReason: String?) async {}
+    func getOutagePeriods(from: Date?, to: Date?) async throws -> [OutagePeriod] { [] }
+    func closeOpenOutages(endedAt: Date) async throws {}
+    func loadOutageState() async throws {}
 }
 #endif
