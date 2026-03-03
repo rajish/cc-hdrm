@@ -1866,11 +1866,11 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                         Self.logger.error("Failed to insert outage record: \(String(cString: sqlite3_errmsg(connection)))")
                     } else {
                         Self.logger.info("API outage detected — created outage record (reason: \(reason, privacy: .public))")
+                        outageActive = true
                     }
                 } catch {
                     Self.logger.error("Failed to insert outage record: \(error.localizedDescription)")
                 }
-                outageActive = true
             }
         }
     }
