@@ -26,6 +26,7 @@ struct SettingsView: View {
     @State private var fiveHourError: String?
     @State private var sevenDayError: String?
     @State private var billingCycleDay: Int
+    @State private var apiStatusAlertsEnabled: Bool
     @State private var extraUsageAlertsEnabled: Bool
     @State private var extraUsageThreshold50: Bool
     @State private var extraUsageThreshold75: Bool
@@ -72,6 +73,7 @@ struct SettingsView: View {
         _customFiveHourText = State(initialValue: preferencesManager.customFiveHourCredits.map(String.init) ?? "")
         _customSevenDayText = State(initialValue: preferencesManager.customSevenDayCredits.map(String.init) ?? "")
         _billingCycleDay = State(initialValue: preferencesManager.billingCycleDay ?? 0)
+        _apiStatusAlertsEnabled = State(initialValue: preferencesManager.apiStatusAlertsEnabled)
         _extraUsageAlertsEnabled = State(initialValue: preferencesManager.extraUsageAlertsEnabled)
         _extraUsageThreshold50 = State(initialValue: preferencesManager.extraUsageThreshold50Enabled)
         _extraUsageThreshold75 = State(initialValue: preferencesManager.extraUsageThreshold75Enabled)
@@ -130,6 +132,13 @@ struct SettingsView: View {
                 }
                 .accessibilityLabel("Critical notification threshold, \(Int(criticalThreshold)) percent")
             }
+
+            // API Status Alerts toggle (Story 5.4)
+            Toggle("API status alerts", isOn: $apiStatusAlertsEnabled)
+                .onChange(of: apiStatusAlertsEnabled) { _, newValue in
+                    preferencesManager.apiStatusAlertsEnabled = newValue
+                }
+                .accessibilityLabel("API status alerts, \(apiStatusAlertsEnabled ? "on" : "off")")
 
             // Extra Usage Alerts subsection (Story 17.4)
             if let appState, appState.extraUsageEnabled {
@@ -402,6 +411,7 @@ struct SettingsView: View {
                     sevenDayError = nil
                     billingCycleDay = 0
                     appState?.updateBillingCycleDay(nil)
+                    apiStatusAlertsEnabled = preferencesManager.apiStatusAlertsEnabled
                     extraUsageAlertsEnabled = preferencesManager.extraUsageAlertsEnabled
                     extraUsageThreshold50 = preferencesManager.extraUsageThreshold50Enabled
                     extraUsageThreshold75 = preferencesManager.extraUsageThreshold75Enabled

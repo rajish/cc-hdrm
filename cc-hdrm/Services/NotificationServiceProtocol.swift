@@ -31,4 +31,8 @@ protocol NotificationServiceProtocol: Sendable {
     var fiveHourThresholdState: ThresholdState { get }
     /// Current threshold state for 7-day window (read-only, for testing).
     var sevenDayThresholdState: ThresholdState { get }
+
+    /// Evaluates API connectivity and fires outage/recovery notifications.
+    /// Called by PollingEngine on each success or failure.
+    func evaluateConnectivity(apiReachable: Bool) async
 }

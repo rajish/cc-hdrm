@@ -33,6 +33,7 @@ final class PreferencesManager: PreferencesManagerProtocol {
         static let extraUsageFiredThresholds = "com.cc-hdrm.extraUsageFiredThresholds"
         static let extraUsageEnteredAlertFired = "com.cc-hdrm.extraUsageEnteredAlertFired"
         static let extraUsageLastBillingPeriodKey = "com.cc-hdrm.extraUsageLastBillingPeriodKey"
+        static let apiStatusAlertsEnabled = "com.cc-hdrm.apiStatusAlertsEnabled"
         static let hasCompletedOnboarding = "com.cc-hdrm.hasCompletedOnboarding"
     }
 
@@ -326,6 +327,16 @@ final class PreferencesManager: PreferencesManagerProtocol {
         }
     }
 
+    // MARK: - API Status Alerts
+
+    var apiStatusAlertsEnabled: Bool {
+        get { defaults.object(forKey: Keys.apiStatusAlertsEnabled) == nil ? PreferencesDefaults.apiStatusAlertsEnabled : defaults.bool(forKey: Keys.apiStatusAlertsEnabled) }
+        set {
+            Self.logger.info("API status alerts enabled changed to \(newValue)")
+            defaults.set(newValue, forKey: Keys.apiStatusAlertsEnabled)
+        }
+    }
+
     // MARK: - Onboarding
 
     var hasCompletedOnboarding: Bool {
@@ -361,6 +372,7 @@ final class PreferencesManager: PreferencesManagerProtocol {
         defaults.removeObject(forKey: Keys.extraUsageFiredThresholds)
         defaults.removeObject(forKey: Keys.extraUsageEnteredAlertFired)
         defaults.removeObject(forKey: Keys.extraUsageLastBillingPeriodKey)
+        defaults.removeObject(forKey: Keys.apiStatusAlertsEnabled)
         defaults.removeObject(forKey: Keys.hasCompletedOnboarding)
     }
 }

@@ -12,6 +12,7 @@ enum PreferencesDefaults {
     static let extraUsageThreshold75Enabled: Bool = true
     static let extraUsageThreshold90Enabled: Bool = true
     static let extraUsageEnteredAlertEnabled: Bool = true
+    static let apiStatusAlertsEnabled: Bool = true
 }
 
 /// Protocol for the preferences manager that handles reading/writing user preferences.
@@ -68,6 +69,11 @@ protocol PreferencesManagerProtocol: AnyObject {
     var extraUsageEnteredAlertFired: Bool { get set }
     /// Billing period key (e.g., "2026-02") for detecting period reset.
     var extraUsageLastBillingPeriodKey: String? { get set }
+
+    // MARK: - API Status Alerts (Story 5.4)
+
+    /// Master toggle for API connectivity notifications (default: true).
+    var apiStatusAlertsEnabled: Bool { get set }
 
     // MARK: - Onboarding (Story 18.3)
 

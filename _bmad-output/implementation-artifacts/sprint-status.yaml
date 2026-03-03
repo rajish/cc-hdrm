@@ -163,7 +163,7 @@ development_status:
   4-6-clickable-ring-gauges-analytics-launcher: done  # Sprint change proposal 2026-03-02
 
   epic-5: in-progress  # Threshold Notifications — reopened for API downtime
-  5-4-api-connectivity-notifications: backlog  # Sprint change proposal 2026-03-02
+  5-4-api-connectivity-notifications: done  # Sprint change proposal 2026-03-02
 
   epic-10: in-progress  # Data Persistence — reopened for outage tracking
   10-6-api-outage-period-persistence: backlog  # Sprint change proposal 2026-03-02
