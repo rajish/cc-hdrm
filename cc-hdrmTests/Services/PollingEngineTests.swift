@@ -1148,9 +1148,6 @@ struct PollingEngineProfileFetchTests {
 
         await engine.performPollCycle()
 
-        // Give time for fire-and-forget Task to execute
-        try? await Task.sleep(for: .milliseconds(100))
-
         #expect(mockHistorical.evaluateOutageStateCallCount == 1)
         #expect(mockHistorical.lastEvaluateOutageApiReachable == true)
         #expect(mockHistorical.lastEvaluateOutageFailureReason == nil)
@@ -1174,8 +1171,6 @@ struct PollingEngineProfileFetchTests {
         )
 
         await engine.performPollCycle()
-
-        try? await Task.sleep(for: .milliseconds(100))
 
         #expect(mockHistorical.evaluateOutageStateCallCount == 1)
         #expect(mockHistorical.lastEvaluateOutageApiReachable == false)
@@ -1201,8 +1196,6 @@ struct PollingEngineProfileFetchTests {
 
         await engine.performPollCycle()
 
-        try? await Task.sleep(for: .milliseconds(100))
-
         #expect(mockHistorical.evaluateOutageStateCallCount == 1)
         #expect(mockHistorical.lastEvaluateOutageApiReachable == false)
         #expect(mockHistorical.lastEvaluateOutageFailureReason == "httpError:503")
@@ -1226,8 +1219,6 @@ struct PollingEngineProfileFetchTests {
         )
 
         await engine.performPollCycle()
-
-        try? await Task.sleep(for: .milliseconds(100))
 
         #expect(mockHistorical.evaluateOutageStateCallCount == 1)
         #expect(mockHistorical.lastEvaluateOutageApiReachable == false)
@@ -1258,8 +1249,6 @@ struct PollingEngineProfileFetchTests {
         )
 
         await engine.performPollCycle()
-
-        try? await Task.sleep(for: .milliseconds(100))
 
         // 401 is an auth issue, not an API outage — should NOT trigger outage tracking
         #expect(mockHistorical.evaluateOutageStateCallCount == 0)

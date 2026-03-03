@@ -28,10 +28,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
 
     // MARK: - Outage Tracking State (Story 10.6)
     //
-    // Thread safety note: These properties are mutated inside evaluateOutageState() which is
-    // called from fire-and-forget Tasks in PollingEngine. Technically unprotected on a non-actor
-    // class, but safe in practice because poll cycles are 30s+ apart and the method is sub-ms.
-    // If poll intervals ever decrease significantly, add locking or convert to actor isolation.
+    // Thread safety: evaluateOutageState() is called inline (awaited) from PollingEngine's
+    // @MainActor poll cycle, so these properties are always mutated sequentially.
 
     /// Number of consecutive API poll failures. Reset to 0 on success.
     private var consecutiveFailureCount: Int = 0

@@ -376,7 +376,7 @@ struct DatabaseManagerTests {
         sqlite3_finalize(dataStmt)
         #expect(util == 0.88)
 
-        // Verify version bumped to 4
+        // Verify version bumped to 6
         #expect(try manager2.getSchemaVersion() == 6)
     }
 
