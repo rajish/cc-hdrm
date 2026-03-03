@@ -51,7 +51,7 @@ so that I understand why I'm being asked to authenticate and feel confident proc
     - `.center()` on screen
     - No dock icon (app remains LSUIElement)
     - No Cmd+Tab entry
-  - [x] Size: ~360×280px, non-resizable
+  - [x] Size: 420×400px, non-resizable
   - [x] Host a SwiftUI `OnboardingView` via `NSHostingView`
   - [x] Expose `show()` and `dismiss()` methods
   - [x] `show()` calls `NSApp.activate(ignoringOtherApps: true)` to bring the panel to front even on first launch
@@ -75,9 +75,13 @@ so that I understand why I'm being asked to authenticate and feel confident proc
 - [x] **Task 4: AppDelegate Integration** (AC: 1, 3, 4, 6, 7)
   - [x] Add `private var onboardingWindowController: OnboardingWindowController?` property
   - [x] In `applicationDidFinishLaunching`, AFTER all services are initialized and status bar is set up:
-    ```
-    if !preferencesManager.hasCompletedOnboarding && appState.oauthState == .unauthenticated {
-        showOnboarding()
+    ```swift
+    if !preferencesManager.hasCompletedOnboarding {
+        if oauthKeychainService?.hasCredentials() == true {
+            preferencesManager.hasCompletedOnboarding = true
+        } else {
+            showOnboarding()
+        }
     }
     ```
   - [x] `showOnboarding()` method:

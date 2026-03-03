@@ -38,20 +38,24 @@ struct OnboardingViewTests {
 struct OnboardingTriggerLogicTests {
 
     /// Evaluates the same condition used in AppDelegate to decide whether to show onboarding.
-    /// hasCompletedOnboarding alone covers all cases: it is false only on true first launch
-    /// or after explicit preferences reset.
-    private func shouldShowOnboarding(hasCompletedOnboarding: Bool) -> Bool {
-        !hasCompletedOnboarding
+    /// Two gates: the flag must be false AND no credentials in keychain.
+    private func shouldShowOnboarding(hasCompletedOnboarding: Bool, hasCredentials: Bool) -> Bool {
+        !hasCompletedOnboarding && !hasCredentials
     }
 
-    @Test("First launch — flag false → should show onboarding")
+    @Test("First launch — flag false, no credentials → should show onboarding")
     func firstLaunchShowsOnboarding() {
-        #expect(shouldShowOnboarding(hasCompletedOnboarding: false) == true)
+        #expect(shouldShowOnboarding(hasCompletedOnboarding: false, hasCredentials: false) == true)
     }
 
-    @Test("Subsequent launch or signed-out user — flag true → should NOT show onboarding")
+    @Test("Subsequent launch — flag true → should NOT show onboarding")
     func completedOnboardingHidesOnboarding() {
-        #expect(shouldShowOnboarding(hasCompletedOnboarding: true) == false)
+        #expect(shouldShowOnboarding(hasCompletedOnboarding: true, hasCredentials: false) == false)
+    }
+
+    @Test("Existing user upgrading — flag false but credentials exist → should NOT show onboarding")
+    func existingUserUpgradeHidesOnboarding() {
+        #expect(shouldShowOnboarding(hasCompletedOnboarding: false, hasCredentials: true) == false)
     }
 
     @Test("MockPreferencesManager hasCompletedOnboarding defaults to false")

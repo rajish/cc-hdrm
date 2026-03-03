@@ -94,6 +94,15 @@ final class OAuthKeychainService: KeychainServiceProtocol, @unchecked Sendable {
         self.writeProvider = writeProvider
     }
 
+    /// Synchronous check for credential presence — used by onboarding to avoid
+    /// showing the popup to existing authenticated users upgrading to a new version.
+    func hasCredentials() -> Bool {
+        switch dataProvider() {
+        case .success: return true
+        default: return false
+        }
+    }
+
     func readCredentials() async throws -> KeychainCredentials {
         let result = dataProvider()
         let data: Data

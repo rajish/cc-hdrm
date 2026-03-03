@@ -217,10 +217,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         startObservingAppState()
 
-        // Show onboarding popup for first-run users. The hasCompletedOnboarding flag alone
-        // covers all cases: it is false only on true first launch or after explicit preferences reset.
+        // Show onboarding popup for true first-run users only.
+        // Check keychain to handle existing users upgrading (their flag defaults to false).
         if !preferences.hasCompletedOnboarding {
-            showOnboarding()
+            if oauthKeychainService?.hasCredentials() == true {
+                // Existing user upgrading — silently mark onboarding complete
+                preferences.hasCompletedOnboarding = true
+            } else {
+                showOnboarding()
+            }
         }
 
         // Create UpdateCheckService for app update detection
