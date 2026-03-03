@@ -28,6 +28,42 @@ struct PopoverViewTests {
     }
 }
 
+// MARK: - Story 4.6 — Ring Gauge Click Integration Tests
+
+@Suite("PopoverView Ring Gauge Click Tests")
+struct PopoverViewRingGaugeClickTests {
+
+    @Test("PopoverView renders without crash when historicalDataService is nil (no click handlers)")
+    @MainActor
+    func rendersWithNilHistoricalDataService() {
+        let appState = AppState()
+        appState.updateOAuthState(.authenticated)
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: WindowState(utilization: 35.0, resetsAt: Date().addingTimeInterval(86400))
+        )
+        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService(), historicalDataService: nil)
+        let controller = NSHostingController(rootView: view)
+        _ = controller.view
+    }
+
+    @Test("PopoverView renders without crash when historicalDataService is provided (click handlers active)")
+    @MainActor
+    func rendersWithHistoricalDataService() {
+        let appState = AppState()
+        appState.updateOAuthState(.authenticated)
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: WindowState(utilization: 35.0, resetsAt: Date().addingTimeInterval(86400))
+        )
+        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService(), historicalDataService: MockHistoricalDataService())
+        let controller = NSHostingController(rootView: view)
+        _ = controller.view
+    }
+}
+
 // MARK: - Live Update Integration Tests (Story 4.1, Task 6)
 
 @Suite("PopoverView Live Update Tests")

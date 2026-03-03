@@ -193,3 +193,40 @@ So that I trust the visualization isn't fabricating data.
 **When** the chart renders
 **Then** the gap is visually continuous (not segmented per period)
 **And** gap boundaries are clear
+
+## Story 13.8: API Outage Background Rendering in Analytics Charts
+
+> Added per Sprint Change Proposal 2026-03-02
+
+As a developer using Claude Code,
+I want to see colored background regions in analytics charts marking periods when the API was unreachable,
+So that I can distinguish "I wasn't using Claude" from "Anthropic was down."
+
+**Acceptance Criteria:**
+
+**Given** the analytics chart renders for a time range containing outage periods
+**When** UsageChart draws the chart
+**Then** outage periods are shown as vertical background bands with a distinct color (muted red/salmon tint — clearly different from gap hatching and slope tint)
+**And** the bands span the full chart height behind the data
+
+**Given** the user hovers over an outage background region
+**When** the tooltip appears
+**Then** it shows: "API outage: [duration]" with start/end times
+
+**Given** the chart legend renders
+**When** outage data exists in the visible range
+**Then** a legend entry appears: colored swatch + "API outage"
+
+**Given** no outage data exists in the visible range
+**When** the chart renders
+**Then** no outage background or legend entry is shown
+
+**Given** both a data gap AND an outage overlap in the same period
+**When** the chart renders
+**Then** the outage background takes precedence (it's more informative — the app was running but couldn't reach the API)
+
+**Visual distinction summary:**
+- Data gap (existing): hatched/grey — "cc-hdrm wasn't running"
+- API outage (new): muted red/salmon tint — "Anthropic was down"
+- Slope band (existing): warm tint — "burning fast"
+- All three can coexist without visual conflict.

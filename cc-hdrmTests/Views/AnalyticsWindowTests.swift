@@ -89,6 +89,60 @@ struct AnalyticsWindowTests {
         #expect(appState.isAnalyticsWindowOpen == false)
     }
 
+    // MARK: - Story 4.6 — show(timeRange:) Tests
+
+    @Test("show(timeRange: .day) opens window and sets requestedAnalyticsTimeRange")
+    func showDayOpensWindow() {
+        let appState = AppState()
+        let window = AnalyticsWindow.shared
+        window.configure(appState: appState, historicalDataService: MockHistoricalDataService(), headroomAnalysisService: MockHeadroomAnalysisService())
+
+        #expect(appState.isAnalyticsWindowOpen == false)
+
+        window.show(timeRange: .day)
+
+        #expect(appState.isAnalyticsWindowOpen == true)
+        #expect(appState.requestedAnalyticsTimeRange == .day)
+
+        // Cleanup
+        window.close()
+    }
+
+    @Test("show(timeRange: .week) opens window and sets requestedAnalyticsTimeRange")
+    func showWeekOpensWindow() {
+        let appState = AppState()
+        let window = AnalyticsWindow.shared
+        window.configure(appState: appState, historicalDataService: MockHistoricalDataService(), headroomAnalysisService: MockHeadroomAnalysisService())
+
+        window.show(timeRange: .week)
+
+        #expect(appState.isAnalyticsWindowOpen == true)
+        #expect(appState.requestedAnalyticsTimeRange == .week)
+
+        // Cleanup
+        window.close()
+    }
+
+    @Test("show(timeRange:) when already open brings to front and switches range (no duplicate)")
+    func showWhenOpenBringsToFront() {
+        let appState = AppState()
+        let window = AnalyticsWindow.shared
+        window.configure(appState: appState, historicalDataService: MockHistoricalDataService(), headroomAnalysisService: MockHeadroomAnalysisService())
+
+        // Open with .day
+        window.show(timeRange: .day)
+        #expect(appState.isAnalyticsWindowOpen == true)
+        #expect(appState.requestedAnalyticsTimeRange == .day)
+
+        // Show with .week while already open — should bring to front, not duplicate
+        window.show(timeRange: .week)
+        #expect(appState.isAnalyticsWindowOpen == true)
+        #expect(appState.requestedAnalyticsTimeRange == .week)
+
+        // Cleanup
+        window.close()
+    }
+
     @Test("multiple toggle cycles work correctly")
     func multipleToggleCycles() {
         let appState = AppState()

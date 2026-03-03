@@ -137,3 +137,50 @@ So that analytics views can display relevant data efficiently.
 **When** HistoricalDataService.getResetEvents(range:) is called
 **Then** it returns all reset_events rows within the specified range
 **And** results are ordered by timestamp ascending
+
+## Story 10.6: API Outage Period Tracking & Persistence
+
+> Added per Sprint Change Proposal 2026-03-02
+
+As a developer using Claude Code,
+I want API outage periods stored in the database,
+So that analytics charts can show when Anthropic's service was down.
+
+**Acceptance Criteria:**
+
+**Given** PollingEngine detects an outage (2+ consecutive poll failures)
+**When** the outage begins
+**Then** a new record is inserted into `api_outages` with `started_at` timestamp and `failure_reason`
+**And** `ended_at` is NULL (ongoing outage)
+
+**Given** an outage is ongoing (`ended_at` is NULL)
+**When** the first successful poll completes
+**Then** the outage record is updated with `ended_at` timestamp
+
+**Given** the app quits during an ongoing outage
+**When** the app relaunches and the first poll succeeds
+**Then** the open outage record is closed with `ended_at` = relaunch time (approximate)
+
+**Given** the app quits during an ongoing outage
+**When** the app relaunches and the first poll also fails
+**Then** the existing open outage record remains open (outage continues)
+
+**Given** HistoricalDataService queries for a time range
+**When** outage data is requested
+**Then** it returns all outage periods overlapping the requested range via `getOutagePeriods(from:to:) -> [OutagePeriod]`
+
+**Database schema:**
+
+```sql
+CREATE TABLE api_outages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    started_at TEXT NOT NULL,       -- ISO 8601
+    ended_at TEXT,                  -- ISO 8601, NULL if ongoing
+    failure_reason TEXT NOT NULL    -- e.g., "networkUnreachable", "httpError:503"
+);
+CREATE INDEX idx_api_outages_started_at ON api_outages(started_at);
+```
+
+**Important distinction:**
+- "Data gap" = cc-hdrm not running (existing, hatched/grey in charts)
+- "API outage" = cc-hdrm running, API unreachable (new, colored background in charts)

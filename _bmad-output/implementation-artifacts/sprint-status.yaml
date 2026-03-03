@@ -136,7 +136,7 @@ development_status:
   15-2-custom-credit-limit-override: done
   epic-15-retrospective: optional
 
-  epic-16: in-progress  # Subscription Intelligence (Phase 4)
+  epic-16: done  # Subscription Intelligence (Phase 4)
   16-1-slow-burn-pattern-detection-service: done
   16-2-pattern-notification-analytics-display: done
   16-3-tier-recommendation-service: done
@@ -145,7 +145,7 @@ development_status:
   16-6-self-benchmarking-visual-trends: done
   epic-16-retrospective: optional
 
-  epic-17: in-progress  # Extra Usage Visibility & Alerts (Phase 5) — reopened for delta chart fix
+  epic-17: done  # Extra Usage Visibility & Alerts (Phase 5)
   17-1-extra-usage-state-menu-bar-indicator: done
   17-2-popover-extra-usage-card: done
   17-3-analytics-extra-usage-crossover-visualization: done
@@ -153,6 +153,20 @@ development_status:
   17-5-extra-usage-delta-chart-rendering: done
   epic-17-retrospective: optional
 
-  epic-18: in-progress  # Independent OAuth Authentication
+  epic-18: in-progress  # Independent OAuth Authentication — reopened for onboarding
   18-1-independent-oauth-authentication: done
   18-2-oauth-profile-tier-resolution: done
+  18-3-first-run-onboarding-popup: done  # Sprint change proposal 2026-03-02
+
+  # Sprint Change Proposal 2026-03-02 — new stories
+  epic-4: in-progress  # Detailed Usage Panel — reopened for ring click
+  4-6-clickable-ring-gauges-analytics-launcher: done  # Sprint change proposal 2026-03-02
+
+  epic-5: in-progress  # Threshold Notifications — reopened for API downtime
+  5-4-api-connectivity-notifications: backlog  # Sprint change proposal 2026-03-02
+
+  epic-10: in-progress  # Data Persistence — reopened for outage tracking
+  10-6-api-outage-period-persistence: backlog  # Sprint change proposal 2026-03-02
+
+  epic-13: in-progress  # Full Analytics Window — reopened for outage rendering
+  13-8-outage-background-rendering: backlog  # Sprint change proposal 2026-03-02

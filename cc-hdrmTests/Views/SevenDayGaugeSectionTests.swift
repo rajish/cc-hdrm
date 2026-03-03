@@ -160,6 +160,62 @@ struct SevenDayGaugeSectionTests {
         #expect(section.combinedAccessibilityLabel.contains("0 full 5-hour quotas left"))
     }
 
+    // MARK: - Story 4.6 — onTap + Accessibility Hint Tests
+
+    @Test("Section renders with onTap callback without crash")
+    @MainActor
+    func rendersWithOnTap() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: WindowState(utilization: 35.0, resetsAt: Date().addingTimeInterval(2 * 86400))
+        )
+        let section = SevenDayGaugeSection(appState: appState, onTap: {})
+        _ = section.body
+    }
+
+    @Test("Section renders without onTap callback without crash")
+    @MainActor
+    func rendersWithoutOnTap() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: WindowState(utilization: 35.0, resetsAt: Date().addingTimeInterval(2 * 86400))
+        )
+        let section = SevenDayGaugeSection(appState: appState, onTap: nil)
+        _ = section.body
+    }
+
+    @Test("Section renders via NSHostingController with onTap without crash")
+    @MainActor
+    func rendersViaHostingWithOnTap() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: WindowState(utilization: 35.0, resetsAt: Date().addingTimeInterval(2 * 86400))
+        )
+        let section = SevenDayGaugeSection(appState: appState, onTap: {})
+        let hosting = NSHostingController(rootView: section)
+        _ = hosting.view
+    }
+
+    @Test("Section renders via NSHostingController without onTap without crash")
+    @MainActor
+    func rendersViaHostingWithoutOnTap() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: WindowState(utilization: 35.0, resetsAt: Date().addingTimeInterval(2 * 86400))
+        )
+        let section = SevenDayGaugeSection(appState: appState, onTap: nil)
+        let hosting = NSHostingController(rootView: section)
+        _ = hosting.view
+    }
+
     @Test("HeadroomState derivation is correct for 7d window")
     @MainActor
     func headroomStateDerivation() {

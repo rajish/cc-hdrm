@@ -92,9 +92,15 @@ struct AnalyticsView: View {
             valueSection
         }
         .padding()
+        .onAppear {
+            selectedTimeRange = appState.requestedAnalyticsTimeRange
+        }
         .task(id: selectedTimeRange) {
             await loadData()
             await loadTierRecommendation()
+        }
+        .onChange(of: appState.requestedAnalyticsTimeRange) { _, newRange in
+            selectedTimeRange = newRange
         }
         .task {
             await loadPatternFindings()

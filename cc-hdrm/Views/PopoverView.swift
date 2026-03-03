@@ -106,7 +106,10 @@ struct PopoverView: View {
 
     @ViewBuilder
     private var authenticatedView: some View {
-        FiveHourGaugeSection(appState: appState)
+        FiveHourGaugeSection(
+            appState: appState,
+            onTap: historicalDataService != nil ? { AnalyticsWindow.shared.show(timeRange: .day) } : nil
+        )
             .padding(.horizontal)
             .padding(.vertical, 8)
 
@@ -114,7 +117,10 @@ struct PopoverView: View {
         if appState.sevenDay != nil {
             Divider()
 
-            SevenDayGaugeSection(appState: appState)
+            SevenDayGaugeSection(
+                appState: appState,
+                onTap: historicalDataService != nil ? { AnalyticsWindow.shared.show(timeRange: .week) } : nil
+            )
                 .padding(.horizontal)
                 .padding(.vertical, 8)
         }
