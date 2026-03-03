@@ -69,5 +69,11 @@ protocol PreferencesManagerProtocol: AnyObject {
     /// Billing period key (e.g., "2026-02") for detecting period reset.
     var extraUsageLastBillingPeriodKey: String? { get set }
 
+    // MARK: - Onboarding (Story 18.3)
+
+    /// Whether the user has completed the first-run onboarding popup.
+    /// Stored in UserDefaults, NOT derived from credential presence.
+    var hasCompletedOnboarding: Bool { get set }
+
     func resetToDefaults()
 }

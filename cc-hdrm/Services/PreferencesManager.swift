@@ -33,6 +33,7 @@ final class PreferencesManager: PreferencesManagerProtocol {
         static let extraUsageFiredThresholds = "com.cc-hdrm.extraUsageFiredThresholds"
         static let extraUsageEnteredAlertFired = "com.cc-hdrm.extraUsageEnteredAlertFired"
         static let extraUsageLastBillingPeriodKey = "com.cc-hdrm.extraUsageLastBillingPeriodKey"
+        static let hasCompletedOnboarding = "com.cc-hdrm.hasCompletedOnboarding"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -325,6 +326,16 @@ final class PreferencesManager: PreferencesManagerProtocol {
         }
     }
 
+    // MARK: - Onboarding
+
+    var hasCompletedOnboarding: Bool {
+        get { defaults.bool(forKey: Keys.hasCompletedOnboarding) }
+        set {
+            Self.logger.info("Has completed onboarding changed to \(newValue)")
+            defaults.set(newValue, forKey: Keys.hasCompletedOnboarding)
+        }
+    }
+
     // MARK: - Reset
 
     func resetToDefaults() {
@@ -350,5 +361,6 @@ final class PreferencesManager: PreferencesManagerProtocol {
         defaults.removeObject(forKey: Keys.extraUsageFiredThresholds)
         defaults.removeObject(forKey: Keys.extraUsageEnteredAlertFired)
         defaults.removeObject(forKey: Keys.extraUsageLastBillingPeriodKey)
+        defaults.removeObject(forKey: Keys.hasCompletedOnboarding)
     }
 }

@@ -84,6 +84,55 @@ Key principles:
 - `@Observable` for state management
 - Swift 6.0 strict concurrency
 
+## Versioning
+
+This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (`major.minor.patch`).
+
+- **Source of truth:** `CFBundleShortVersionString` in `cc-hdrm/Info.plist`
+- **Git tags:** `v{major}.{minor}.{patch}` (e.g., `v1.0.0`)
+- **Changelog:** [CHANGELOG.md](CHANGELOG.md) follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format with an `[Unreleased]` section for pending changes
+- **Release keywords:** Include `[patch]`, `[minor]`, or `[major]` in PR titles to trigger an automated version bump
+
+### Automated Pre-Merge Version Bump
+
+The [`release-prepare.yml`](.github/workflows/release-prepare.yml) GitHub Actions workflow automatically bumps the version when a release keyword is detected in a PR title targeting `master`.
+
+**How it works:**
+
+1. A maintainer opens (or edits) a PR with `[patch]`, `[minor]`, or `[major]` in the title
+2. The workflow reads the current version from `master`'s `cc-hdrm/Info.plist`
+3. It computes the new semver version and commits the updated `Info.plist` back to the PR branch
+4. The commit message is `chore: bump version to {new_version}`
+
+**Trigger events:** `opened`, `edited` (title change), `synchronize` (new push)
+
+**Rules:**
+- Only maintainers can trigger version bumps — non-maintainer keywords are ignored with a PR comment
+- No keyword = no bump, workflow exits cleanly
+- If multiple keywords are present, highest precedence wins: `major` > `minor` > `patch`
+- Keywords are case-insensitive (`[Patch]`, `[MINOR]`, etc.)
+- The workflow is idempotent — re-runs read the version from the PR's base branch (typically `master`), not the PR branch
+
+### Automated Post-Merge Release
+
+The [`release-publish.yml`](.github/workflows/release-publish.yml) GitHub Actions workflow runs on every push to `master`. When it detects a version bump commit (from the pre-merge workflow above), it automatically builds, packages, and publishes a release.
+
+**Pipeline steps:**
+
+1. Detect the `chore: bump version to {version}` commit in the push
+2. Validate the version matches `CFBundleShortVersionString` in `cc-hdrm/Info.plist`
+3. Auto-generate a changelog entry from commit messages since the previous tag
+4. Update `CHANGELOG.md` and commit to `master`
+5. Tag the changelog commit with `v{version}`
+6. Build a universal binary (arm64 + x86\_64) via `xcodebuild archive`
+7. Package as ZIP (`cc-hdrm-{version}-macos.zip`) and DMG (`cc-hdrm-{version}.dmg`)
+8. Compute SHA256 checksums
+9. Create a GitHub Release with the changelog entry as body and ZIP/DMG/checksums as assets
+
+**Changelog generation:** Commit messages since the previous tag are collected automatically, excluding automation commits. If the merged PR body contains content between `<!-- release-notes-start -->` and `<!-- release-notes-end -->` markers, that content is prepended as a release summary.
+
+**No version bump = no release.** If a push to `master` doesn't include a version bump commit, the workflow exits cleanly.
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).

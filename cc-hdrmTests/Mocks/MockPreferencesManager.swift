@@ -24,6 +24,7 @@ final class MockPreferencesManager: PreferencesManagerProtocol {
     var extraUsageFiredThresholds: Set<Int> = []
     var extraUsageEnteredAlertFired: Bool = false
     var extraUsageLastBillingPeriodKey: String?
+    var hasCompletedOnboarding: Bool = false
     var resetToDefaultsCallCount = 0
 
     func resetToDefaults() {
@@ -49,5 +50,6 @@ final class MockPreferencesManager: PreferencesManagerProtocol {
         extraUsageFiredThresholds = []
         extraUsageEnteredAlertFired = false
         extraUsageLastBillingPeriodKey = nil
+        hasCompletedOnboarding = false
     }
 }

@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var headroomAnalysisServiceRef: (any HeadroomAnalysisServiceProtocol)?
     private var analyticsWindow: AnalyticsWindow?
     private var observationTask: Task<Void, Never>?
+    private var onboardingWindowController: OnboardingWindowController?
     private var eventMonitor: Any?
     private var previousAccessibilityValue: String?
     private var previousDisplayedWindow: DisplayedWindow?
@@ -216,6 +217,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         startObservingAppState()
 
+        // Show onboarding popup for first-run users. The hasCompletedOnboarding flag alone
+        // covers all cases: it is false only on true first launch or after explicit preferences reset.
+        if !preferences.hasCompletedOnboarding {
+            showOnboarding()
+        }
+
         // Create UpdateCheckService for app update detection
         if updateCheckService == nil {
             updateCheckService = UpdateCheckService(appState: state, preferencesManager: preferences)
@@ -321,6 +328,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Stop polling since we have no credentials
         pollingEngine?.stop()
+    }
+
+    // MARK: - Onboarding
+
+    private func showOnboarding() {
+        let view = OnboardingView(
+            onSignIn: { @MainActor [weak self] in
+                guard let self else { return }
+                self.preferencesManager?.hasCompletedOnboarding = true
+                self.onboardingWindowController?.dismiss()
+                self.onboardingWindowController = nil
+                Task { @MainActor in
+                    await self.performSignIn()
+                }
+            },
+            onLater: { @MainActor [weak self] in
+                guard let self else { return }
+                self.preferencesManager?.hasCompletedOnboarding = true
+                self.onboardingWindowController?.dismiss()
+                self.onboardingWindowController = nil
+            }
+        )
+        let controller = OnboardingWindowController(contentView: view)
+        self.onboardingWindowController = controller
+        controller.show()
     }
 
     /// Attempts to fetch profile data and enrich credentials with `rateLimitTier` and `subscriptionType`.

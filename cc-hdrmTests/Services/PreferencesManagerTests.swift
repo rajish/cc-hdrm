@@ -417,6 +417,32 @@ struct PreferencesManagerTests {
         #expect(manager.extraUsageLastBillingPeriodKey == nil)
     }
 
+    // MARK: - Onboarding Flag (Story 18.3)
+
+    @Test("hasCompletedOnboarding defaults to false")
+    func hasCompletedOnboardingDefault() {
+        let (manager, _, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        #expect(manager.hasCompletedOnboarding == false)
+    }
+
+    @Test("Setting hasCompletedOnboarding to true persists and reads back")
+    func hasCompletedOnboardingPersists() {
+        let (manager, _, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        manager.hasCompletedOnboarding = true
+        #expect(manager.hasCompletedOnboarding == true)
+    }
+
+    @Test("resetToDefaults resets hasCompletedOnboarding to false")
+    func resetResetsOnboardingFlag() {
+        let (manager, _, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        manager.hasCompletedOnboarding = true
+        manager.resetToDefaults()
+        #expect(manager.hasCompletedOnboarding == false)
+    }
+
     // MARK: - Protocol Conformance
 
     @Test("PreferencesManager conforms to PreferencesManagerProtocol")
