@@ -238,6 +238,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 2. Then start polling engine
         // 3. Other services can start in parallel
         Task {
+            // Restore outage tracking state from database (must run before polling starts)
+            if let histService = self.historicalDataServiceRef {
+                do {
+                    try await histService.loadOutageState()
+                } catch {
+                    Self.logger.warning("Failed to restore outage state: \(error.localizedDescription)")
+                }
+            }
+
             // Bootstrap slope buffer from historical data OFF main thread (SQLite is blocking)
             // Must complete before polling starts to avoid losing early polls
             if let histService = self.historicalDataServiceRef,

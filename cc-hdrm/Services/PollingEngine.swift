@@ -217,6 +217,7 @@ final class PollingEngine: PollingEngineProtocol {
             appState.updateConnectionStatus(.connected)
             appState.updateStatusMessage(nil)
             await notificationService?.evaluateConnectivity(apiReachable: true)
+            await historicalDataService?.evaluateOutageState(apiReachable: true, failureReason: nil)
 
             // Persist to database asynchronously (fire-and-forget, does not block UI)
             // Pass tier for reset event recording, then run pattern analysis
@@ -293,6 +294,7 @@ final class PollingEngine: PollingEngineProtocol {
                 detail: "Will retry automatically"
             ))
             await notificationService?.evaluateConnectivity(apiReachable: false)
+            await historicalDataService?.evaluateOutageState(apiReachable: false, failureReason: "unknown")
         }
     }
 
@@ -310,6 +312,7 @@ final class PollingEngine: PollingEngineProtocol {
                 detail: "Will retry automatically"
             ))
             await notificationService?.evaluateConnectivity(apiReachable: false)
+            await historicalDataService?.evaluateOutageState(apiReachable: false, failureReason: "networkUnreachable")
         case .apiError(let statusCode, let body):
             Self.logger.error("API error \(statusCode): \(body ?? "no body")")
             appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
@@ -319,6 +322,7 @@ final class PollingEngine: PollingEngineProtocol {
                 detail: body ?? "Unknown error"
             ))
             await notificationService?.evaluateConnectivity(apiReachable: false)
+            await historicalDataService?.evaluateOutageState(apiReachable: false, failureReason: "httpError:\(statusCode)")
         case .parseError:
             Self.logger.error("Failed to parse API response")
             appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
@@ -328,6 +332,7 @@ final class PollingEngine: PollingEngineProtocol {
                 detail: "Will retry automatically"
             ))
             await notificationService?.evaluateConnectivity(apiReachable: false)
+            await historicalDataService?.evaluateOutageState(apiReachable: false, failureReason: "parseError")
         default:
             Self.logger.error("Unexpected error during usage fetch: \(String(describing: error))")
             appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
@@ -337,6 +342,7 @@ final class PollingEngine: PollingEngineProtocol {
                 detail: "Will retry automatically"
             ))
             await notificationService?.evaluateConnectivity(apiReachable: false)
+            await historicalDataService?.evaluateOutageState(apiReachable: false, failureReason: "unknown")
         }
     }
 

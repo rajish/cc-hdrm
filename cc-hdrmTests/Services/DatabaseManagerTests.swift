@@ -51,7 +51,7 @@ struct DatabaseManagerTests {
         #expect(manager.indexExists("idx_reset_events_timestamp"))
     }
 
-    @Test("Schema creation sets schema version to current (5)")
+    @Test("Schema creation sets schema version to current (6)")
     func schemaCreationSetsVersion() throws {
         let (manager, path) = makeManager()
         defer { cleanup(manager: manager, path: path) }
@@ -59,7 +59,7 @@ struct DatabaseManagerTests {
         try manager.ensureSchema()
 
         let version = try manager.getSchemaVersion()
-        #expect(version == 5)
+        #expect(version == 6)
     }
 
     @Test("Database path is correct")
@@ -202,7 +202,7 @@ struct DatabaseManagerTests {
         let version2 = try manager2.getSchemaVersion()
 
         #expect(version1 == version2)
-        #expect(version1 == 5)
+        #expect(version1 == 6)
     }
 
     @Test("Migration v1->v2 creates rollup_metadata table")
@@ -289,7 +289,7 @@ struct DatabaseManagerTests {
         #expect(util == 0.99)
 
         // Verify version bumped to current (migration runs all the way through)
-        #expect(try manager2.getSchemaVersion() == 5)
+        #expect(try manager2.getSchemaVersion() == 6)
     }
 
     @Test("Migration v2->v3 adds extra_usage columns to usage_polls")
@@ -376,8 +376,8 @@ struct DatabaseManagerTests {
         sqlite3_finalize(dataStmt)
         #expect(util == 0.88)
 
-        // Verify version bumped to 4
-        #expect(try manager2.getSchemaVersion() == 5)
+        // Verify version bumped to 6
+        #expect(try manager2.getSchemaVersion() == 6)
     }
 
     // MARK: - Table Schema Verification (AC #1)
@@ -603,7 +603,7 @@ struct DatabaseManagerTests {
         let rollupResult = sqlite3_exec(connection2, "INSERT INTO usage_rollups (period_start, period_end, resolution, extra_usage_delta) VALUES (1000, 2000, '5min', 10.5)", nil, nil, &errorMessage)
         #expect(rollupResult == SQLITE_OK, "INSERT with extra_usage_delta into usage_rollups should succeed")
 
-        #expect(try manager2.getSchemaVersion() == 5)
+        #expect(try manager2.getSchemaVersion() == 6)
     }
 
     @Test("Migration v4->v5 backfills deltas from consecutive polls")

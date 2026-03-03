@@ -166,7 +166,7 @@ development_status:
   5-4-api-connectivity-notifications: done  # Sprint change proposal 2026-03-02
 
   epic-10: in-progress  # Data Persistence — reopened for outage tracking
-  10-6-api-outage-period-persistence: backlog  # Sprint change proposal 2026-03-02
+  10-6-api-outage-period-persistence: done  # Sprint change proposal 2026-03-02
 
   epic-13: in-progress  # Full Analytics Window — reopened for outage rendering
   13-8-outage-background-rendering: backlog  # Sprint change proposal 2026-03-02

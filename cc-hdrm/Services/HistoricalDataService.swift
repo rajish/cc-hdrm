@@ -26,6 +26,16 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
     /// that occur slightly before the 5h mark.
     private let resetCooldownMs: Int64 = 4 * 60 * 60 * 1000
 
+    // MARK: - Outage Tracking State (Story 10.6)
+    //
+    // Thread safety: evaluateOutageState() is called inline (awaited) from PollingEngine's
+    // @MainActor poll cycle, so these properties are always mutated sequentially.
+
+    /// Number of consecutive API poll failures. Reset to 0 on success.
+    private var consecutiveFailureCount: Int = 0
+    /// Whether an API outage is currently active (2+ consecutive failures detected).
+    private var outageActive: Bool = false
+
     /// Creates a HistoricalDataService with the specified database manager.
     /// - Parameters:
     ///   - databaseManager: The database manager for persistence operations
@@ -796,7 +806,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         }
         let connection = try databaseManager.getConnection()
 
-        let tables = ["usage_polls", "usage_rollups", "reset_events", "rollup_metadata"]
+        let tables = ["usage_polls", "usage_rollups", "reset_events", "rollup_metadata", "api_outages"]
         for table in tables {
             let result = sqlite3_exec(connection, "DELETE FROM \(table)", nil, nil, nil)
             guard result == SQLITE_OK else {
@@ -1757,6 +1767,232 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             throw AppError.databaseQueryFailed(underlying: SQLiteError.execFailed(message: errorMessage ?? "Unknown error"))
         }
 
+        // Delete old closed outage records (keep ongoing outages regardless of age)
+        let deleteOutageSql = "DELETE FROM api_outages WHERE ended_at IS NOT NULL AND ended_at < ?"
+        statement = nil
+
+        let prepareOutageResult = sqlite3_prepare_v2(connection, deleteOutageSql, -1, &statement, nil)
+        guard prepareOutageResult == SQLITE_OK else {
+            throw AppError.databaseQueryFailed(underlying: SQLiteError.prepareFailed(code: prepareOutageResult))
+        }
+
+        sqlite3_bind_int64(statement, 1, cutoffMs)
+
+        stepResult = sqlite3_step(statement)
+        if stepResult != SQLITE_DONE {
+            errorMessage = String(cString: sqlite3_errmsg(connection))
+        }
+        sqlite3_finalize(statement)
+
+        guard stepResult == SQLITE_DONE else {
+            throw AppError.databaseQueryFailed(underlying: SQLiteError.execFailed(message: errorMessage ?? "Unknown error"))
+        }
+
         Self.logger.info("Pruned data older than \(retentionDays, privacy: .public) days")
+    }
+
+    // MARK: - Story 10.6: API Outage Period Tracking
+
+    func evaluateOutageState(apiReachable: Bool, failureReason: String?) async {
+        guard databaseManager.isAvailable else {
+            Self.logger.debug("Database unavailable - skipping outage state evaluation")
+            return
+        }
+
+        if apiReachable {
+            // Recovery: close any open outage
+            if outageActive {
+                let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+                do {
+                    let connection = try databaseManager.getConnection()
+                    let sql = "UPDATE api_outages SET ended_at = ? WHERE ended_at IS NULL"
+                    var statement: OpaquePointer?
+                    defer {
+                        if let statement = statement {
+                            sqlite3_finalize(statement)
+                        }
+                    }
+
+                    let prepareResult = sqlite3_prepare_v2(connection, sql, -1, &statement, nil)
+                    if prepareResult == SQLITE_OK {
+                        sqlite3_bind_int64(statement, 1, nowMs)
+                        let stepResult = sqlite3_step(statement)
+                        if stepResult == SQLITE_DONE {
+                            Self.logger.info("API outage ended — closed open outage record")
+                            consecutiveFailureCount = 0
+                            outageActive = false
+                        } else {
+                            Self.logger.error("Failed to close outage record: \(String(cString: sqlite3_errmsg(connection))) — will retry on next success")
+                        }
+                    } else {
+                        Self.logger.error("Failed to prepare outage close statement: \(prepareResult) — will retry on next success")
+                    }
+                } catch {
+                    Self.logger.error("Failed to close outage record: \(error.localizedDescription) — will retry on next success")
+                }
+            } else {
+                consecutiveFailureCount = 0
+            }
+        } else {
+            // Failure: increment counter, start outage at threshold
+            consecutiveFailureCount += 1
+
+            if consecutiveFailureCount >= 2 && !outageActive {
+                let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+                let reason = failureReason ?? "unknown"
+                do {
+                    let connection = try databaseManager.getConnection()
+                    let sql = "INSERT INTO api_outages (started_at, failure_reason) VALUES (?, ?)"
+                    var statement: OpaquePointer?
+                    defer {
+                        if let statement = statement {
+                            sqlite3_finalize(statement)
+                        }
+                    }
+
+                    let prepareResult = sqlite3_prepare_v2(connection, sql, -1, &statement, nil)
+                    guard prepareResult == SQLITE_OK else {
+                        Self.logger.error("Failed to prepare outage insert statement: \(prepareResult)")
+                        return
+                    }
+
+                    sqlite3_bind_int64(statement, 1, nowMs)
+                    reason.withCString { cString in
+                        sqlite3_bind_text(statement, 2, cString, -1, Self.SQLITE_TRANSIENT)
+                    }
+
+                    let stepResult = sqlite3_step(statement)
+                    if stepResult != SQLITE_DONE {
+                        Self.logger.error("Failed to insert outage record: \(String(cString: sqlite3_errmsg(connection)))")
+                    } else {
+                        Self.logger.info("API outage detected — created outage record (reason: \(reason, privacy: .public))")
+                        outageActive = true
+                    }
+                } catch {
+                    Self.logger.error("Failed to insert outage record: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    func getOutagePeriods(from: Date?, to: Date?) async throws -> [OutagePeriod] {
+        guard databaseManager.isAvailable else {
+            return []
+        }
+
+        let connection = try databaseManager.getConnection()
+
+        // Build query dynamically based on which bounds are provided
+        var conditions: [String] = []
+        if to != nil {
+            conditions.append("started_at <= ?")
+        }
+        if from != nil {
+            conditions.append("(ended_at >= ? OR ended_at IS NULL)")
+        }
+
+        var sql = "SELECT id, started_at, ended_at, failure_reason FROM api_outages"
+        if !conditions.isEmpty {
+            sql += " WHERE " + conditions.joined(separator: " AND ")
+        }
+        sql += " ORDER BY started_at ASC"
+
+        var statement: OpaquePointer?
+        defer {
+            if let statement = statement {
+                sqlite3_finalize(statement)
+            }
+        }
+
+        let prepareResult = sqlite3_prepare_v2(connection, sql, -1, &statement, nil)
+        guard prepareResult == SQLITE_OK else {
+            throw AppError.databaseQueryFailed(underlying: SQLiteError.prepareFailed(code: prepareResult))
+        }
+
+        var bindIndex: Int32 = 1
+        if let to = to {
+            let toMs = Int64(to.timeIntervalSince1970 * 1000)
+            sqlite3_bind_int64(statement, bindIndex, toMs)
+            bindIndex += 1
+        }
+        if let from = from {
+            let fromMs = Int64(from.timeIntervalSince1970 * 1000)
+            sqlite3_bind_int64(statement, bindIndex, fromMs)
+            bindIndex += 1
+        }
+
+        var results: [OutagePeriod] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            let id = sqlite3_column_int64(statement, 0)
+            let startedAt = sqlite3_column_int64(statement, 1)
+            let endedAt: Int64? = sqlite3_column_type(statement, 2) == SQLITE_NULL
+                ? nil
+                : sqlite3_column_int64(statement, 2)
+            let failureReason = String(cString: sqlite3_column_text(statement, 3))
+
+            results.append(OutagePeriod(
+                id: id,
+                startedAt: startedAt,
+                endedAt: endedAt,
+                failureReason: failureReason
+            ))
+        }
+
+        return results
+    }
+
+    func closeOpenOutages(endedAt: Date) async throws {
+        guard databaseManager.isAvailable else { return }
+
+        let connection = try databaseManager.getConnection()
+        let endedAtMs = Int64(endedAt.timeIntervalSince1970 * 1000)
+
+        let sql = "UPDATE api_outages SET ended_at = ? WHERE ended_at IS NULL"
+        var statement: OpaquePointer?
+        defer {
+            if let statement = statement {
+                sqlite3_finalize(statement)
+            }
+        }
+
+        let prepareResult = sqlite3_prepare_v2(connection, sql, -1, &statement, nil)
+        guard prepareResult == SQLITE_OK else {
+            throw AppError.databaseQueryFailed(underlying: SQLiteError.prepareFailed(code: prepareResult))
+        }
+
+        sqlite3_bind_int64(statement, 1, endedAtMs)
+
+        let stepResult = sqlite3_step(statement)
+        guard stepResult == SQLITE_DONE else {
+            let errorMessage = String(cString: sqlite3_errmsg(connection))
+            throw AppError.databaseQueryFailed(underlying: SQLiteError.execFailed(message: errorMessage))
+        }
+    }
+
+    func loadOutageState() async throws {
+        guard databaseManager.isAvailable else { return }
+
+        let connection = try databaseManager.getConnection()
+        let sql = "SELECT COUNT(*) FROM api_outages WHERE ended_at IS NULL"
+        var statement: OpaquePointer?
+        defer {
+            if let statement = statement {
+                sqlite3_finalize(statement)
+            }
+        }
+
+        let prepareResult = sqlite3_prepare_v2(connection, sql, -1, &statement, nil)
+        guard prepareResult == SQLITE_OK else {
+            throw AppError.databaseQueryFailed(underlying: SQLiteError.prepareFailed(code: prepareResult))
+        }
+
+        guard sqlite3_step(statement) == SQLITE_ROW else { return }
+
+        let openCount = sqlite3_column_int(statement, 0)
+        if openCount > 0 {
+            outageActive = true
+            consecutiveFailureCount = 2 // Already past threshold
+            Self.logger.info("Restored outage state: \(openCount) open outage(s) found")
+        }
     }
 }

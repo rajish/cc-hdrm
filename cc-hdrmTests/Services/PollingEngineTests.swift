@@ -170,6 +170,25 @@ private final class PEMockHistoricalDataService: HistoricalDataServiceProtocol, 
     func getExtraUsagePerCycle(billingCycleDay: Int?) async throws -> [String: Double] {
         return [:]
     }
+
+    // Story 10.6: API Outage Period Tracking
+    var evaluateOutageStateCallCount = 0
+    var lastEvaluateOutageApiReachable: Bool?
+    var lastEvaluateOutageFailureReason: String?
+
+    func evaluateOutageState(apiReachable: Bool, failureReason: String?) async {
+        evaluateOutageStateCallCount += 1
+        lastEvaluateOutageApiReachable = apiReachable
+        lastEvaluateOutageFailureReason = failureReason
+    }
+
+    func getOutagePeriods(from: Date?, to: Date?) async throws -> [OutagePeriod] {
+        return []
+    }
+
+    func closeOpenOutages(endedAt: Date) async throws {}
+
+    func loadOutageState() async throws {}
 }
 
 private struct PEMockAPIClient: APIClientProtocol {
@@ -1106,5 +1125,132 @@ struct PollingEngineProfileFetchTests {
 
         // Credit limits should be nil (no tier, no custom limits)
         #expect(appState.creditLimits == nil)
+    }
+
+    // MARK: - Story 10.6: Outage State Evaluation
+
+    @Test("successful poll calls evaluateOutageState with apiReachable=true (Story 10.6)")
+    @MainActor
+    func successfulPollCallsEvaluateOutageStateSuccess() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(result: successResponse())
+        let mockHistorical = PEMockHistoricalDataService()
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            historicalDataService: mockHistorical
+        )
+
+        await engine.performPollCycle()
+
+        #expect(mockHistorical.evaluateOutageStateCallCount == 1)
+        #expect(mockHistorical.lastEvaluateOutageApiReachable == true)
+        #expect(mockHistorical.lastEvaluateOutageFailureReason == nil)
+    }
+
+    @Test("network error calls evaluateOutageState with networkUnreachable (Story 10.6)")
+    @MainActor
+    func networkErrorCallsEvaluateOutageState() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(error: AppError.networkUnreachable)
+        let mockHistorical = PEMockHistoricalDataService()
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            historicalDataService: mockHistorical
+        )
+
+        await engine.performPollCycle()
+
+        #expect(mockHistorical.evaluateOutageStateCallCount == 1)
+        #expect(mockHistorical.lastEvaluateOutageApiReachable == false)
+        #expect(mockHistorical.lastEvaluateOutageFailureReason == "networkUnreachable")
+    }
+
+    @Test("API 503 calls evaluateOutageState with httpError:503 (Story 10.6)")
+    @MainActor
+    func apiErrorCallsEvaluateOutageState() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(error: AppError.apiError(statusCode: 503, body: "Service Unavailable"))
+        let mockHistorical = PEMockHistoricalDataService()
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            historicalDataService: mockHistorical
+        )
+
+        await engine.performPollCycle()
+
+        #expect(mockHistorical.evaluateOutageStateCallCount == 1)
+        #expect(mockHistorical.lastEvaluateOutageApiReachable == false)
+        #expect(mockHistorical.lastEvaluateOutageFailureReason == "httpError:503")
+    }
+
+    @Test("parse error calls evaluateOutageState with parseError (Story 10.6)")
+    @MainActor
+    func parseErrorCallsEvaluateOutageState() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(error: AppError.parseError(underlying: URLError(.cannotParseResponse)))
+        let mockHistorical = PEMockHistoricalDataService()
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            historicalDataService: mockHistorical
+        )
+
+        await engine.performPollCycle()
+
+        #expect(mockHistorical.evaluateOutageStateCallCount == 1)
+        #expect(mockHistorical.lastEvaluateOutageApiReachable == false)
+        #expect(mockHistorical.lastEvaluateOutageFailureReason == "parseError")
+    }
+
+    @Test("API 401 does NOT call evaluateOutageState (Story 10.6)")
+    @MainActor
+    func api401DoesNotCallEvaluateOutageState() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let refreshedCreds = KeychainCredentials(
+            accessToken: "new-token",
+            refreshToken: "new-refresh",
+            expiresAt: (Date().timeIntervalSince1970 + 3600) * 1000,
+            subscriptionType: nil, rateLimitTier: nil, scopes: nil
+        )
+        let mockRefresh = PEMockTokenRefreshService(result: refreshedCreds)
+        let mockAPI = PEMockAPIClient(error: AppError.apiError(statusCode: 401, body: "Unauthorized"))
+        let mockHistorical = PEMockHistoricalDataService()
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            historicalDataService: mockHistorical
+        )
+
+        await engine.performPollCycle()
+
+        // 401 is an auth issue, not an API outage — should NOT trigger outage tracking
+        #expect(mockHistorical.evaluateOutageStateCallCount == 0)
     }
 }
