@@ -73,6 +73,10 @@ final class AppState {
     /// Updated by AnalyticsWindow on window open/close.
     private(set) var isAnalyticsWindowOpen: Bool = false
 
+    /// Requested time range for the analytics window.
+    /// Set by AnalyticsWindow.show(timeRange:), observed by AnalyticsView via .onChange.
+    private(set) var requestedAnalyticsTimeRange: TimeRange = .week
+
     /// Poll data for the 24h sparkline visualization. Updated on each successful poll cycle.
     /// Data is ordered by timestamp ascending. Preserved across connection state changes.
     private(set) var sparklineData: [UsagePoll] = []
@@ -303,6 +307,12 @@ final class AppState {
     /// Called by AnalyticsWindow when window opens or closes.
     func setAnalyticsWindowOpen(_ open: Bool) {
         self.isAnalyticsWindowOpen = open
+    }
+
+    /// Sets the requested analytics time range.
+    /// Called by AnalyticsWindow.show(timeRange:) to communicate the desired range to AnalyticsView.
+    func setRequestedAnalyticsTimeRange(_ timeRange: TimeRange) {
+        self.requestedAnalyticsTimeRange = timeRange
     }
 
     /// Updates the billing cycle day from preferences.

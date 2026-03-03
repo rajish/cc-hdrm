@@ -5,6 +5,7 @@ import SwiftUI
 /// Returns `EmptyView` when `appState.sevenDay` is nil (AC #6).
 struct SevenDayGaugeSection: View {
     let appState: AppState
+    var onTap: (() -> Void)? = nil
 
     /// Headroom percentage derived from 7-day utilization. `nil` when no data.
     private var headroom: Double? {
@@ -15,6 +16,8 @@ struct SevenDayGaugeSection: View {
     private var sevenDayState: HeadroomState {
         appState.sevenDay?.headroomState ?? .disconnected
     }
+
+    @State private var isHovered: Bool = false
 
     /// Combined VoiceOver announcement (AC #7) + Story 11.4 AC #4:
     /// "7-day headroom: [X] percent, [slope level], resets in [relative], at [absolute]"
@@ -66,8 +69,19 @@ struct SevenDayGaugeSection: View {
                         .foregroundStyle(Color.headroomColor(for: sevenDayState))
                 }
             }
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isHovered ? Color(nsColor: .quaternarySystemFill).opacity(0.3) : Color.clear)
+            )
+            .contentShape(Rectangle())
+            .overlay {
+                if onTap != nil {
+                    InteractionOverlay(onTap: { onTap?() }, onHoverChange: { isHovered = $0 })
+                }
+            }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(combinedAccessibilityLabel)
+            .accessibilityHint(onTap != nil ? "Double-tap to open analytics" : "")
         }
     }
 }

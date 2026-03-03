@@ -61,6 +61,24 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
         }
     }
 
+    /// Opens the analytics window at a specific time range, or switches range if already open.
+    /// Used by ring gauge click handlers to drill into the relevant time window.
+    func show(timeRange: TimeRange) {
+        guard appState != nil else {
+            assertionFailure("show(timeRange:) called before configure()")
+            Self.logger.error("show(timeRange:) called before configure() - ignoring")
+            return
+        }
+        appState?.setRequestedAnalyticsTimeRange(timeRange)
+        if let panel, panel.isVisible {
+            Self.logger.info("Analytics window switching to \(timeRange.displayLabel) and bringing to front")
+            panel.orderFront(nil)
+        } else {
+            Self.logger.info("Analytics window opening at \(timeRange.displayLabel)")
+            openWindow()
+        }
+    }
+
     /// Closes the analytics window if open.
     func close() {
         Self.logger.info("Analytics window closing")
@@ -123,6 +141,10 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         Self.logger.info("Analytics window closed via delegate")
         appState?.setAnalyticsWindowOpen(false)
+        // Reset requested time range so toggle() (Sparkline path) opens at default .week.
+        // Without this, a previous show(timeRange: .day) would persist and toggle()
+        // would open at .day instead of .week via AnalyticsView's .onAppear handler.
+        appState?.setRequestedAnalyticsTimeRange(.week)
         // Nil out the panel so a fresh AnalyticsView (with reset @State)
         // is created on next open. This ensures session-only state
         // (series visibility, selected time range, chart data) resets

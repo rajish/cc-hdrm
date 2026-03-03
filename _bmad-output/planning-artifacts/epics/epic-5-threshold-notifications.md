@@ -89,3 +89,35 @@ So that I have maximum warning to wrap up before hitting the limit.
 **When** a threshold crossing occurs
 **Then** no notification is attempted, no error is shown
 **And** the menu bar color/weight changes still reflect the state (visual fallback)
+
+## Story 5.4: API Connectivity Notifications
+
+> Added per Sprint Change Proposal 2026-03-02
+
+As a developer using Claude Code,
+I want to be notified when the Claude API becomes unreachable and when it recovers,
+So that I know about Anthropic service disruptions even when I'm not looking at the menu bar.
+
+**Acceptance Criteria:**
+
+**Given** the app is connected and polling successfully
+**When** 2+ consecutive poll cycles fail (matching existing backoff threshold)
+**Then** a macOS notification fires:
+Title: "Claude API unreachable"
+Body: "Monitoring continues — you'll be notified when it recovers"
+**And** the notification fires once per outage (not repeated during ongoing outage)
+
+**Given** the app is in outage state (2+ consecutive failures)
+**When** a poll cycle succeeds
+**Then** a macOS notification fires:
+Title: "Claude API is back"
+Body: "Service restored — usage data is current"
+**And** the outage state resets
+
+**Given** the user has denied notification permissions
+**When** a connectivity transition occurs
+**Then** no notification is attempted (visual fallback via menu bar)
+
+**Given** notifications are enabled
+**When** the user opens settings
+**Then** an "API status alerts" toggle is available (default: on)

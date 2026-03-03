@@ -144,3 +144,42 @@ So that I understand what's happening and what (if anything) I need to do.
 **Given** a VoiceOver user focuses the StatusMessageView
 **When** VoiceOver reads the element
 **Then** it reads the full message and detail text
+
+## Story 4.6: Clickable Ring Gauges as Analytics Launchers
+
+> Added per Sprint Change Proposal 2026-03-02
+
+As a developer using Claude Code,
+I want to click a ring gauge in the popover to open analytics for that time window,
+So that I can drill into detailed trends directly from the element I'm already looking at.
+
+**Acceptance Criteria:**
+
+**Given** the 5h ring gauge section is visible in the popover
+**When** Alex clicks/taps anywhere in the 5h gauge section
+**Then** the analytics window opens (or comes to front) with "24h" time range pre-selected
+**And** the popover remains open
+**And** a subtle hover state indicates the gauge section is clickable
+**And** cursor changes to pointer (hand) on hover
+
+**Given** the 7d ring gauge section is visible in the popover
+**When** Alex clicks/taps anywhere in the 7d gauge section
+**Then** the analytics window opens (or comes to front) with "7d" time range pre-selected
+**And** the popover remains open
+**And** a subtle hover state indicates the gauge section is clickable
+**And** cursor changes to pointer (hand) on hover
+
+**Given** the analytics window is already open
+**When** Alex clicks a ring gauge
+**Then** the analytics window comes to front and switches to the corresponding time range
+**And** no duplicate window is created
+
+**Given** historical data is unavailable (no SQLite data yet)
+**When** Alex clicks a ring gauge
+**Then** the click does nothing (no error, no empty window)
+
+**Given** a VoiceOver user focuses a ring gauge section
+**When** VoiceOver reads the element
+**Then** it includes "Double-tap to open analytics" in the accessibility hint
+
+**Implementation note:** `AnalyticsWindowController.toggle()` needs a variant: `show(timeRange: TimeRange)` that opens the window and sets the initial range. The sparkline continues to use the default (24h).

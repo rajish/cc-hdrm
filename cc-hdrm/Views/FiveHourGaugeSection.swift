@@ -4,6 +4,7 @@ import SwiftUI
 /// Stacks: "5h" label, ring gauge, countdown label.
 struct FiveHourGaugeSection: View {
     let appState: AppState
+    var onTap: (() -> Void)? = nil
 
     /// Headroom percentage derived from 5h utilization. `nil` when disconnected.
     private var headroom: Double? {
@@ -14,6 +15,8 @@ struct FiveHourGaugeSection: View {
     private var fiveHourState: HeadroomState {
         appState.fiveHour?.headroomState ?? .disconnected
     }
+
+    @State private var isHovered: Bool = false
 
     /// Combined VoiceOver announcement per AC #14 + Story 11.4 AC #4:
     /// "5-hour headroom: [X] percent, [slope level], resets in [relative], at [absolute]"
@@ -52,7 +55,18 @@ struct FiveHourGaugeSection: View {
                 countdownTick: appState.countdownTick
             )
         }
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isHovered ? Color(nsColor: .quaternarySystemFill).opacity(0.3) : Color.clear)
+        )
+        .contentShape(Rectangle())
+        .overlay {
+            if onTap != nil {
+                InteractionOverlay(onTap: { onTap?() }, onHoverChange: { isHovered = $0 })
+            }
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(combinedAccessibilityLabel)
+        .accessibilityHint(onTap != nil ? "Double-tap to open analytics" : "")
     }
 }
