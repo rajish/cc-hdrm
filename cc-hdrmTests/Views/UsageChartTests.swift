@@ -1404,7 +1404,9 @@ struct UsageChartTests {
     @Test("BarChartView renders without crash with outage periods")
     func barChartRendersWithOutagePeriods() {
         let rollups = makeSampleRollups(count: 5)
-        let outages = makeOutagePeriods()
+        // Create outage within the rollup time range (rollups span last ~25 min)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let outages = makeOutagePeriods(startMs: nowMs - 900_000, durationMs: 60_000) // 15 min ago, 1 min duration
         let view = BarChartView(
             rollups: rollups,
             timeRange: .week,
