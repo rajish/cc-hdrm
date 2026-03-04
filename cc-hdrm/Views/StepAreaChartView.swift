@@ -2,6 +2,120 @@ import Charts
 import SwiftUI
 import os
 
+/// A time range where the API was unreachable (outage period).
+/// Top-level so both StepAreaChartView and BarChartView can reference without cross-view coupling.
+struct OutageRange: Identifiable {
+    let id: Int
+    let start: Date
+    let end: Date
+    let durationSeconds: TimeInterval
+
+    /// Outage background color — muted red/salmon tint, distinct from gap grey.
+    static let color = Color.red.opacity(0.08)
+
+    /// Converts outage periods to chart-clipped date ranges for rendering.
+    /// Filters out outages that don't overlap the chart bounds and clips edges.
+    static func make(from periods: [OutagePeriod], chartStart: Date?, chartEnd: Date?) -> [OutageRange] {
+        guard let chartStart = chartStart, let chartEnd = chartEnd else { return [] }
+
+        var ranges: [OutageRange] = []
+        for period in periods {
+            let start = period.startDate
+            let end = period.endDate ?? Date() // Ongoing outage extends to now
+
+            // Skip outages entirely outside chart bounds
+            guard start < chartEnd && end > chartStart else { continue }
+
+            // Clip to chart bounds
+            let clippedStart = max(start, chartStart)
+            let clippedEnd = min(end, chartEnd)
+            let duration = clippedEnd.timeIntervalSince(clippedStart)
+
+            ranges.append(OutageRange(
+                id: ranges.count,
+                start: clippedStart,
+                end: clippedEnd,
+                durationSeconds: duration
+            ))
+        }
+        return ranges
+    }
+
+    /// Formats a duration in seconds to a human-readable string.
+    /// e.g., "12 min", "2h 30m", "1d 4h"
+    static func formatDuration(_ seconds: TimeInterval) -> String {
+        let totalMinutes = Int(seconds / 60)
+        if totalMinutes < 1 {
+            return "< 1 min"
+        }
+        if totalMinutes < 60 {
+            return "\(totalMinutes) min"
+        }
+        let hours = totalMinutes / 60
+        let minutes = totalMinutes % 60
+        if hours < 24 {
+            return minutes > 0 ? "\(hours)h \(minutes)m" : "\(hours)h"
+        }
+        let days = hours / 24
+        let remainingHours = hours % 24
+        return remainingHours > 0 ? "\(days)d \(remainingHours)h" : "\(days)d"
+    }
+
+    /// Cached date formatters for outage tooltip time display.
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
+    private static let dayTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "EEE HH:mm"
+        return f
+    }()
+
+    private static let dateTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d HH:mm"
+        return f
+    }()
+
+    /// Formats the outage time range for tooltip display.
+    static func formatTimeRange(start: Date, end: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDate(start, inSameDayAs: end) {
+            return "\(timeFormatter.string(from: start)) - \(timeFormatter.string(from: end))"
+        }
+        let weekStart = calendar.dateInterval(of: .weekOfYear, for: start)
+        let weekEnd = calendar.dateInterval(of: .weekOfYear, for: end)
+        if weekStart == weekEnd {
+            return "\(dayTimeFormatter.string(from: start)) - \(dayTimeFormatter.string(from: end))"
+        }
+        return "\(dateTimeFormatter.string(from: start)) - \(dateTimeFormatter.string(from: end))"
+    }
+}
+
+/// Shared tooltip view for API outage hover display.
+/// Used by both StepAreaChartView and BarChartView hover overlays.
+struct OutageTooltipView: View {
+    let outage: OutageRange
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("API outage")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("\(OutageRange.formatDuration(outage.durationSeconds)) (\(OutageRange.formatTimeRange(start: outage.start, end: outage.end)))")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(6)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("API outage, duration \(OutageRange.formatDuration(outage.durationSeconds))")
+    }
+}
+
 /// Step-area chart for 24h view that honors the sawtooth utilization pattern.
 ///
 /// Performance design: The static chart content is in a separate `StaticChartContent` view
@@ -24,6 +138,8 @@ struct StepAreaChartView: View {
     let resetTimestamps: [Date]
     /// Time ranges where no data exists (gaps between segments).
     let gapRanges: [GapRange]
+    /// Time ranges where the API was unreachable.
+    let outageRanges: [OutageRange]
 
     /// 7-day series color — distinct blue.
     static let sevenDayColor = Color.blue
@@ -35,7 +151,7 @@ struct StepAreaChartView: View {
 
     // MARK: - Init
 
-    init(polls: [UsagePoll], fiveHourVisible: Bool, sevenDayVisible: Bool) {
+    init(polls: [UsagePoll], fiveHourVisible: Bool, sevenDayVisible: Bool, outagePeriods: [OutagePeriod] = []) {
         self.fiveHourVisible = fiveHourVisible
         self.sevenDayVisible = sevenDayVisible
 
@@ -55,6 +171,11 @@ struct StepAreaChartView: View {
         self.extraUsagePoints = cleanedPoints.filter { $0.extraUsageActive == true }
         self.extraUsageBackgroundPoints = cleanedPoints.filter { ($0.extraUsageUtilization ?? 0) > 0 }
         self.gapRanges = Self.findGapRanges(in: cleanedPoints)
+
+        // Compute outage ranges clipped to chart time bounds
+        let chartStart = cleanedPoints.first?.date
+        let chartEnd = cleanedPoints.last?.date
+        self.outageRanges = OutageRange.make(from: outagePeriods, chartStart: chartStart, chartEnd: chartEnd)
     }
 
     /// Identifies time ranges where no data exists by finding boundaries between segments.
@@ -160,6 +281,7 @@ struct StepAreaChartView: View {
             extraUsageBackgroundPoints: extraUsageBackgroundPoints,
             resetTimestamps: resetTimestamps,
             gapRanges: gapRanges,
+            outageRanges: outageRanges,
             fiveHourVisible: fiveHourVisible,
             sevenDayVisible: sevenDayVisible
         )
@@ -402,6 +524,7 @@ private struct ChartWithHoverOverlay: View {
     let extraUsageBackgroundPoints: [StepAreaChartView.ChartPoint]
     let resetTimestamps: [Date]
     let gapRanges: [StepAreaChartView.GapRange]
+    let outageRanges: [OutageRange]
     let fiveHourVisible: Bool
     let sevenDayVisible: Bool
 
@@ -417,6 +540,7 @@ private struct ChartWithHoverOverlay: View {
             extraUsageBackgroundPoints: extraUsageBackgroundPoints,
             resetTimestamps: resetTimestamps,
             gapRanges: gapRanges,
+            outageRanges: outageRanges,
             fiveHourVisible: fiveHourVisible,
             sevenDayVisible: sevenDayVisible
         )
@@ -444,6 +568,7 @@ private struct ChartWithHoverOverlay: View {
                     HoverOverlayContent(
                         chartPoints: chartPoints,
                         gapRanges: gapRanges,
+                        outageRanges: outageRanges,
                         hoveredIndex: hoveredIndex,
                         hoveredDate: hoveredDate,
                         fiveHourVisible: fiveHourVisible,
@@ -505,6 +630,7 @@ private struct StaticChartContent: View {
     let extraUsageBackgroundPoints: [StepAreaChartView.ChartPoint]
     let resetTimestamps: [Date]
     let gapRanges: [StepAreaChartView.GapRange]
+    let outageRanges: [OutageRange]
     let fiveHourVisible: Bool
     let sevenDayVisible: Bool
 
@@ -519,6 +645,17 @@ private struct StaticChartContent: View {
                     yEnd: .value("Top", 100)
                 )
                 .foregroundStyle(Color.secondary.opacity(0.08))
+            }
+
+            // Layer 1: API outage regions (muted red/salmon tint) — rendered AFTER gaps so outage overlays gap
+            ForEach(outageRanges) { outage in
+                RectangleMark(
+                    xStart: .value("Start", outage.start),
+                    xEnd: .value("End", outage.end),
+                    yStart: .value("Bottom", 0),
+                    yEnd: .value("Top", 100)
+                )
+                .foregroundStyle(OutageRange.color)
             }
 
             // 100% reference line (Story 17.3)
@@ -652,12 +789,19 @@ private struct StaticChartContent: View {
 private struct HoverOverlayContent: View {
     let chartPoints: [StepAreaChartView.ChartPoint]
     let gapRanges: [StepAreaChartView.GapRange]
+    let outageRanges: [OutageRange]
     let hoveredIndex: Int?
     let hoveredDate: Date?
     let fiveHourVisible: Bool
     let sevenDayVisible: Bool
     let proxy: ChartProxy
     let size: CGSize
+
+    /// Check if the actual cursor date falls within an outage range (HIGHEST priority).
+    private var hoveredOutage: OutageRange? {
+        guard let date = hoveredDate else { return nil }
+        return outageRanges.first { $0.start <= date && date < $0.end }
+    }
 
     /// Check if the actual cursor date falls within a gap range.
     /// Uses `hoveredDate` (the real cursor position) instead of the nearest chart point's date,
@@ -669,7 +813,22 @@ private struct HoverOverlayContent: View {
     }
 
     var body: some View {
-        if let date = hoveredDate, let gap = hoveredGap,
+        if let date = hoveredDate, let outage = hoveredOutage,
+           let xPos = proxy.position(forX: date) {
+            // Cursor is in an outage region — outage tooltip takes priority (AC 5)
+            Path { path in
+                path.move(to: CGPoint(x: xPos, y: 0))
+                path.addLine(to: CGPoint(x: xPos, y: size.height))
+            }
+            .stroke(Color.white.opacity(0.6), lineWidth: 1)
+
+            OutageTooltipView(outage: outage)
+                .fixedSize()
+                .position(
+                    x: tooltipXPosition(chartX: xPos),
+                    y: 45
+                )
+        } else if let date = hoveredDate, let gap = hoveredGap,
            let xPos = proxy.position(forX: date) {
             // Cursor is in a gap region — show vertical line at cursor and gap tooltip
             Path { path in

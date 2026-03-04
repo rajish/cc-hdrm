@@ -15,7 +15,8 @@ struct UsageChartTests {
         fiveHourVisible: Bool = true,
         sevenDayVisible: Bool = true,
         isLoading: Bool = false,
-        hasAnyHistoricalData: Bool = true
+        hasAnyHistoricalData: Bool = true,
+        outagePeriods: [OutagePeriod] = []
     ) -> UsageChart {
         UsageChart(
             pollData: pollData,
@@ -24,7 +25,8 @@ struct UsageChartTests {
             fiveHourVisible: fiveHourVisible,
             sevenDayVisible: sevenDayVisible,
             isLoading: isLoading,
-            hasAnyHistoricalData: hasAnyHistoricalData
+            hasAnyHistoricalData: hasAnyHistoricalData,
+            outagePeriods: outagePeriods
         )
     }
 
@@ -1345,4 +1347,255 @@ struct UsageChartTests {
         // Reset count should be 1
         #expect(barPoints[0].resetCount == 1)
     }
+
+    // MARK: - Story 13.8: Outage Background Rendering
+
+    /// Helper to create outage periods for testing.
+    private func makeOutagePeriods(
+        count: Int = 1,
+        startMs: Int64? = nil,
+        durationMs: Int64 = 600_000,
+        ongoing: Bool = false
+    ) -> [OutagePeriod] {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let base = startMs ?? (nowMs - 3_600_000) // Default: 1 hour ago
+
+        return (0..<count).map { i in
+            let start = base + Int64(i) * (durationMs + 300_000) // 5 min gap between outages
+            let end: Int64? = ongoing && i == count - 1 ? nil : start + durationMs
+            return OutagePeriod(
+                id: Int64(i),
+                startedAt: start,
+                endedAt: end,
+                failureReason: "httpError:503"
+            )
+        }
+    }
+
+    @Test("StepAreaChartView renders without crash with outage periods")
+    func stepAreaChartRendersWithOutagePeriods() {
+        let polls = makeSamplePolls(count: 20)
+        // Create outage within the poll time range (polls span last ~10 min)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let outages = makeOutagePeriods(startMs: nowMs - 300_000, durationMs: 60_000) // 5 min ago, 1 min duration
+        let view = StepAreaChartView(
+            polls: polls,
+            fiveHourVisible: true,
+            sevenDayVisible: true,
+            outagePeriods: outages
+        )
+        let _ = view.body
+        #expect(!view.outageRanges.isEmpty)
+    }
+
+    @Test("StepAreaChartView renders without crash with empty outage periods")
+    func stepAreaChartRendersWithEmptyOutagePeriods() {
+        let polls = makeSamplePolls(count: 20)
+        let view = StepAreaChartView(
+            polls: polls,
+            fiveHourVisible: true,
+            sevenDayVisible: true,
+            outagePeriods: []
+        )
+        let _ = view.body
+        #expect(view.outageRanges.isEmpty)
+    }
+
+    @Test("BarChartView renders without crash with outage periods")
+    func barChartRendersWithOutagePeriods() {
+        let rollups = makeSampleRollups(count: 5)
+        let outages = makeOutagePeriods()
+        let view = BarChartView(
+            rollups: rollups,
+            timeRange: .week,
+            fiveHourVisible: true,
+            sevenDayVisible: true,
+            outagePeriods: outages
+        )
+        let _ = view.body
+        #expect(!view.outageRanges.isEmpty)
+    }
+
+    @Test("BarChartView renders without crash with empty outage periods")
+    func barChartRendersWithEmptyOutagePeriods() {
+        let rollups = makeSampleRollups(count: 5)
+        let view = BarChartView(
+            rollups: rollups,
+            timeRange: .week,
+            fiveHourVisible: true,
+            sevenDayVisible: true,
+            outagePeriods: []
+        )
+        let _ = view.body
+        #expect(view.outageRanges.isEmpty)
+    }
+
+    @Test("UsageChart passes outagePeriods to chart views via init parameter")
+    func usageChartPassesOutagePeriods() {
+        let outages = makeOutagePeriods()
+        let chart = UsageChart(
+            pollData: makeSamplePolls(count: 10),
+            rollupData: [],
+            timeRange: .day,
+            fiveHourVisible: true,
+            sevenDayVisible: true,
+            isLoading: false,
+            hasAnyHistoricalData: true,
+            outagePeriods: outages
+        )
+        #expect(chart.outagePeriods.count == 1)
+        let _ = chart.body // Renders without crash
+    }
+
+    @Test("Outage range clipping: outage extending beyond chart bounds is clipped")
+    func outageRangeClipping() {
+        let now = Date()
+        let chartStart = now.addingTimeInterval(-3600) // 1h ago
+        let chartEnd = now
+
+        // Outage from 2h ago to 30 min ago — extends before chart start
+        let outages = [OutagePeriod(
+            id: 1,
+            startedAt: Int64((now.timeIntervalSince1970 - 7200) * 1000),
+            endedAt: Int64((now.timeIntervalSince1970 - 1800) * 1000),
+            failureReason: "networkUnreachable"
+        )]
+
+        let ranges = OutageRange.make(from: outages, chartStart: chartStart, chartEnd: chartEnd)
+        #expect(ranges.count == 1)
+        // Start should be clipped to chart start
+        #expect(abs(ranges[0].start.timeIntervalSince(chartStart)) < 1.0)
+        // End should be 30 min ago (within chart)
+        #expect(abs(ranges[0].end.timeIntervalSince(now.addingTimeInterval(-1800))) < 1.0)
+    }
+
+    @Test("Ongoing outage (endedAt nil) uses current time as end")
+    func ongoingOutageUsesCurrentTime() {
+        let now = Date()
+        let chartStart = now.addingTimeInterval(-3600)
+        let chartEnd = now.addingTimeInterval(60) // Slightly in future to ensure outage fits
+
+        // Ongoing outage starting 30 min ago
+        let outages = [OutagePeriod(
+            id: 1,
+            startedAt: Int64((now.timeIntervalSince1970 - 1800) * 1000),
+            endedAt: nil,
+            failureReason: "httpError:503"
+        )]
+
+        let ranges = OutageRange.make(from: outages, chartStart: chartStart, chartEnd: chartEnd)
+        #expect(ranges.count == 1)
+        // End should be approximately now (within a few seconds due to execution time)
+        #expect(abs(ranges[0].end.timeIntervalSince(now)) < 5.0)
+    }
+
+    @Test("AnalyticsView.fetchData includes outagePeriods in result")
+    func fetchDataIncludesOutagePeriods() async throws {
+        let service = MockHistoricalDataServiceForOutages()
+        let result = try await AnalyticsView.fetchData(for: .day, using: service)
+        #expect(result.outagePeriods.count == 1)
+    }
+
+    @Test("Outage duration formatting: minutes, hours, hours+minutes, days+hours")
+    func outageDurationFormatting() {
+        // Less than 1 minute
+        #expect(OutageRange.formatDuration(30) == "< 1 min")
+        // Minutes
+        #expect(OutageRange.formatDuration(720) == "12 min")
+        // Exact hours
+        #expect(OutageRange.formatDuration(7200) == "2h")
+        // Hours + minutes
+        #expect(OutageRange.formatDuration(9000) == "2h 30m")
+        // Days + hours
+        #expect(OutageRange.formatDuration(100800) == "1d 4h")
+        // Exact days
+        #expect(OutageRange.formatDuration(86400) == "1d")
+    }
+
+    @Test("Outage time range formatting: same day shows time only")
+    func outageTimeRangeSameDay() {
+        let calendar = Calendar.current
+        let base = calendar.startOfDay(for: Date())
+        let start = calendar.date(bySettingHour: 14, minute: 32, second: 0, of: base)!
+        let end = calendar.date(bySettingHour: 14, minute: 44, second: 0, of: base)!
+        let result = OutageRange.formatTimeRange(start: start, end: end)
+        #expect(result == "14:32 - 14:44")
+    }
+
+    @Test("Outage time range formatting: same week shows day + time")
+    func outageTimeRangeSameWeek() {
+        let calendar = Calendar.current
+        // Use a Monday and Tuesday in the same week
+        let base = calendar.startOfDay(for: Date())
+        // Find next Monday
+        var monday = base
+        while calendar.component(.weekday, from: monday) != 2 { // 2 = Monday
+            monday = calendar.date(byAdding: .day, value: 1, to: monday)!
+        }
+        let start = calendar.date(bySettingHour: 9, minute: 15, second: 0, of: monday)!
+        let tuesday = calendar.date(byAdding: .day, value: 1, to: monday)!
+        let end = calendar.date(bySettingHour: 11, minute: 45, second: 0, of: tuesday)!
+        let result = OutageRange.formatTimeRange(start: start, end: end)
+        // Should contain day abbreviation and time for both
+        #expect(result.contains("09:15"))
+        #expect(result.contains("11:45"))
+        #expect(result.contains("-"))
+    }
+
+    @Test("Outage time range formatting: different weeks shows date + time")
+    func outageTimeRangeDifferentWeeks() {
+        let calendar = Calendar.current
+        let base = calendar.startOfDay(for: Date())
+        let start = calendar.date(bySettingHour: 9, minute: 15, second: 0, of: base)!
+        // 14 days later — guaranteed different week
+        let futureDate = calendar.date(byAdding: .day, value: 14, to: base)!
+        let end = calendar.date(bySettingHour: 11, minute: 45, second: 0, of: futureDate)!
+        let result = OutageRange.formatTimeRange(start: start, end: end)
+        // Should contain month abbreviation, day number, and time
+        #expect(result.contains("09:15"))
+        #expect(result.contains("11:45"))
+        #expect(result.contains("-"))
+    }
+
+    @Test("Empty outage periods produces no outage ranges")
+    func emptyOutagePeriodsProducesNoRanges() {
+        let now = Date()
+        let ranges = OutageRange.make(
+            from: [],
+            chartStart: now.addingTimeInterval(-3600),
+            chartEnd: now
+        )
+        #expect(ranges.isEmpty)
+    }
+}
+
+// MARK: - Mock Service for Outage Tests
+
+/// Mock service that returns outage data for fetchData tests.
+private struct MockHistoricalDataServiceForOutages: HistoricalDataServiceProtocol {
+    func persistPoll(_ response: UsageResponse) async throws {}
+    func persistPoll(_ response: UsageResponse, tier: String?) async throws {}
+    func getRecentPolls(hours: Int) async throws -> [UsagePoll] {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        return [
+            UsagePoll(id: 1, timestamp: nowMs - 60_000, fiveHourUtil: 50, fiveHourResetsAt: nowMs + 3_600_000,
+                      sevenDayUtil: 25, sevenDayResetsAt: nowMs + 86_400_000)
+        ]
+    }
+    func getLastPoll() async throws -> UsagePoll? { nil }
+    func getResetEvents(fromTimestamp: Int64?, toTimestamp: Int64?) async throws -> [ResetEvent] { [] }
+    func getResetEvents(range: TimeRange) async throws -> [ResetEvent] { [] }
+    func getDatabaseSize() async throws -> Int64 { 0 }
+    func ensureRollupsUpToDate() async throws {}
+    func getRolledUpData(range: TimeRange) async throws -> [UsageRollup] { [] }
+    func pruneOldData(retentionDays: Int) async throws {}
+    func clearAllData() async throws {}
+    func getExtraUsagePerCycle(billingCycleDay: Int?) async throws -> [String: Double] { [:] }
+    func evaluateOutageState(apiReachable: Bool, failureReason: String?) async {}
+    func getOutagePeriods(from: Date?, to: Date?) async throws -> [OutagePeriod] {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        return [OutagePeriod(id: 1, startedAt: nowMs - 600_000, endedAt: nowMs - 300_000, failureReason: "httpError:503")]
+    }
+    func closeOpenOutages(endedAt: Date) async throws {}
+    func loadOutageState() async throws {}
 }
