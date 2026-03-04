@@ -15,6 +15,8 @@ struct UsageChart: View {
     /// Whether any historical data exists in the database (across all time ranges).
     /// When false and data is empty, shows "No data yet" instead of "No data for this time range".
     let hasAnyHistoricalData: Bool
+    /// API outage periods to render as background bands in charts.
+    var outagePeriods: [OutagePeriod] = []
 
     /// Total data points across both data sources.
     private var dataPointCount: Int {
@@ -50,14 +52,16 @@ struct UsageChart: View {
             StepAreaChartView(
                 polls: pollData,
                 fiveHourVisible: fiveHourVisible,
-                sevenDayVisible: sevenDayVisible
+                sevenDayVisible: sevenDayVisible,
+                outagePeriods: outagePeriods
             )
         } else {
             BarChartView(
                 rollups: rollupData,
                 timeRange: timeRange,
                 fiveHourVisible: fiveHourVisible,
-                sevenDayVisible: sevenDayVisible
+                sevenDayVisible: sevenDayVisible,
+                outagePeriods: outagePeriods
             )
         }
     }
@@ -102,7 +106,8 @@ struct UsageChart: View {
         fiveHourVisible: true,
         sevenDayVisible: true,
         isLoading: false,
-        hasAnyHistoricalData: false
+        hasAnyHistoricalData: false,
+        outagePeriods: []
     )
     .frame(width: 500, height: 300)
 }

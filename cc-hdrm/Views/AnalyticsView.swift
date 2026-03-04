@@ -67,6 +67,7 @@ struct AnalyticsView: View {
     /// Set to true once any successful load returns data. Used to distinguish
     /// "no data yet" (fresh install) from "no data for this range".
     @State private var hasAnyHistoricalData: Bool = false
+    @State private var outagePeriods: [OutagePeriod] = []
     @State private var patternFindings: [PatternFinding] = []
     @State private var tierRecommendation: TierRecommendation?
     @State private var cycleUtilizations: [CycleUtilization] = []
@@ -80,6 +81,7 @@ struct AnalyticsView: View {
         VStack(spacing: 12) {
             titleBar
             controlsRow
+            outageLegend
             UsageChart(
                 pollData: chartData,
                 rollupData: rollupData,
@@ -87,7 +89,8 @@ struct AnalyticsView: View {
                 fiveHourVisible: fiveHourVisible,
                 sevenDayVisible: sevenDayVisible,
                 isLoading: isLoading,
-                hasAnyHistoricalData: hasAnyHistoricalData
+                hasAnyHistoricalData: hasAnyHistoricalData,
+                outagePeriods: outagePeriods
             )
             valueSection
         }
@@ -262,6 +265,7 @@ struct AnalyticsView: View {
             rollupData = result.rollupData
             resetEvents = result.resetEvents
             allTimeResetEvents = result.allTimeResetEvents
+            outagePeriods = result.outagePeriods
 
             if !hasAnyHistoricalData && (chartData.count + rollupData.count) > 0 {
                 hasAnyHistoricalData = true
@@ -299,6 +303,7 @@ struct AnalyticsView: View {
         var rollupData: [UsageRollup] = []
         var resetEvents: [ResetEvent] = []
         var allTimeResetEvents: [ResetEvent] = []
+        var outagePeriods: [OutagePeriod] = []
     }
 
     /// Fetches analytics data for the given time range.
@@ -355,11 +360,33 @@ struct AnalyticsView: View {
             allTimeResetEvents = try await service.getResetEvents(range: .all)
         }
 
+        try Task.checkCancellation()
+
+        // Fetch outage periods for the data time range
+        let outageFrom: Date?
+        let outageTo: Date?
+        switch range {
+        case .day:
+            outageFrom = chartData.first.map { Date(timeIntervalSince1970: Double($0.timestamp) / 1000.0) }
+            outageTo = chartData.last.map { Date(timeIntervalSince1970: Double($0.timestamp) / 1000.0) }
+        case .week, .month, .all:
+            outageFrom = rollupData.first.map { Date(timeIntervalSince1970: Double($0.periodStart) / 1000.0) }
+            outageTo = rollupData.last.map { Date(timeIntervalSince1970: Double($0.periodEnd) / 1000.0) }
+        }
+        let outagePeriods: [OutagePeriod]
+        do {
+            outagePeriods = try await service.getOutagePeriods(from: outageFrom, to: outageTo)
+        } catch {
+            logger.warning("Outage period fetch failed (continuing without outage data): \(error.localizedDescription)")
+            outagePeriods = []
+        }
+
         return DataLoadResult(
             chartData: chartData,
             rollupData: rollupData,
             resetEvents: resetEvents,
-            allTimeResetEvents: allTimeResetEvents
+            allTimeResetEvents: allTimeResetEvents,
+            outagePeriods: outagePeriods
         )
     }
 
@@ -379,6 +406,24 @@ struct AnalyticsView: View {
             .buttonStyle(.plain)
             .focusEffectDisabled()
             .accessibilityLabel("Close analytics window")
+        }
+    }
+
+    // MARK: - Outage Legend
+
+    @ViewBuilder
+    private var outageLegend: some View {
+        if !outagePeriods.isEmpty {
+            HStack(spacing: 4) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color.red.opacity(0.3))
+                    .frame(width: 12, height: 8)
+                Text("API outage")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityLabel("Chart shows API outage periods")
         }
     }
 

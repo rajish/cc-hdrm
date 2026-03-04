@@ -15,6 +15,8 @@ struct BarChartView: View {
 
     /// Pre-computed gap ranges — periods with no rollup data between first and last data point.
     let gapRanges: [BarGapRange]
+    /// Pre-computed outage ranges — periods where the API was unreachable.
+    let outageRanges: [OutageRange]
 
     /// 7-day series color — reuses StepAreaChartView constant.
     static let sevenDayColor = StepAreaChartView.sevenDayColor
@@ -51,13 +53,20 @@ struct BarChartView: View {
 
     // MARK: - Init
 
-    init(rollups: [UsageRollup], timeRange: TimeRange, fiveHourVisible: Bool, sevenDayVisible: Bool) {
+    init(rollups: [UsageRollup], timeRange: TimeRange, fiveHourVisible: Bool, sevenDayVisible: Bool, outagePeriods: [OutagePeriod] = []) {
         self.timeRange = timeRange
         self.fiveHourVisible = fiveHourVisible
         self.sevenDayVisible = sevenDayVisible
         let points = Self.makeBarPoints(from: rollups, timeRange: timeRange)
         self.barPoints = points
         self.gapRanges = Self.findGapRanges(in: points, timeRange: timeRange)
+
+        // Compute outage ranges clipped to chart time bounds.
+        // Use max(periodEnd, now) so ongoing outages render to the visual chart edge
+        // (xAxisDomain extends past the last data point with a trailing buffer).
+        let chartStart = points.first?.periodStart
+        let chartEnd = points.last.map { max($0.periodEnd, Date()) }
+        self.outageRanges = OutageRange.make(from: outagePeriods, chartStart: chartStart, chartEnd: chartEnd)
     }
 
     // MARK: - Body
@@ -66,6 +75,7 @@ struct BarChartView: View {
         BarChartWithHoverOverlay(
             barPoints: barPoints,
             gapRanges: gapRanges,
+            outageRanges: outageRanges,
             timeRange: timeRange,
             fiveHourVisible: fiveHourVisible,
             sevenDayVisible: sevenDayVisible
@@ -225,6 +235,7 @@ struct BarChartView: View {
 private struct BarChartWithHoverOverlay: View {
     let barPoints: [BarChartView.BarPoint]
     let gapRanges: [BarChartView.BarGapRange]
+    let outageRanges: [OutageRange]
     let timeRange: TimeRange
     let fiveHourVisible: Bool
     let sevenDayVisible: Bool
@@ -237,6 +248,7 @@ private struct BarChartWithHoverOverlay: View {
         StaticBarChartContent(
             barPoints: barPoints,
             gapRanges: gapRanges,
+            outageRanges: outageRanges,
             timeRange: timeRange,
             fiveHourVisible: fiveHourVisible,
             sevenDayVisible: sevenDayVisible
@@ -265,6 +277,7 @@ private struct BarChartWithHoverOverlay: View {
                     BarHoverOverlayContent(
                         barPoints: barPoints,
                         gapRanges: gapRanges,
+                        outageRanges: outageRanges,
                         hoveredIndex: hoveredIndex,
                         hoveredDate: hoveredDate,
                         timeRange: timeRange,
@@ -319,6 +332,7 @@ private struct BarChartWithHoverOverlay: View {
 private struct StaticBarChartContent: View {
     let barPoints: [BarChartView.BarPoint]
     let gapRanges: [BarChartView.BarGapRange]
+    let outageRanges: [OutageRange]
     let timeRange: TimeRange
     let fiveHourVisible: Bool
     let sevenDayVisible: Bool
@@ -397,6 +411,17 @@ private struct StaticBarChartContent: View {
                     yEnd: .value("Top", 100)
                 )
                 .foregroundStyle(Color.secondary.opacity(0.08))
+            }
+
+            // Layer 1: API outage regions (muted red/salmon tint) — rendered AFTER gaps so outage overlays gap
+            ForEach(outageRanges) { outage in
+                RectangleMark(
+                    xStart: .value("Start", outage.start),
+                    xEnd: .value("End", outage.end),
+                    yStart: .value("Bottom", 0),
+                    yEnd: .value("Top", 100)
+                )
+                .foregroundStyle(OutageRange.color)
             }
 
             // 100% reference line (Story 17.3)
@@ -554,6 +579,7 @@ private struct StaticBarChartContent: View {
 private struct BarHoverOverlayContent: View {
     let barPoints: [BarChartView.BarPoint]
     let gapRanges: [BarChartView.BarGapRange]
+    let outageRanges: [OutageRange]
     let hoveredIndex: Int?
     let hoveredDate: Date?
     let timeRange: TimeRange
@@ -562,14 +588,35 @@ private struct BarHoverOverlayContent: View {
     let proxy: ChartProxy
     let size: CGSize
 
-    /// Check if the hovered date falls within a gap range (gap check comes FIRST).
+    /// Check if the actual cursor date falls within an outage range (HIGHEST priority).
+    private var hoveredOutage: OutageRange? {
+        guard let date = hoveredDate else { return nil }
+        return outageRanges.first { $0.start <= date && date < $0.end }
+    }
+
+    /// Check if the hovered date falls within a gap range.
     private var hoveredGap: BarChartView.BarGapRange? {
         guard let date = hoveredDate else { return nil }
         return gapRanges.first { $0.start <= date && date < $0.end }
     }
 
     var body: some View {
-        if let date = hoveredDate, let gap = hoveredGap,
+        if let date = hoveredDate, let outage = hoveredOutage,
+           let xPos = proxy.position(forX: date) {
+            // Cursor is in an outage region — outage tooltip takes priority (AC 5)
+            Path { path in
+                path.move(to: CGPoint(x: xPos, y: 0))
+                path.addLine(to: CGPoint(x: xPos, y: size.height))
+            }
+            .stroke(Color.white.opacity(0.6), lineWidth: 1)
+
+            OutageTooltipView(outage: outage)
+                .fixedSize()
+                .position(
+                    x: tooltipXPosition(chartX: xPos),
+                    y: 55
+                )
+        } else if let date = hoveredDate, let gap = hoveredGap,
            let xPos = proxy.position(forX: date) {
             // Cursor is in a gap region — show gap tooltip with vertical line
             Path { path in

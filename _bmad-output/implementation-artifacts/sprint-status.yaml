@@ -169,4 +169,4 @@ development_status:
   10-6-api-outage-period-persistence: done  # Sprint change proposal 2026-03-02
 
   epic-13: in-progress  # Full Analytics Window — reopened for outage rendering
-  13-8-outage-background-rendering: backlog  # Sprint change proposal 2026-03-02
+  13-8-outage-background-rendering: done  # Sprint change proposal 2026-03-02
