@@ -61,9 +61,11 @@ struct BarChartView: View {
         self.barPoints = points
         self.gapRanges = Self.findGapRanges(in: points, timeRange: timeRange)
 
-        // Compute outage ranges clipped to chart time bounds
+        // Compute outage ranges clipped to chart time bounds.
+        // Use max(periodEnd, now) so ongoing outages render to the visual chart edge
+        // (xAxisDomain extends past the last data point with a trailing buffer).
         let chartStart = points.first?.periodStart
-        let chartEnd = points.last?.periodEnd
+        let chartEnd = points.last.map { max($0.periodEnd, Date()) }
         self.outageRanges = OutageRange.make(from: outagePeriods, chartStart: chartStart, chartEnd: chartEnd)
     }
 
