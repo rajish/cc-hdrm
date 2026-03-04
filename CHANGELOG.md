@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.5] - 2026-03-04
+
+### Changed
+
+- feat: API outage background rendering in analytics charts (Story 13.8) (#95)
+- feat: API outage period tracking and persistence (Story 10.6) (#94)
+- feat: API connectivity notifications with outage/recovery state machine (Story 5.4) (#93)
+- feat: clickable ring gauges as analytics launchers (Story 4.6) (#92)
+- feat: first-run onboarding popup, README rewrite, app icon (#91)
+
 ## [1.4.4] - 2026-02-26
 
 ### Changed
@@ -205,7 +215,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Launch at login via SMAppService
 - Xcode project with XcodeGen configuration
 
-[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.4.4...HEAD
+[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.4.5...HEAD
+[1.4.5]: https://github.com/rajish/cc-hdrm/compare/v1.4.4...v1.4.5
 [1.4.4]: https://github.com/rajish/cc-hdrm/compare/v1.4.3...v1.4.4
 [1.4.3]: https://github.com/rajish/cc-hdrm/compare/v1.4.2...v1.4.3
 [1.4.2]: https://github.com/rajish/cc-hdrm/compare/v1.4.1...v1.4.2
