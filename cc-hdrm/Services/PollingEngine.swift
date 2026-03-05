@@ -93,11 +93,13 @@ final class PollingEngine: PollingEngineProtocol {
         if isLowPowerModeEnabled() {
             base *= 2
         }
-        guard consecutiveFailureCount > 1 else { return base }
+        let retryFloor = retryAfterOverride.map { TimeInterval($0) } ?? 0
+        guard consecutiveFailureCount > 1 else {
+            return min(max(base, retryFloor), 3600)
+        }
 
         let exponent = min(consecutiveFailureCount - 1, 10)
         let backoff = base * pow(2.0, Double(exponent))
-        let retryFloor = retryAfterOverride.map { TimeInterval(max(0, $0)) } ?? 0
         let interval = min(max(backoff, retryFloor), 3600)
         Self.logger.info("Backoff interval: \(interval)s (failures: \(self.consecutiveFailureCount), retryAfter: \(self.retryAfterOverride.map(String.init) ?? "nil"))")
         return interval
@@ -334,7 +336,8 @@ final class PollingEngine: PollingEngineProtocol {
             retryAfterOverride = retryAfter
             // Do NOT clear extra usage — rate limiting is transient, previous data is still valid.
             appState.updateConnectionStatus(.disconnected)
-            let retryDetail = retryAfter.map { "Will retry in \($0)s." } ?? "Will retry with backoff."
+            let cappedRetryAfter = retryAfter.map { min($0, 3600) }
+            let retryDetail = cappedRetryAfter.map { "Will retry in \($0)s." } ?? "Will retry with backoff."
             let detail = "\(retryDetail) Sign out and back in to reset, or increase poll interval in Settings."
             appState.updateStatusMessage(StatusMessage(
                 title: "Rate limited",

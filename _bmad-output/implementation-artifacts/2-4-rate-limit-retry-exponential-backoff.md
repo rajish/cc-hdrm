@@ -20,7 +20,7 @@ so that polling recovers automatically without hammering a rate-limited or degra
 
 4. **Given** the PollingEngine is in exponential backoff, **When** the popover displays the disconnected status, **Then** it shows the actual last poll attempt time (not last successful fetch) **And** optionally shows the next retry countdown (e.g., "Retrying in 45s").
 
-5. **Given** the system is in Low Power Mode (`ProcessInfo.processInfo.isLowPowerModeEnabled`), **When** the PollingEngine calculates the next interval, **Then** the base interval is doubled (30s -> 60s) before applying backoff multiplier **And** the 5-minute cap still applies to the final interval.
+5. **Given** the system is in Low Power Mode (`ProcessInfo.processInfo.isLowPowerModeEnabled`), **When** the PollingEngine calculates the next interval, **Then** the base interval is doubled (300s -> 600s) before applying backoff multiplier **And** the 1-hour cap still applies to the final interval.
 
 6. **Given** a successful poll occurs after a backoff period, **When** `connectionStatus` returns to `.connected`, **Then** the consecutive failure counter resets to zero **And** the polling interval returns to the base interval (respecting Low Power Mode if active).
 
@@ -51,7 +51,7 @@ so that polling recovers automatically without hammering a rate-limited or degra
     - If `consecutiveFailureCount <= 1`: return `baseInterval`
     - Clamp exponent: `let exponent = min(consecutiveFailureCount - 1, 10)` — prevents `pow()` overflow for sustained failures
     - Backoff: `baseInterval * pow(2, Double(exponent))`, capped at 3600s (1 hour)
-    - If `retryAfterOverride` exceeds computed value, use `retryAfterOverride` (also capped at 300s)
+    - If `retryAfterOverride` exceeds computed value, use `retryAfterOverride` (also capped at 3600s)
     - Log interval change at `.info` level
   - [x] 3.3 On success path (after `appState.updateConnectionStatus(.connected)` at line 217): reset `consecutiveFailureCount = 0` and `retryAfterOverride = nil`
   - [x] 3.4 On failure paths in `handleAPIError` (for `.networkUnreachable`, `.apiError`, `.parseError`, `default`): increment `consecutiveFailureCount += 1` AND clear `retryAfterOverride = nil` (stale Retry-After from a previous 429 must not persist across different error types)
@@ -94,17 +94,17 @@ so that polling recovers automatically without hammering a rate-limited or degra
     - [x] Test: 429 response with `Retry-After: 30` header -> `AppError.rateLimited(retryAfter: 30)`
     - [x] Test: 429 response without `Retry-After` header -> `AppError.rateLimited(retryAfter: nil)`
     - [x] Test: 429 response with non-integer `Retry-After` (e.g., HTTP-date format) -> `AppError.rateLimited(retryAfter: nil)`
-    - [x] Test: 429 response with negative `Retry-After: -1` -> `AppError.rateLimited(retryAfter: 0)` (clamped)
+    - [x] Test: 429 response with negative `Retry-After: -1` -> `AppError.rateLimited(retryAfter: nil)` (non-positive treated as absent)
   - [x] 7.2 In `cc-hdrmTests/Services/PollingEngineTests.swift`:
     - [x] Test: Single failure -> no backoff (interval stays at base)
     - [x] Test: 2 consecutive failures -> interval doubles
     - [x] Test: 3 consecutive failures -> interval quadruples
-    - [x] Test: Backoff caps at 5 minutes (300s) even with many consecutive failures
+    - [x] Test: Backoff caps at 1 hour (3600s) even with many consecutive failures
     - [x] Test: Exponent capped at 10 — 100 consecutive failures doesn't cause pow() overflow
     - [x] Test: Success after backoff -> interval resets to base, consecutiveFailureCount = 0
     - [x] Test: 429 with Retry-After=60 -> interval is at least 60s
-    - [x] Test: 429 with Retry-After exceeding cap -> capped at 300s
-    - [x] Test: 429 with negative Retry-After -> treated as 0 (clamped)
+    - [x] Test: 429 with Retry-After exceeding cap -> capped at 3600s
+    - [x] Test: 429 with negative Retry-After -> treated as nil (non-positive = absent)
     - [x] Test: `evaluateConnectivity` NOT called on 429 (connectivity state unchanged)
     - [x] Test: `evaluateOutageState` NOT called on 429
     - [x] Test: `lastAttempted` is updated before fetchUsageData, not on credential failure
@@ -112,7 +112,7 @@ so that polling recovers automatically without hammering a rate-limited or degra
     - [x] Test: `retryAfterOverride` cleared when non-429 error follows a 429 (e.g., 429 then networkUnreachable)
     - [x] Test: Mixed errors (429, timeout, 429, timeout) — connectivity counter not reset by 429s
     - [x] Test: Low Power Mode doubles base interval (inject `isLowPowerModeEnabled: { true }`)
-    - [x] Test: Low Power Mode + backoff compounds correctly (60s base -> 120s -> 240s -> cap 300s)
+    - [x] Test: Low Power Mode + backoff compounds correctly (600s base -> 1200s -> 2400s -> cap 3600s)
     - [x] Test: PopoverView shows "Rate limited" message (not overridden to "Unable to reach Claude API")
     - [x] Test: PopoverView shows "Unable to reach Claude API" with `lastAttempted` timestamp when no specific status message set
   - [x] 7.3 Run `xcodegen generate` after any new test files (likely no new files — tests go in existing files)
@@ -233,7 +233,7 @@ case .disconnected:
 ### File Structure Requirements
 
 Files to modify:
-```
+```text
 cc-hdrm/Models/AppError.swift                    # ADD rateLimited(retryAfter:) case + Equatable
 cc-hdrm/Services/APIClient.swift                  # ADD 429 detection + Retry-After parsing + clamping
 cc-hdrm/Services/PollingEngine.swift              # ADD backoff state, isLowPowerModeEnabled injection, computeNextInterval(), rateLimited handler, lastAttempted call
@@ -303,9 +303,9 @@ None
 ### Completion Notes List
 
 - Added `AppError.rateLimited(retryAfter: Int?)` case with `Equatable` support
-- APIClient now detects HTTP 429, parses `Retry-After` header (integer only), clamps negative values to 0
+- APIClient now detects HTTP 429, parses `Retry-After` header (integer only), filters non-positive values to nil
 - PollingEngine gains exponential backoff: `consecutiveFailureCount`, `retryAfterOverride`, injectable `isLowPowerModeEnabled`
-- `computeNextInterval()` implements: base * 2^(failures-1), Retry-After floor, 300s cap, Low Power Mode doubling, exponent capped at 10
+- `computeNextInterval()` implements: base * 2^(failures-1), Retry-After floor, 3600s cap, Low Power Mode doubling, exponent capped at 10
 - 429 handler: sets `.disconnected` + "Rate limited" message, does NOT call `evaluateConnectivity` or `evaluateOutageState`
 - Non-429 errors increment failure count and clear `retryAfterOverride` (stale Retry-After doesn't persist)
 - Success path resets `consecutiveFailureCount` and `retryAfterOverride` to zero/nil

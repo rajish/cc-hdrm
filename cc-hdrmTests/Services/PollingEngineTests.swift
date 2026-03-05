@@ -1287,6 +1287,31 @@ struct PollingEngineBackoffTests {
         #expect(interval == 300.0)
     }
 
+    @Test("single 429 with Retry-After > base uses retryAfter as floor")
+    @MainActor
+    func singleFailureRetryAfterFloor() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(error: AppError.rateLimited(retryAfter: 600))
+        let appState = AppState()
+        let prefs = MockPreferencesManager()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            preferencesManager: prefs,
+            isLowPowerModeEnabled: { false }
+        )
+
+        // 1 failure with Retry-After=600 > base(300) -> uses retryAfter floor
+        await engine.performPollCycle()
+
+        let interval = engine.computeNextInterval()
+        #expect(interval == 600.0)
+    }
+
     @Test("2 consecutive failures doubles interval")
     @MainActor
     func twoFailuresDoubleInterval() async {
