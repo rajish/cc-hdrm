@@ -335,7 +335,7 @@ final class PollingEngine: PollingEngineProtocol {
             // Do NOT clear extra usage — rate limiting is transient, previous data is still valid.
             appState.updateConnectionStatus(.disconnected)
             let retryDetail = retryAfter.map { "Will retry in \($0)s." } ?? "Will retry with backoff."
-            let detail = "\(retryDetail) Consider increasing poll interval in Settings."
+            let detail = "\(retryDetail) Sign out and back in to reset, or increase poll interval in Settings."
             appState.updateStatusMessage(StatusMessage(
                 title: "Rate limited",
                 detail: detail
