@@ -35,11 +35,11 @@ struct PreferencesManagerTests {
         #expect(manager.criticalThreshold == 5.0)
     }
 
-    @Test("Default poll interval is 30 seconds")
+    @Test("Default poll interval is 300 seconds")
     func defaultPollInterval() {
         let (manager, _, suite) = makeManager()
         defer { cleanup(suiteName: suite) }
-        #expect(manager.pollInterval == 30.0)
+        #expect(manager.pollInterval == 300.0)
     }
 
     @Test("Default launchAtLogin is false")
@@ -134,12 +134,12 @@ struct PreferencesManagerTests {
         #expect(manager.pollInterval == 10.0)
     }
 
-    @Test("Poll interval of 500 seconds clamped to 300 seconds")
+    @Test("Poll interval of 2000 seconds clamped to 1800 seconds")
     func pollIntervalClampedToMax() {
         let (manager, defaults, suite) = makeManager()
         defer { cleanup(suiteName: suite) }
-        defaults.set(500.0, forKey: "com.cc-hdrm.pollInterval")
-        #expect(manager.pollInterval == 300.0)
+        defaults.set(2000.0, forKey: "com.cc-hdrm.pollInterval")
+        #expect(manager.pollInterval == 1800.0)
     }
 
     @Test("Poll interval setter clamps to min 10")
@@ -150,12 +150,12 @@ struct PreferencesManagerTests {
         #expect(manager.pollInterval == 10.0)
     }
 
-    @Test("Poll interval setter clamps to max 300")
+    @Test("Poll interval setter clamps to max 1800")
     func pollIntervalSetterClampsMax() {
         let (manager, _, suite) = makeManager()
         defer { cleanup(suiteName: suite) }
-        manager.pollInterval = 500.0
-        #expect(manager.pollInterval == 300.0)
+        manager.pollInterval = 2000.0
+        #expect(manager.pollInterval == 1800.0)
     }
 
     // MARK: - Warning Threshold Clamping (AC #5)

@@ -4,7 +4,7 @@ import Foundation
 enum PreferencesDefaults {
     static let warningThreshold: Double = 20.0
     static let criticalThreshold: Double = 5.0
-    static let pollInterval: TimeInterval = 30
+    static let pollInterval: TimeInterval = 300
     static let launchAtLogin: Bool = false
     static let dataRetentionDays: Int = 365
     static let extraUsageAlertsEnabled: Bool = true

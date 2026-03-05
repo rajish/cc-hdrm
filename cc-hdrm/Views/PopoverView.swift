@@ -175,11 +175,15 @@ struct PopoverView: View {
 
         switch appState.connectionStatus {
         case .disconnected:
-            // Note: lastUpdated tracks last *successful* fetch, not last poll attempt.
-            // AC #1 specifies "Last attempt: Xs ago" wording; this is the best proxy available.
+            // If PollingEngine set a specific status message (e.g., "Rate limited"),
+            // use it instead of the generic "Unable to reach Claude API" override.
+            if let existingMessage = appState.statusMessage {
+                return existingMessage
+            }
+            // Fallback: generic disconnected message with actual last attempt time
             let detail: String
-            if let lastUpdated = appState.lastUpdated {
-                let elapsed = Int(max(0, Date().timeIntervalSince(lastUpdated)))
+            if let lastAttempted = appState.lastAttempted ?? appState.lastUpdated {
+                let elapsed = Int(max(0, Date().timeIntervalSince(lastAttempted)))
                 detail = elapsed < 60 ? "Last attempt: \(elapsed)s ago" : "Last attempt: \(elapsed / 60)m ago"
             } else {
                 detail = "Attempting to connect..."

@@ -50,6 +50,7 @@ final class AppState {
     private(set) var connectionStatus: ConnectionStatus = .disconnected
     private(set) var oauthState: OAuthState = .unauthenticated
     private(set) var lastUpdated: Date?
+    private(set) var lastAttempted: Date?
     private(set) var subscriptionTier: String?
     private(set) var statusMessage: StatusMessage?
     private(set) var availableUpdate: AvailableUpdate?
@@ -321,10 +322,19 @@ final class AppState {
         self.billingCycleDay = day
     }
 
+    /// Updates the timestamp of the most recent API poll attempt.
+    func updateLastAttempted() {
+        self.lastAttempted = Date()
+    }
+
     /// Sets `lastUpdated` to an arbitrary date. Test use only — not available in release builds.
     #if DEBUG
     func setLastUpdated(_ date: Date?) {
         self.lastUpdated = date
+    }
+
+    func setLastAttempted(_ date: Date?) {
+        self.lastAttempted = date
     }
     #endif
 }

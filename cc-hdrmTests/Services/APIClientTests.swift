@@ -123,6 +123,79 @@ struct APIClientTests {
         }
     }
 
+    // MARK: - Rate Limit (429)
+
+    private static func make429Response(retryAfter: String?) -> (Data, URLResponse) {
+        let data = "rate limited".data(using: .utf8)!
+        var headers: [String: String] = [:]
+        if let retryAfter {
+            headers["Retry-After"] = retryAfter
+        }
+        let response = HTTPURLResponse(
+            url: URL(string: "https://api.anthropic.com/api/oauth/usage")!,
+            statusCode: 429,
+            httpVersion: nil,
+            headerFields: headers
+        )!
+        return (data, response)
+    }
+
+    @Test("429 with Retry-After header returns rateLimited with parsed value")
+    func rateLimitedWithRetryAfter() async {
+        let client = APIClient(dataLoader: { _ in Self.make429Response(retryAfter: "30") })
+
+        do {
+            _ = try await client.fetchUsage(token: "test-token")
+            Issue.record("Expected error")
+        } catch let error as AppError {
+            #expect(error == AppError.rateLimited(retryAfter: 30))
+        } catch {
+            Issue.record("Expected AppError but got \(error)")
+        }
+    }
+
+    @Test("429 without Retry-After header returns rateLimited with nil")
+    func rateLimitedWithoutRetryAfter() async {
+        let client = APIClient(dataLoader: { _ in Self.make429Response(retryAfter: nil) })
+
+        do {
+            _ = try await client.fetchUsage(token: "test-token")
+            Issue.record("Expected error")
+        } catch let error as AppError {
+            #expect(error == AppError.rateLimited(retryAfter: nil))
+        } catch {
+            Issue.record("Expected AppError but got \(error)")
+        }
+    }
+
+    @Test("429 with non-integer Retry-After returns rateLimited with nil")
+    func rateLimitedWithHttpDateRetryAfter() async {
+        let client = APIClient(dataLoader: { _ in Self.make429Response(retryAfter: "Thu, 01 Dec 1994 16:00:00 GMT") })
+
+        do {
+            _ = try await client.fetchUsage(token: "test-token")
+            Issue.record("Expected error")
+        } catch let error as AppError {
+            #expect(error == AppError.rateLimited(retryAfter: nil))
+        } catch {
+            Issue.record("Expected AppError but got \(error)")
+        }
+    }
+
+    @Test("429 with negative Retry-After returns rateLimited with 0 (clamped)")
+    func rateLimitedWithNegativeRetryAfter() async {
+        let client = APIClient(dataLoader: { _ in Self.make429Response(retryAfter: "-1") })
+
+        do {
+            _ = try await client.fetchUsage(token: "test-token")
+            Issue.record("Expected error")
+        } catch let error as AppError {
+            #expect(error == AppError.rateLimited(retryAfter: 0))
+        } catch {
+            Issue.record("Expected AppError but got \(error)")
+        }
+    }
+
     // MARK: - Request Validation
 
     @Test("request includes correct headers")

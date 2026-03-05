@@ -170,3 +170,7 @@ development_status:
 
   epic-13: in-progress  # Full Analytics Window — reopened for outage rendering
   13-8-outage-background-rendering: done  # Sprint change proposal 2026-03-02
+
+  # Sprint Change Proposal 2026-03-05 — rate limit handling
+  epic-2: in-progress  # Live Usage Data Pipeline — reopened for backoff
+  2-4-rate-limit-retry-exponential-backoff: done  # Sprint change proposal 2026-03-05

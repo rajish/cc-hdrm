@@ -34,7 +34,7 @@ struct SettingsView: View {
     @State private var extraUsageEnteredAlert: Bool
 
     /// Discrete poll interval options per AC #2.
-    private static let pollIntervalOptions: [TimeInterval] = [10, 15, 30, 60, 120, 300]
+    private static let pollIntervalOptions: [TimeInterval] = [10, 15, 30, 60, 120, 300, 600, 900, 1800]
 
     /// Discrete retention options mapping display labels to day values.
     private static let retentionOptions: [(label: String, days: Int)] = [

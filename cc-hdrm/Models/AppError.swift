@@ -15,6 +15,7 @@ enum AppError: Error, Sendable, Equatable {
     case databaseQueryFailed(underlying: any Error & Sendable)
     case oauthAuthorizationFailed(String)
     case oauthTokenExchangeFailed(underlying: any Error & Sendable)
+    case rateLimited(retryAfter: Int?)
     case oauthCallbackTimeout
 
     static func == (lhs: AppError, rhs: AppError) -> Bool {
@@ -42,6 +43,8 @@ enum AppError: Error, Sendable, Equatable {
             return lMsg == rMsg
         case (.oauthTokenExchangeFailed, .oauthTokenExchangeFailed):
             return true
+        case let (.rateLimited(lRetry), .rateLimited(rRetry)):
+            return lRetry == rRetry
         default:
             return false
         }

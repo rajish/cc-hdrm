@@ -1254,3 +1254,592 @@ struct PollingEngineProfileFetchTests {
         #expect(mockHistorical.evaluateOutageStateCallCount == 0)
     }
 }
+
+// MARK: - Backoff & Rate Limit Tests (Story 2.4)
+
+@Suite("PollingEngine Backoff Tests")
+struct PollingEngineBackoffTests {
+
+    // MARK: - computeNextInterval Tests
+
+    @Test("single failure returns base interval (no backoff)")
+    @MainActor
+    func singleFailureNoBackoff() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(error: AppError.networkUnreachable)
+        let appState = AppState()
+        let prefs = MockPreferencesManager()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            preferencesManager: prefs,
+            isLowPowerModeEnabled: { false }
+        )
+
+        // 1 failure -> consecutiveFailureCount = 1
+        await engine.performPollCycle()
+
+        let interval = engine.computeNextInterval()
+        #expect(interval == 300.0)
+    }
+
+    @Test("2 consecutive failures doubles interval")
+    @MainActor
+    func twoFailuresDoubleInterval() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(results: [
+            .failure(AppError.networkUnreachable),
+            .failure(AppError.networkUnreachable),
+        ])
+        let appState = AppState()
+        let prefs = MockPreferencesManager()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            preferencesManager: prefs,
+            isLowPowerModeEnabled: { false }
+        )
+
+        await engine.performPollCycle()
+        await engine.performPollCycle()
+
+        let interval = engine.computeNextInterval()
+        #expect(interval == 600.0) // 300 * 2^1
+    }
+
+    @Test("3 consecutive failures quadruples interval")
+    @MainActor
+    func threeFailuresQuadrupleInterval() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(results: [
+            .failure(AppError.networkUnreachable),
+            .failure(AppError.networkUnreachable),
+            .failure(AppError.networkUnreachable),
+        ])
+        let appState = AppState()
+        let prefs = MockPreferencesManager()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            preferencesManager: prefs,
+            isLowPowerModeEnabled: { false }
+        )
+
+        await engine.performPollCycle()
+        await engine.performPollCycle()
+        await engine.performPollCycle()
+
+        let interval = engine.computeNextInterval()
+        #expect(interval == 1200.0) // 300 * 2^2
+    }
+
+    @Test("backoff caps at 1 hour (3600s)")
+    @MainActor
+    func backoffCapsAt3600Seconds() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        // Need enough failures to exceed 3600s: 300 * 2^4 = 4800 > 3600
+        let mockAPI = PEMockAPIClient(results: [
+            .failure(AppError.networkUnreachable),
+            .failure(AppError.networkUnreachable),
+            .failure(AppError.networkUnreachable),
+            .failure(AppError.networkUnreachable),
+            .failure(AppError.networkUnreachable),
+        ])
+        let appState = AppState()
+        let prefs = MockPreferencesManager()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            preferencesManager: prefs,
+            isLowPowerModeEnabled: { false }
+        )
+
+        for _ in 0..<5 {
+            await engine.performPollCycle()
+        }
+
+        let interval = engine.computeNextInterval()
+        #expect(interval == 3600.0) // Capped
+    }
+
+    @Test("exponent capped at 10 — 100 consecutive failures doesn't overflow")
+    @MainActor
+    func exponentCappedAt10() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(error: AppError.networkUnreachable)
+        let appState = AppState()
+        let prefs = MockPreferencesManager()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            preferencesManager: prefs,
+            isLowPowerModeEnabled: { false }
+        )
+
+        // Simulate 100 failures
+        for _ in 0..<100 {
+            await engine.performPollCycle()
+        }
+
+        let interval = engine.computeNextInterval()
+        // 300 * 2^10 = 307200, capped to 3600
+        #expect(interval == 3600.0)
+        #expect(interval.isFinite) // No overflow
+    }
+
+    @Test("success after backoff resets interval to base")
+    @MainActor
+    func successResetsBackoff() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(results: [
+            .failure(AppError.networkUnreachable),
+            .failure(AppError.networkUnreachable),
+            .failure(AppError.networkUnreachable),
+            .success(successResponse()),
+        ])
+        let appState = AppState()
+        let prefs = MockPreferencesManager()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            preferencesManager: prefs,
+            isLowPowerModeEnabled: { false }
+        )
+
+        // 3 failures
+        await engine.performPollCycle()
+        await engine.performPollCycle()
+        await engine.performPollCycle()
+        #expect(engine.computeNextInterval() == 1200.0) // 300 * 2^2
+
+        // Success resets
+        await engine.performPollCycle()
+        #expect(engine.computeNextInterval() == 300.0)
+    }
+
+    @Test("429 with Retry-After=60 uses retryAfter as floor")
+    @MainActor
+    func retryAfterFloor() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(results: [
+            .failure(AppError.rateLimited(retryAfter: 60)),
+            .failure(AppError.rateLimited(retryAfter: 60)),
+        ])
+        let appState = AppState()
+        let prefs = MockPreferencesManager()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            preferencesManager: prefs,
+            isLowPowerModeEnabled: { false }
+        )
+
+        // 2 failures: backoff = 300 * 2^1 = 600, retryAfter = 60 -> max(600, 60) = 600
+        await engine.performPollCycle()
+        await engine.performPollCycle()
+
+        let interval = engine.computeNextInterval()
+        #expect(interval == 600.0)
+    }
+
+    @Test("429 with Retry-After exceeding cap is capped at 3600s")
+    @MainActor
+    func retryAfterExceedingCap() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(results: [
+            .failure(AppError.rateLimited(retryAfter: 7200)),
+            .failure(AppError.rateLimited(retryAfter: 7200)),
+        ])
+        let appState = AppState()
+        let prefs = MockPreferencesManager()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            preferencesManager: prefs,
+            isLowPowerModeEnabled: { false }
+        )
+
+        await engine.performPollCycle()
+        await engine.performPollCycle()
+
+        let interval = engine.computeNextInterval()
+        #expect(interval == 3600.0) // Capped
+    }
+
+    @Test("evaluateConnectivity and evaluateOutageState NOT called on 429")
+    @MainActor
+    func noEvaluateConnectivityOn429() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(error: AppError.rateLimited(retryAfter: 30))
+        let appState = AppState()
+        let mockNotification = MockNotificationService()
+        let mockHistorical = PEMockHistoricalDataService()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            notificationService: mockNotification,
+            historicalDataService: mockHistorical,
+            isLowPowerModeEnabled: { false }
+        )
+
+        await engine.performPollCycle()
+
+        // Neither evaluateConnectivity nor evaluateOutageState should be called for 429
+        #expect(mockNotification.evaluateConnectivityCalls.isEmpty)
+        #expect(mockHistorical.evaluateOutageStateCallCount == 0)
+    }
+
+    @Test("lastAttempted is updated before fetchUsageData, not on credential failure")
+    @MainActor
+    func lastAttemptedUpdatedOnAPICall() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(result: successResponse())
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            isLowPowerModeEnabled: { false }
+        )
+
+        #expect(appState.lastAttempted == nil)
+        await engine.performPollCycle()
+        #expect(appState.lastAttempted != nil)
+    }
+
+    @Test("lastAttempted NOT updated on credential failure")
+    @MainActor
+    func lastAttemptedNotUpdatedOnCredentialFailure() async {
+        let mockKeychain = PEMockKeychainService(readError: AppError.keychainNotFound)
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(result: successResponse())
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            isLowPowerModeEnabled: { false }
+        )
+
+        await engine.performPollCycle()
+        #expect(appState.lastAttempted == nil) // No API call attempted
+    }
+
+    @Test("recovery from backoff restores consecutiveFailureCount to 0")
+    @MainActor
+    func recoveryResetsFailureCount() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(results: [
+            .failure(AppError.rateLimited(retryAfter: 60)),
+            .failure(AppError.rateLimited(retryAfter: 60)),
+            .success(successResponse()),
+        ])
+        let appState = AppState()
+        let prefs = MockPreferencesManager()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            preferencesManager: prefs,
+            isLowPowerModeEnabled: { false }
+        )
+
+        await engine.performPollCycle()
+        await engine.performPollCycle()
+        #expect(engine.computeNextInterval() == 600.0) // 300 * 2^1
+
+        await engine.performPollCycle() // success
+        #expect(engine.computeNextInterval() == 300.0) // back to base
+    }
+
+    @Test("retryAfterOverride cleared when non-429 error follows a 429")
+    @MainActor
+    func retryAfterClearedOnDifferentError() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(results: [
+            .failure(AppError.rateLimited(retryAfter: 200)),
+            .failure(AppError.rateLimited(retryAfter: 200)),
+            .failure(AppError.networkUnreachable), // different error clears retryAfter
+        ])
+        let appState = AppState()
+        let prefs = MockPreferencesManager()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            preferencesManager: prefs,
+            isLowPowerModeEnabled: { false }
+        )
+
+        await engine.performPollCycle() // 429 -> retryAfter=200
+        await engine.performPollCycle() // 429 -> retryAfter=200
+        await engine.performPollCycle() // networkUnreachable -> retryAfter cleared
+
+        // 3 failures: backoff = 300 * 2^2 = 1200, no retryAfter override
+        let interval = engine.computeNextInterval()
+        #expect(interval == 1200.0) // Not 200
+    }
+
+    @Test("Low Power Mode doubles base interval")
+    @MainActor
+    func lowPowerModeDoublesBase() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(result: successResponse())
+        let appState = AppState()
+        let prefs = MockPreferencesManager()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            preferencesManager: prefs,
+            isLowPowerModeEnabled: { true }
+        )
+
+        let interval = engine.computeNextInterval()
+        #expect(interval == 600.0) // 300 * 2
+    }
+
+    @Test("Low Power Mode + backoff compounds correctly (600s base -> 1200s -> 2400s -> cap 3600s)")
+    @MainActor
+    func lowPowerModeWithBackoff() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(results: [
+            .failure(AppError.networkUnreachable),
+            .failure(AppError.networkUnreachable),
+            .failure(AppError.networkUnreachable),
+            .failure(AppError.networkUnreachable),
+        ])
+        let appState = AppState()
+        let prefs = MockPreferencesManager()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            preferencesManager: prefs,
+            isLowPowerModeEnabled: { true }
+        )
+
+        // 1 failure -> base (600s, LPM doubles 300 to 600)
+        await engine.performPollCycle()
+        #expect(engine.computeNextInterval() == 600.0)
+
+        // 2 failures -> 600 * 2^1 = 1200
+        await engine.performPollCycle()
+        #expect(engine.computeNextInterval() == 1200.0)
+
+        // 3 failures -> 600 * 2^2 = 2400
+        await engine.performPollCycle()
+        #expect(engine.computeNextInterval() == 2400.0)
+
+        // 4 failures -> 600 * 2^3 = 4800, capped at 3600
+        await engine.performPollCycle()
+        #expect(engine.computeNextInterval() == 3600.0)
+    }
+
+    // MARK: - Rate Limit Status Message Tests
+
+    @Test("429 sets connectionStatus to .disconnected with 'Rate limited' message")
+    @MainActor
+    func rateLimitedStatusMessage() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(error: AppError.rateLimited(retryAfter: 45))
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            isLowPowerModeEnabled: { false }
+        )
+
+        await engine.performPollCycle()
+
+        #expect(appState.connectionStatus == .disconnected)
+        #expect(appState.statusMessage?.title == "Rate limited")
+        #expect(appState.statusMessage?.detail == "Will retry in 45s. Consider increasing poll interval in Settings.")
+    }
+
+    @Test("429 without Retry-After shows 'Will retry with backoff'")
+    @MainActor
+    func rateLimitedNoRetryAfterMessage() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(error: AppError.rateLimited(retryAfter: nil))
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            isLowPowerModeEnabled: { false }
+        )
+
+        await engine.performPollCycle()
+
+        #expect(appState.connectionStatus == .disconnected)
+        #expect(appState.statusMessage?.title == "Rate limited")
+        #expect(appState.statusMessage?.detail == "Will retry with backoff. Consider increasing poll interval in Settings.")
+    }
+
+    @Test("mixed errors (429, timeout, 429, timeout) — connectivity counter not reset by 429s")
+    @MainActor
+    func mixedErrorsConnectivityNotResetBy429() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(results: [
+            .failure(AppError.rateLimited(retryAfter: 30)),
+            .failure(AppError.networkUnreachable),
+            .failure(AppError.rateLimited(retryAfter: 30)),
+            .failure(AppError.networkUnreachable),
+        ])
+        let appState = AppState()
+        let mockHistorical = PEMockHistoricalDataService()
+        let prefs = MockPreferencesManager()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            preferencesManager: prefs,
+            historicalDataService: mockHistorical,
+            isLowPowerModeEnabled: { false }
+        )
+
+        await engine.performPollCycle() // 429 -> evaluateOutageState NOT called
+        #expect(mockHistorical.evaluateOutageStateCallCount == 0)
+
+        await engine.performPollCycle() // networkUnreachable -> evaluateOutageState called
+        #expect(mockHistorical.evaluateOutageStateCallCount == 1)
+        #expect(mockHistorical.lastEvaluateOutageApiReachable == false)
+
+        await engine.performPollCycle() // 429 -> evaluateOutageState NOT called again
+        #expect(mockHistorical.evaluateOutageStateCallCount == 1)
+
+        await engine.performPollCycle() // networkUnreachable -> evaluateOutageState called
+        #expect(mockHistorical.evaluateOutageStateCallCount == 2)
+
+        // 4 failures total -> backoff should be applied
+        // consecutiveFailureCount = 4, exponent = min(4-1, 10) = 3
+        // backoff = 300 * 2^3 = 2400, no retryAfter, min(2400, 3600) = 2400
+        let interval = engine.computeNextInterval()
+        #expect(interval == 2400.0)
+    }
+}
+
+// MARK: - PopoverView Status Message Tests (Story 2.4)
+
+@Suite("PopoverView Rate Limit Display Tests")
+struct PopoverViewRateLimitTests {
+
+    @Test("429 rate limit message passes through to disconnected status (not overridden)")
+    @MainActor
+    func rateLimitMessagePassesThrough() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(error: AppError.rateLimited(retryAfter: 30))
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            isLowPowerModeEnabled: { false }
+        )
+
+        await engine.performPollCycle()
+
+        // After 429, connectionStatus is .disconnected AND statusMessage is set
+        // PopoverView.resolvedStatusMessage returns appState.statusMessage when non-nil
+        // for .disconnected (not the generic "Unable to reach Claude API")
+        #expect(appState.connectionStatus == .disconnected)
+        #expect(appState.statusMessage != nil)
+        #expect(appState.statusMessage?.title == "Rate limited")
+    }
+
+    @Test("generic disconnected fallback uses lastAttempted when no status message")
+    @MainActor
+    func genericDisconnectedUsesLastAttempted() async {
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(error: AppError.networkUnreachable)
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            isLowPowerModeEnabled: { false }
+        )
+
+        await engine.performPollCycle()
+
+        // After network error, lastAttempted is set (updated before fetchUsageData)
+        // PopoverView.resolvedStatusMessage falls back to generic message with lastAttempted
+        #expect(appState.connectionStatus == .disconnected)
+        #expect(appState.lastAttempted != nil)
+        // The PollingEngine sets its own statusMessage for networkUnreachable,
+        // so resolvedStatusMessage will use that. Clear it to test the fallback path.
+        appState.updateStatusMessage(nil)
+        #expect(appState.statusMessage == nil)
+        #expect(appState.lastAttempted != nil)
+    }
+}

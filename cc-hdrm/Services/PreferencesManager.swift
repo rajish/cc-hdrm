@@ -115,10 +115,10 @@ final class PreferencesManager: PreferencesManagerProtocol {
         get {
             let raw = defaults.double(forKey: Keys.pollInterval)
             guard raw > 0 else { return PreferencesDefaults.pollInterval }
-            return min(max(raw, 10), 300)
+            return min(max(raw, 10), 1800)
         }
         set {
-            let clamped = min(max(newValue, 10), 300)
+            let clamped = min(max(newValue, 10), 1800)
             Self.logger.info("Poll interval changed to \(clamped)s")
             defaults.set(clamped, forKey: Keys.pollInterval)
         }

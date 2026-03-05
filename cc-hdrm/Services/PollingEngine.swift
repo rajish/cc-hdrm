@@ -22,6 +22,9 @@ final class PollingEngine: PollingEngineProtocol {
     /// Guards against repeated profile backfill attempts when the profile genuinely has no tier.
     /// Reset on token refresh (natural retry point for tier changes).
     private var hasAttemptedProfileBackfill = false
+    private var consecutiveFailureCount: Int = 0
+    private var retryAfterOverride: Int?
+    private let isLowPowerModeEnabled: () -> Bool
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -39,7 +42,8 @@ final class PollingEngine: PollingEngineProtocol {
         slopeCalculationService: (any SlopeCalculationServiceProtocol)? = nil,
         patternDetector: (any SubscriptionPatternDetectorProtocol)? = nil,
         patternNotificationService: (any PatternNotificationServiceProtocol)? = nil,
-        extraUsageAlertService: (any ExtraUsageAlertServiceProtocol)? = nil
+        extraUsageAlertService: (any ExtraUsageAlertServiceProtocol)? = nil,
+        isLowPowerModeEnabled: @escaping () -> Bool = { ProcessInfo.processInfo.isLowPowerModeEnabled }
     ) {
         self.keychainService = keychainService
         self.tokenRefreshService = tokenRefreshService
@@ -52,6 +56,7 @@ final class PollingEngine: PollingEngineProtocol {
         self.patternDetector = patternDetector
         self.patternNotificationService = patternNotificationService
         self.extraUsageAlertService = extraUsageAlertService
+        self.isLowPowerModeEnabled = isLowPowerModeEnabled
     }
 
     func start() async {
@@ -60,7 +65,7 @@ final class PollingEngine: PollingEngineProtocol {
 
         pollingTask = Task { [weak self] in
             while !Task.isCancelled {
-                let interval = self?.preferencesManager.pollInterval ?? PreferencesDefaults.pollInterval
+                let interval = self?.computeNextInterval() ?? PreferencesDefaults.pollInterval
                 try? await Task.sleep(for: .seconds(interval))
                 guard !Task.isCancelled else { break }
                 Self.logger.debug("Poll cycle triggered")
@@ -80,6 +85,24 @@ final class PollingEngine: PollingEngineProtocol {
 
     // MARK: - Internal (exposed for testing)
 
+    /// Computes the next polling interval with exponential backoff on consecutive failures.
+    /// Low Power Mode doubles the base interval. Retry-After from 429 acts as a floor.
+    /// Capped at 3600 seconds (1 hour).
+    func computeNextInterval() -> TimeInterval {
+        var base = preferencesManager.pollInterval
+        if isLowPowerModeEnabled() {
+            base *= 2
+        }
+        guard consecutiveFailureCount > 1 else { return base }
+
+        let exponent = min(consecutiveFailureCount - 1, 10)
+        let backoff = base * pow(2.0, Double(exponent))
+        let retryFloor = retryAfterOverride.map { TimeInterval(max(0, $0)) } ?? 0
+        let interval = min(max(backoff, retryFloor), 3600)
+        Self.logger.info("Backoff interval: \(interval)s (failures: \(self.consecutiveFailureCount), retryAfter: \(self.retryAfterOverride.map(String.init) ?? "nil"))")
+        return interval
+    }
+
     /// Executes a single poll cycle: read credentials → fetch usage → handle 401 with refresh.
     func performPollCycle() async {
         do {
@@ -90,6 +113,7 @@ final class PollingEngine: PollingEngineProtocol {
             }
 
             Self.logger.debug("Credentials loaded — fetching usage data")
+            appState.updateLastAttempted()
             await fetchUsageData(credentials: credentials)
         } catch {
             handleCredentialError(error)
@@ -214,6 +238,8 @@ final class PollingEngine: PollingEngineProtocol {
                 )
             }
 
+            consecutiveFailureCount = 0
+            retryAfterOverride = nil
             appState.updateConnectionStatus(.connected)
             appState.updateStatusMessage(nil)
             await notificationService?.evaluateConnectivity(apiReachable: true)
@@ -288,6 +314,8 @@ final class PollingEngine: PollingEngineProtocol {
             await handleAPIError(error, credentials: credentials)
         } catch {
             Self.logger.error("Unexpected non-AppError during usage fetch: \(error.localizedDescription)")
+            consecutiveFailureCount += 1
+            retryAfterOverride = nil
             appState.updateConnectionStatus(.disconnected)
             appState.updateStatusMessage(StatusMessage(
                 title: "Unexpected error",
@@ -300,11 +328,28 @@ final class PollingEngine: PollingEngineProtocol {
 
     private func handleAPIError(_ error: AppError, credentials: KeychainCredentials) async {
         switch error {
+        case .rateLimited(let retryAfter):
+            Self.logger.warning("Rate limited — retry after: \(retryAfter.map(String.init) ?? "unspecified") seconds")
+            consecutiveFailureCount += 1
+            retryAfterOverride = retryAfter
+            // Do NOT clear extra usage — rate limiting is transient, previous data is still valid.
+            appState.updateConnectionStatus(.disconnected)
+            let retryDetail = retryAfter.map { "Will retry in \($0)s." } ?? "Will retry with backoff."
+            let detail = "\(retryDetail) Consider increasing poll interval in Settings."
+            appState.updateStatusMessage(StatusMessage(
+                title: "Rate limited",
+                detail: detail
+            ))
+            // Do NOT call evaluateConnectivity — 429 is ambiguous (API responded but is
+            // rejecting requests). Leave connectivity state unchanged.
+            // Do NOT call evaluateOutageState — 429 is not an outage.
         case .apiError(statusCode: 401, _):
             Self.logger.info("API returned 401 — triggering token refresh")
             await attemptTokenRefresh(credentials: credentials)
         case .networkUnreachable:
             Self.logger.error("Network unreachable during usage fetch")
+            consecutiveFailureCount += 1
+            retryAfterOverride = nil
             appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
             appState.updateConnectionStatus(.disconnected)
             appState.updateStatusMessage(StatusMessage(
@@ -315,6 +360,8 @@ final class PollingEngine: PollingEngineProtocol {
             await historicalDataService?.evaluateOutageState(apiReachable: false, failureReason: "networkUnreachable")
         case .apiError(let statusCode, let body):
             Self.logger.error("API error \(statusCode): \(body ?? "no body")")
+            consecutiveFailureCount += 1
+            retryAfterOverride = nil
             appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
             appState.updateConnectionStatus(.disconnected)
             appState.updateStatusMessage(StatusMessage(
@@ -325,6 +372,8 @@ final class PollingEngine: PollingEngineProtocol {
             await historicalDataService?.evaluateOutageState(apiReachable: false, failureReason: "httpError:\(statusCode)")
         case .parseError:
             Self.logger.error("Failed to parse API response")
+            consecutiveFailureCount += 1
+            retryAfterOverride = nil
             appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
             appState.updateConnectionStatus(.disconnected)
             appState.updateStatusMessage(StatusMessage(
@@ -335,6 +384,8 @@ final class PollingEngine: PollingEngineProtocol {
             await historicalDataService?.evaluateOutageState(apiReachable: false, failureReason: "parseError")
         default:
             Self.logger.error("Unexpected error during usage fetch: \(String(describing: error))")
+            consecutiveFailureCount += 1
+            retryAfterOverride = nil
             appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)
             appState.updateConnectionStatus(.disconnected)
             appState.updateStatusMessage(StatusMessage(
