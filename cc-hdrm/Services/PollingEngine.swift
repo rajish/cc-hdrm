@@ -338,7 +338,7 @@ final class PollingEngine: PollingEngineProtocol {
             appState.updateConnectionStatus(.disconnected)
             let cappedRetryAfter = retryAfter.map { min($0, 3600) }
             let retryDetail = cappedRetryAfter.map { "Retry in \($0)s." } ?? "Will retry with backoff."
-            let detail = "\(retryDetail) Re-sign-in resets immediately."
+            let detail = "\(retryDetail) Try re-sign-in or longer poll interval."
             appState.updateStatusMessage(StatusMessage(
                 title: "Rate limited",
                 detail: detail

@@ -1736,7 +1736,7 @@ struct PollingEngineBackoffTests {
 
         #expect(appState.connectionStatus == .disconnected)
         #expect(appState.statusMessage?.title == "Rate limited")
-        #expect(appState.statusMessage?.detail == "Retry in 45s. Re-sign-in resets immediately.")
+        #expect(appState.statusMessage?.detail == "Retry in 45s. Try re-sign-in or longer poll interval.")
     }
 
     @Test("429 without Retry-After shows 'Will retry with backoff'")
@@ -1759,7 +1759,7 @@ struct PollingEngineBackoffTests {
 
         #expect(appState.connectionStatus == .disconnected)
         #expect(appState.statusMessage?.title == "Rate limited")
-        #expect(appState.statusMessage?.detail == "Will retry with backoff. Re-sign-in resets immediately.")
+        #expect(appState.statusMessage?.detail == "Will retry with backoff. Try re-sign-in or longer poll interval.")
     }
 
     @Test("mixed errors (429, timeout, 429, timeout) — connectivity counter not reset by 429s")
