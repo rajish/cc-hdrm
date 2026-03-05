@@ -182,7 +182,7 @@ struct APIClientTests {
         }
     }
 
-    @Test("429 with negative Retry-After returns rateLimited with 0 (clamped)")
+    @Test("429 with negative Retry-After returns rateLimited with nil (non-positive treated as absent)")
     func rateLimitedWithNegativeRetryAfter() async {
         let client = APIClient(dataLoader: { _ in Self.make429Response(retryAfter: "-1") })
 
@@ -190,7 +190,21 @@ struct APIClientTests {
             _ = try await client.fetchUsage(token: "test-token")
             Issue.record("Expected error")
         } catch let error as AppError {
-            #expect(error == AppError.rateLimited(retryAfter: 0))
+            #expect(error == AppError.rateLimited(retryAfter: nil))
+        } catch {
+            Issue.record("Expected AppError but got \(error)")
+        }
+    }
+
+    @Test("429 with Retry-After: 0 returns rateLimited with nil (zero treated as absent)")
+    func rateLimitedWithZeroRetryAfter() async {
+        let client = APIClient(dataLoader: { _ in Self.make429Response(retryAfter: "0") })
+
+        do {
+            _ = try await client.fetchUsage(token: "test-token")
+            Issue.record("Expected error")
+        } catch let error as AppError {
+            #expect(error == AppError.rateLimited(retryAfter: nil))
         } catch {
             Issue.record("Expected AppError but got \(error)")
         }

@@ -34,7 +34,7 @@ so that polling recovers automatically without hammering a rate-limited or degra
 - [x] Task 2: Parse `Retry-After` header in APIClient (AC: 2)
   - [x] 2.1 In `cc-hdrm/Services/APIClient.swift` `fetch` method: before the `guard httpResponse.statusCode == 200` check, add a 429-specific branch that extracts `Retry-After` header via `httpResponse.value(forHTTPHeaderField: "Retry-After")`, parses as `Int`, and throws `AppError.rateLimited(retryAfter:)`
   - [x] 2.2 If `Retry-After` header is missing or not a valid integer (including HTTP-date format), throw `AppError.rateLimited(retryAfter: nil)`
-  - [x] 2.3 Clamp parsed value: `max(0, retryAfter)` — reject negative values from malformed headers
+  - [x] 2.3 Filter non-positive values: `Retry-After` of 0 or negative → `nil` (treated as absent — "retry now" is not a meaningful delay)
   - [x] 2.4 Log the rate limit event: `Self.logger.warning("Rate limited by API — Retry-After: \(retryAfter ?? "not specified")")`
 
 - [x] Task 3: Add backoff state to PollingEngine (AC: 3, 5, 6)

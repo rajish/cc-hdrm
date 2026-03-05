@@ -75,7 +75,7 @@ struct APIClient: APIClientProtocol, @unchecked Sendable {
         if httpResponse.statusCode == 429 {
             let retryAfter = httpResponse.value(forHTTPHeaderField: "Retry-After")
                 .flatMap(Int.init)
-                .map { max(0, $0) }
+                .flatMap { $0 > 0 ? $0 : nil }
             Self.logger.warning("Rate limited — Retry-After: \(retryAfter.map(String.init) ?? "not specified")")
             throw AppError.rateLimited(retryAfter: retryAfter)
         }
