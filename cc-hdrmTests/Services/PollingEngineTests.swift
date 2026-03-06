@@ -1895,7 +1895,7 @@ struct PollingEngineRestartTests {
     func restartPollingCancelsOldTask() async {
         let appState = AppState()
         let mockKeychain = PEMockKeychainService(credentials: KeychainCredentials(
-            accessToken: "tok", refreshToken: nil, expiresAt: Date().addingTimeInterval(3600).timeIntervalSince1970,
+            accessToken: "tok", refreshToken: nil, expiresAt: (Date().timeIntervalSince1970 + 3600) * 1000,
             subscriptionType: nil, rateLimitTier: nil, scopes: nil
         ))
         let mockAPI = PEMockAPIClient(result: UsageResponse(
@@ -1935,7 +1935,7 @@ struct PollingEngineRestartTests {
 
         let engine = PollingEngine(
             keychainService: PEMockKeychainService(credentials: KeychainCredentials(
-                accessToken: "tok", refreshToken: nil, expiresAt: Date().addingTimeInterval(3600).timeIntervalSince1970,
+                accessToken: "tok", refreshToken: nil, expiresAt: (Date().timeIntervalSince1970 + 3600) * 1000,
                 subscriptionType: nil, rateLimitTier: nil, scopes: nil
             )),
             tokenRefreshService: PEMockTokenRefreshService(),
@@ -1979,7 +1979,7 @@ struct PollingEngineRestartTests {
         let mockAPI = PEMockAPIClient(error: AppError.networkUnreachable)
         let engine = PollingEngine(
             keychainService: PEMockKeychainService(credentials: KeychainCredentials(
-                accessToken: "tok", refreshToken: nil, expiresAt: Date().addingTimeInterval(3600).timeIntervalSince1970,
+                accessToken: "tok", refreshToken: nil, expiresAt: (Date().timeIntervalSince1970 + 3600) * 1000,
                 subscriptionType: nil, rateLimitTier: nil, scopes: nil
             )),
             tokenRefreshService: PEMockTokenRefreshService(),
