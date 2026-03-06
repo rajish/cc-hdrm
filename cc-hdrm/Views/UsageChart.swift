@@ -17,6 +17,8 @@ struct UsageChart: View {
     let hasAnyHistoricalData: Bool
     /// API outage periods to render as background bands in charts.
     var outagePeriods: [OutagePeriod] = []
+    /// Poll interval in seconds, used for gap detection threshold in 24h chart.
+    var pollInterval: TimeInterval = 30
 
     /// Total data points across both data sources.
     private var dataPointCount: Int {
@@ -53,7 +55,8 @@ struct UsageChart: View {
                 polls: pollData,
                 fiveHourVisible: fiveHourVisible,
                 sevenDayVisible: sevenDayVisible,
-                outagePeriods: outagePeriods
+                outagePeriods: outagePeriods,
+                pollInterval: pollInterval
             )
         } else {
             BarChartView(
