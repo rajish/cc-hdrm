@@ -13,6 +13,7 @@ struct GearMenuView: View {
     var historicalDataService: (any HistoricalDataServiceProtocol)?
     var appState: AppState?
     var onThresholdChange: (() -> Void)?
+    var onPollIntervalChange: (() -> Void)?
     var onClearHistory: (() -> Void)?
     var onSignOut: (() -> Void)?
     @State private var showingSettings = false
@@ -43,7 +44,7 @@ struct GearMenuView: View {
         .popover(isPresented: $showingSettings, arrowEdge: .bottom) {
             SettingsView(preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, historicalDataService: historicalDataService, appState: appState, onDone: {
                 showingSettings = false
-            }, onThresholdChange: onThresholdChange, onClearHistory: onClearHistory)
+            }, onThresholdChange: onThresholdChange, onPollIntervalChange: onPollIntervalChange, onClearHistory: onClearHistory)
             .onDisappear {
                 // Close the parent NSPopover when settings dismisses for any reason
                 // (Done button, Esc, or click-outside)

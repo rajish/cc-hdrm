@@ -5,4 +5,7 @@ protocol PollingEngineProtocol: Sendable {
     func start() async
     /// Stops the polling loop by cancelling the internal task.
     func stop()
+    /// Restarts the polling loop with the current poll interval.
+    /// Cancels the in-flight sleep and starts a new loop WITHOUT an immediate poll cycle.
+    func restartPolling()
 }

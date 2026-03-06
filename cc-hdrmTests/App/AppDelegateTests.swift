@@ -9,6 +9,7 @@ import Testing
 private final class MockPollingEngine: PollingEngineProtocol {
     var startCallCount = 0
     var stopCallCount = 0
+    var restartPollingCallCount = 0
 
     func start() async {
         startCallCount += 1
@@ -16,6 +17,10 @@ private final class MockPollingEngine: PollingEngineProtocol {
 
     func stop() {
         stopCallCount += 1
+    }
+
+    func restartPolling() {
+        restartPollingCallCount += 1
     }
 }
 
