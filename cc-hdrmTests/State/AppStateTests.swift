@@ -661,6 +661,73 @@ struct AppStateTests {
         #expect(AppState.sparklineMinDataPoints == 2)
     }
 
+    // MARK: - Last Poll Timestamp Tests (Story 13.9)
+
+    @Test("lastPollTimestamp starts as nil")
+    @MainActor
+    func lastPollTimestampInitiallyNil() {
+        let state = AppState()
+        #expect(state.lastPollTimestamp == nil)
+    }
+
+    @Test("lastPollTimestamp is set on successful poll (updateWindows)")
+    @MainActor
+    func lastPollTimestampSetOnSuccess() {
+        let state = AppState()
+        #expect(state.lastPollTimestamp == nil)
+
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 50.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 30.0, resetsAt: nil)
+        )
+
+        #expect(state.lastPollTimestamp != nil)
+    }
+
+    @Test("lastPollTimestamp equals lastUpdated after updateWindows")
+    @MainActor
+    func lastPollTimestampMatchesLastUpdated() {
+        let state = AppState()
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 50.0, resetsAt: nil),
+            sevenDay: nil
+        )
+        #expect(state.lastPollTimestamp == state.lastUpdated)
+    }
+
+    @Test("lastPollTimestamp is NOT set by connection status changes (failed polls)")
+    @MainActor
+    func lastPollTimestampNotSetOnFailure() {
+        let state = AppState()
+
+        // Simulate failed poll — only connection status and status message change
+        state.updateConnectionStatus(.disconnected)
+        state.updateStatusMessage(StatusMessage(title: "Error", detail: "Network"))
+        state.updateLastAttempted()
+
+        #expect(state.lastPollTimestamp == nil, "Failed polls must not set lastPollTimestamp")
+    }
+
+    @Test("lastPollTimestamp advances on each successful poll")
+    @MainActor
+    func lastPollTimestampAdvancesOnEachPoll() {
+        let state = AppState()
+
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 50.0, resetsAt: nil),
+            sevenDay: nil
+        )
+        let firstTimestamp = state.lastPollTimestamp
+
+        let fiveHour = WindowState(utilization: 55.0, resetsAt: nil)
+        state.updateWindows(fiveHour: fiveHour, sevenDay: nil)
+        let secondTimestamp = state.lastPollTimestamp
+
+        #expect(firstTimestamp != nil)
+        #expect(secondTimestamp != nil)
+        #expect(secondTimestamp! >= firstTimestamp!)
+    }
+
     // MARK: - Analytics Window State Tests (Story 12.3)
 
     @Test("isAnalyticsWindowOpen starts as false")

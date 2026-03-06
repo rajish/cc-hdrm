@@ -71,6 +71,7 @@ struct AnalyticsView: View {
     @State private var patternFindings: [PatternFinding] = []
     @State private var tierRecommendation: TierRecommendation?
     @State private var cycleUtilizations: [CycleUtilization] = []
+    @State private var pollReloadTask: Task<Void, Never>?
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -99,11 +100,19 @@ struct AnalyticsView: View {
             selectedTimeRange = appState.requestedAnalyticsTimeRange
         }
         .task(id: selectedTimeRange) {
+            pollReloadTask?.cancel()
             await loadData()
             await loadTierRecommendation()
         }
         .onChange(of: appState.requestedAnalyticsTimeRange) { _, newRange in
             selectedTimeRange = newRange
+        }
+        .onChange(of: appState.lastPollTimestamp) {
+            guard !isLoading else { return }
+            pollReloadTask?.cancel()
+            pollReloadTask = Task {
+                await loadData()
+            }
         }
         .task {
             await loadPatternFindings()

@@ -70,6 +70,10 @@ final class AppState {
     /// Mirrored from PreferencesManager so SwiftUI views can observe changes reactively.
     private(set) var billingCycleDay: Int?
 
+    /// Timestamp of the last successful poll completion.
+    /// Observed by AnalyticsView to trigger chart data reload.
+    private(set) var lastPollTimestamp: Date?
+
     /// Whether the analytics window is currently open.
     /// Updated by AnalyticsWindow on window open/close.
     private(set) var isAnalyticsWindowOpen: Bool = false
@@ -250,6 +254,7 @@ final class AppState {
         self.fiveHour = fiveHour
         self.sevenDay = sevenDay
         self.lastUpdated = Date()
+        self.lastPollTimestamp = self.lastUpdated
     }
 
     /// Updates the connection status.
