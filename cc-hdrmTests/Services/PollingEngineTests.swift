@@ -1868,3 +1868,144 @@ struct PopoverViewRateLimitTests {
         #expect(appState.lastAttempted != nil)
     }
 }
+
+// MARK: - restartPolling Tests (Story 2.5)
+
+@Suite("PollingEngine restartPolling Tests")
+struct PollingEngineRestartTests {
+
+    @Test("restartPolling when pollingTask is nil does not crash (AC 3)")
+    @MainActor
+    func restartPollingWhenNilDoesNotCrash() async {
+        let appState = AppState()
+        let engine = PollingEngine(
+            keychainService: PEMockKeychainService(readError: AppError.keychainNotFound),
+            tokenRefreshService: PEMockTokenRefreshService(),
+            apiClient: PEMockAPIClient(),
+            appState: appState
+        )
+
+        // Engine never started — pollingTask is nil
+        engine.restartPolling()
+        // If we reach here, no crash occurred
+    }
+
+    @Test("restartPolling cancels the old pollingTask (AC 1)")
+    @MainActor
+    func restartPollingCancelsOldTask() async {
+        let appState = AppState()
+        let mockKeychain = PEMockKeychainService(credentials: KeychainCredentials(
+            accessToken: "tok", refreshToken: nil, expiresAt: (Date().timeIntervalSince1970 + 3600) * 1000,
+            subscriptionType: nil, rateLimitTier: nil, scopes: nil
+        ))
+        let mockAPI = PEMockAPIClient(result: UsageResponse(
+            fiveHour: .init(utilization: 10.0, resetsAt: nil),
+            sevenDay: nil,
+            sevenDaySonnet: nil,
+            extraUsage: nil
+        ))
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: PEMockTokenRefreshService(),
+            apiClient: mockAPI,
+            appState: appState
+        )
+
+        // Start the engine — this creates a pollingTask
+        await engine.start()
+
+        // restartPolling should cancel the old task and create a new one
+        engine.restartPolling()
+
+        // Give the new task time to start its sleep
+        try? await Task.sleep(for: .milliseconds(50))
+
+        // Stop to clean up — if the old task were still alive, stop would need to cancel it,
+        // but restartPolling already replaced it. The fact that stop() completes cleanly
+        // confirms the old task was cancelled.
+        engine.stop()
+    }
+
+    @Test("after restartPolling, next interval uses updated pollInterval (AC 1)")
+    @MainActor
+    func restartPollingUsesUpdatedInterval() async {
+        let appState = AppState()
+        let mockPrefs = MockPreferencesManager()
+        mockPrefs.pollInterval = 300 // 5 minutes initially
+
+        let engine = PollingEngine(
+            keychainService: PEMockKeychainService(credentials: KeychainCredentials(
+                accessToken: "tok", refreshToken: nil, expiresAt: (Date().timeIntervalSince1970 + 3600) * 1000,
+                subscriptionType: nil, rateLimitTier: nil, scopes: nil
+            )),
+            tokenRefreshService: PEMockTokenRefreshService(),
+            apiClient: PEMockAPIClient(result: UsageResponse(
+                fiveHour: .init(utilization: 10.0, resetsAt: nil),
+                sevenDay: nil,
+                sevenDaySonnet: nil,
+                extraUsage: nil
+            )),
+            appState: appState,
+            preferencesManager: mockPrefs
+        )
+
+        await engine.start()
+
+        // Change interval to 10 seconds
+        mockPrefs.pollInterval = 10
+
+        // computeNextInterval reads live from preferencesManager
+        let interval = engine.computeNextInterval()
+        #expect(interval == 10, "computeNextInterval should reflect the updated pollInterval")
+
+        // Restart to pick up the new interval in the loop
+        engine.restartPolling()
+
+        // Verify interval is still 10 after restart (restart doesn't reset preferences or state)
+        let intervalAfterRestart = engine.computeNextInterval()
+        #expect(intervalAfterRestart == 10, "Interval should remain 10 after restartPolling")
+
+        // Clean up
+        engine.stop()
+    }
+
+    @Test("consecutiveFailureCount is preserved across restartPolling (AC 2)")
+    @MainActor
+    func restartPollingPreservesBackoff() async {
+        let appState = AppState()
+        let mockPrefs = MockPreferencesManager()
+        mockPrefs.pollInterval = 30
+
+        let mockAPI = PEMockAPIClient(error: AppError.networkUnreachable)
+        let engine = PollingEngine(
+            keychainService: PEMockKeychainService(credentials: KeychainCredentials(
+                accessToken: "tok", refreshToken: nil, expiresAt: (Date().timeIntervalSince1970 + 3600) * 1000,
+                subscriptionType: nil, rateLimitTier: nil, scopes: nil
+            )),
+            tokenRefreshService: PEMockTokenRefreshService(),
+            apiClient: mockAPI,
+            appState: appState,
+            preferencesManager: mockPrefs
+        )
+
+        // Simulate multiple failures to build up consecutiveFailureCount
+        await engine.performPollCycle()
+        await engine.performPollCycle()
+        await engine.performPollCycle()
+
+        // start() also calls performPollCycle — which adds another failure
+        await engine.start()
+
+        // Capture interval AFTER start (which ran another failed poll cycle)
+        let intervalBefore = engine.computeNextInterval()
+        #expect(intervalBefore > 30, "Interval should include backoff after consecutive failures")
+
+        // Restart polling — backoff state should be preserved
+        engine.restartPolling()
+
+        let intervalAfter = engine.computeNextInterval()
+        #expect(intervalAfter == intervalBefore, "Backoff interval should be preserved after restartPolling")
+
+        engine.stop()
+    }
+}

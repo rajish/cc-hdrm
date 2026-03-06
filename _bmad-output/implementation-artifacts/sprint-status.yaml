@@ -173,3 +173,6 @@ development_status:
 
   # Sprint Change Proposal 2026-03-05 — rate limit handling
   2-4-rate-limit-retry-exponential-backoff: done  # Sprint change proposal 2026-03-05
+
+  # Bug fix — poll interval not applied immediately
+  2-5-poll-interval-hot-reload: done  # Bug: changing poll interval doesn't interrupt current sleep

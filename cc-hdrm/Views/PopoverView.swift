@@ -8,6 +8,7 @@ struct PopoverView: View {
     let launchAtLoginService: LaunchAtLoginServiceProtocol
     var historicalDataService: (any HistoricalDataServiceProtocol)?
     var onThresholdChange: (() -> Void)?
+    var onPollIntervalChange: (() -> Void)?
     var onClearHistory: (() -> Void)?
     var onSignIn: (() -> Void)?
     var onSignOut: (() -> Void)?
@@ -72,7 +73,7 @@ struct PopoverView: View {
 
         HStack {
             Spacer()
-            GearMenuView(preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, historicalDataService: historicalDataService, appState: appState, onThresholdChange: onThresholdChange, onClearHistory: onClearHistory, onSignOut: onSignOut)
+            GearMenuView(preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, historicalDataService: historicalDataService, appState: appState, onThresholdChange: onThresholdChange, onPollIntervalChange: onPollIntervalChange, onClearHistory: onClearHistory, onSignOut: onSignOut)
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
@@ -98,7 +99,7 @@ struct PopoverView: View {
 
         HStack {
             Spacer()
-            GearMenuView(preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, historicalDataService: historicalDataService, appState: appState, onThresholdChange: onThresholdChange, onClearHistory: onClearHistory, onSignOut: onSignOut)
+            GearMenuView(preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, historicalDataService: historicalDataService, appState: appState, onThresholdChange: onThresholdChange, onPollIntervalChange: onPollIntervalChange, onClearHistory: onClearHistory, onSignOut: onSignOut)
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
@@ -163,7 +164,7 @@ struct PopoverView: View {
 
         Divider()
 
-        PopoverFooterView(appState: appState, preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, historicalDataService: historicalDataService, onThresholdChange: onThresholdChange, onClearHistory: onClearHistory, onSignOut: onSignOut)
+        PopoverFooterView(appState: appState, preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, historicalDataService: historicalDataService, onThresholdChange: onThresholdChange, onPollIntervalChange: onPollIntervalChange, onClearHistory: onClearHistory, onSignOut: onSignOut)
             .padding(.horizontal)
             .padding(.vertical, 8)
     }

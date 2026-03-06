@@ -176,6 +176,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor in
                 await self.notificationService?.reevaluateThresholds()
             }
+        }, onPollIntervalChange: { [weak self] in
+            self?.pollingEngine?.restartPolling()
         }, onClearHistory: { [weak state] in
             state?.updateSparklineData([])
             AnalyticsWindow.shared.close()

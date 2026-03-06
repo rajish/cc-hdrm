@@ -62,7 +62,35 @@ final class PollingEngine: PollingEngineProtocol {
     func start() async {
         Self.logger.info("Polling engine starting — performing initial fetch")
         await performPollCycle()
+        startPollingLoop()
+    }
 
+    func stop() {
+        Self.logger.info("Polling engine stopping")
+        pollingTask?.cancel()
+        pollingTask = nil
+        sparklineRefreshTask?.cancel()
+        sparklineRefreshTask = nil
+    }
+
+    func restartPolling() {
+        // Guard: do nothing if polling isn't running (AC 3 — no credentials)
+        guard pollingTask != nil else {
+            Self.logger.info("restartPolling called but no active polling task — ignoring")
+            return
+        }
+
+        let nextInterval = computeNextInterval()
+        Self.logger.info("Restarting polling loop — next interval: \(nextInterval)s")
+        pollingTask?.cancel()
+        startPollingLoop()
+    }
+
+    // MARK: - Private Helpers
+
+    /// Creates and assigns the polling loop task. Used by both `start()` and `restartPolling()`
+    /// to avoid duplicating the while-loop structure.
+    private func startPollingLoop() {
         pollingTask = Task { [weak self] in
             while !Task.isCancelled {
                 let interval = self?.computeNextInterval() ?? PreferencesDefaults.pollInterval
@@ -73,14 +101,6 @@ final class PollingEngine: PollingEngineProtocol {
             }
             Self.logger.info("Polling engine stopped")
         }
-    }
-
-    func stop() {
-        Self.logger.info("Polling engine stopping")
-        pollingTask?.cancel()
-        pollingTask = nil
-        sparklineRefreshTask?.cancel()
-        sparklineRefreshTask = nil
     }
 
     // MARK: - Internal (exposed for testing)

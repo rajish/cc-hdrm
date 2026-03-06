@@ -9,6 +9,7 @@ struct SettingsView: View {
     let appState: AppState?
     var onDone: (() -> Void)?
     var onThresholdChange: (() -> Void)?
+    var onPollIntervalChange: (() -> Void)?
     var onClearHistory: (() -> Void)?
 
     @State private var warningThreshold: Double
@@ -52,13 +53,14 @@ struct SettingsView: View {
     /// Warning threshold for database size (500 MB).
     private static let databaseSizeWarningThreshold: Int64 = 524_288_000
 
-    init(preferencesManager: PreferencesManagerProtocol, launchAtLoginService: LaunchAtLoginServiceProtocol, historicalDataService: (any HistoricalDataServiceProtocol)? = nil, appState: AppState? = nil, onDone: (() -> Void)? = nil, onThresholdChange: (() -> Void)? = nil, onClearHistory: (() -> Void)? = nil) {
+    init(preferencesManager: PreferencesManagerProtocol, launchAtLoginService: LaunchAtLoginServiceProtocol, historicalDataService: (any HistoricalDataServiceProtocol)? = nil, appState: AppState? = nil, onDone: (() -> Void)? = nil, onThresholdChange: (() -> Void)? = nil, onPollIntervalChange: (() -> Void)? = nil, onClearHistory: (() -> Void)? = nil) {
         self.preferencesManager = preferencesManager
         self.launchAtLoginService = launchAtLoginService
         self.historicalDataService = historicalDataService
         self.appState = appState
         self.onDone = onDone
         self.onThresholdChange = onThresholdChange
+        self.onPollIntervalChange = onPollIntervalChange
         self.onClearHistory = onClearHistory
         _warningThreshold = State(initialValue: preferencesManager.warningThreshold)
         _criticalThreshold = State(initialValue: preferencesManager.criticalThreshold)
@@ -207,6 +209,7 @@ struct SettingsView: View {
                     preferencesManager.pollInterval = newValue
                     pollInterval = preferencesManager.pollInterval
                     isUpdating = false
+                    onPollIntervalChange?()
                 }
                 .accessibilityLabel("Poll interval, \(Self.formatInterval(pollInterval))")
             }
