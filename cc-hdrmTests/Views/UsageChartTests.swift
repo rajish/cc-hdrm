@@ -501,14 +501,14 @@ struct UsageChartTests {
         #expect(hasSteep)
     }
 
-    @Test("Gap in poll data creates separate segments")
+    @Test("Gap in poll data creates separate segments (gap must exceed 60-min threshold)")
     func gapSegmentation() {
         let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
-        let gapMs: Int64 = 10 * 60 * 1000 // 10 minute gap (exceeds 5min threshold)
+        let gapMs: Int64 = 90 * 60 * 1000 // 90 minute gap (exceeds 60-min threshold)
         let polls = [
             UsagePoll(id: 1, timestamp: nowMs - gapMs - 60_000, fiveHourUtil: 30.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
             UsagePoll(id: 2, timestamp: nowMs - gapMs, fiveHourUtil: 35.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
-            // 10 minute gap here
+            // 90 minute gap here
             UsagePoll(id: 3, timestamp: nowMs - 60_000, fiveHourUtil: 10.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
             UsagePoll(id: 4, timestamp: nowMs, fiveHourUtil: 15.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil)
         ]
@@ -521,6 +521,19 @@ struct UsageChartTests {
         // After gap, segment increments
         #expect(points[2].segment == 1)
         #expect(points[3].segment == 1)
+    }
+
+    @Test("makeChartPoints boundary — delta exactly at threshold is NOT a gap (strict >)")
+    func makeChartPointsBoundaryExactThreshold() {
+        let threshold = SparklinePathBuilder.gapThresholdMs
+        let polls = [
+            UsagePoll(id: 1, timestamp: 0, fiveHourUtil: 20.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
+            UsagePoll(id: 2, timestamp: threshold, fiveHourUtil: 25.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
+        ]
+        let points = StepAreaChartView.makeChartPoints(from: polls)
+        #expect(points.count == 2)
+        #expect(points[0].segment == points[1].segment,
+                "Delta exactly equal to threshold should NOT create a new segment (comparison is strict >)")
     }
 
     @Test("StepAreaChartView renders without crash with sample data")
@@ -1013,11 +1026,11 @@ struct UsageChartTests {
     @Test("StepAreaChartView gap ranges passed to overlay -- gapRanges computed from poll data with gaps (4.7)")
     func stepAreaGapRangesComputed() {
         let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
-        let gapMs: Int64 = 10 * 60 * 1000  // 10-minute gap exceeding 5-min threshold
+        let gapMs: Int64 = 90 * 60 * 1000  // 90-minute gap exceeding 60-min threshold
         let polls = [
             UsagePoll(id: 1, timestamp: nowMs - gapMs - 60_000, fiveHourUtil: 30.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
             UsagePoll(id: 2, timestamp: nowMs - gapMs, fiveHourUtil: 35.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
-            // 10-minute gap
+            // 90-minute gap
             UsagePoll(id: 3, timestamp: nowMs - 60_000, fiveHourUtil: 10.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
             UsagePoll(id: 4, timestamp: nowMs, fiveHourUtil: 15.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
         ]
@@ -1058,12 +1071,12 @@ struct UsageChartTests {
     @Test("StepAreaChartView gap hover uses cursor date not nearest point date (review fix)")
     func stepAreaGapHoverUsesCursorDate() {
         let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
-        let gapMs: Int64 = 10 * 60 * 1000  // 10-minute gap exceeding 5-min threshold
-        // Segment 0: two polls, then 10-min gap, then Segment 1: two polls
+        let gapMs: Int64 = 90 * 60 * 1000  // 90-minute gap exceeding 60-min threshold
+        // Segment 0: two polls, then 90-min gap, then Segment 1: two polls
         let polls = [
             UsagePoll(id: 1, timestamp: nowMs - gapMs - 60_000, fiveHourUtil: 30.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
             UsagePoll(id: 2, timestamp: nowMs - gapMs, fiveHourUtil: 35.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
-            // 10-minute gap here
+            // 90-minute gap here
             UsagePoll(id: 3, timestamp: nowMs - 60_000, fiveHourUtil: 10.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
             UsagePoll(id: 4, timestamp: nowMs, fiveHourUtil: 15.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
         ]

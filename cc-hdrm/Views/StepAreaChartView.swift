@@ -151,11 +151,11 @@ struct StepAreaChartView: View {
 
     // MARK: - Init
 
-    init(polls: [UsagePoll], fiveHourVisible: Bool, sevenDayVisible: Bool, outagePeriods: [OutagePeriod] = [], pollInterval: TimeInterval = 30) {
+    init(polls: [UsagePoll], fiveHourVisible: Bool, sevenDayVisible: Bool, outagePeriods: [OutagePeriod] = []) {
         self.fiveHourVisible = fiveHourVisible
         self.sevenDayVisible = sevenDayVisible
 
-        let points = Self.makeChartPoints(from: polls, pollInterval: pollInterval)
+        let points = Self.makeChartPoints(from: polls)
 
         // Enforce monotonic utilization within segments (suppress API noise dips)
         let monotonicPoints = Self.enforceMonotonicWithinSegments(points)
@@ -313,11 +313,11 @@ struct StepAreaChartView: View {
 
     // MARK: - Data Transformation
 
-    static func makeChartPoints(from polls: [UsagePoll], pollInterval: TimeInterval = 30) -> [ChartPoint] {
+    static func makeChartPoints(from polls: [UsagePoll]) -> [ChartPoint] {
         guard !polls.isEmpty else { return [] }
 
         let slopes = computeSlopeAtEachPoint(polls: polls)
-        let gapThreshold = SparklinePathBuilder.gapThresholdMs(pollInterval: pollInterval)
+        let gapThreshold = SparklinePathBuilder.gapThresholdMs
         var currentSegment = 0
 
         return polls.enumerated().map { index, poll in

@@ -177,3 +177,7 @@ development_status:
 
   # Bug fix — poll interval not applied immediately
   2-5-poll-interval-hot-reload: done  # Bug: changing poll interval doesn't interrupt current sleep
+
+  # Chart Visualization Fixes
+  epic-19: in-progress  # Chart Visualization Fixes
+  19-1-adaptive-gap-detection: done  # Bug: changing poll interval causes historical data to show as missing

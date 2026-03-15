@@ -138,7 +138,6 @@ struct PopoverView: View {
         Divider()
         Sparkline(
             data: appState.sparklineData,
-            pollInterval: preferencesManager.pollInterval,
             onTap: { AnalyticsWindow.shared.toggle() },
             isAnalyticsOpen: appState.isAnalyticsWindowOpen
         )

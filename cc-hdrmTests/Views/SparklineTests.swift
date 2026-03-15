@@ -7,29 +7,138 @@ import Testing
 @Suite("SparklinePathBuilder Tests")
 struct SparklinePathBuilderTests {
 
-    // MARK: - Gap Threshold Calculation (Subtask 3.6)
+    // MARK: - Gap Threshold Constant (Story 19.1)
 
-    @Test("gapThresholdMs uses 5-minute minimum for normal poll intervals")
-    func gapThresholdUsesMinimum() {
-        let fiveMinMs: Int64 = 5 * 60 * 1000
-
-        // 30s poll interval -> 5 min minimum (45s * 1.5 = 45s < 5 min)
-        #expect(SparklinePathBuilder.gapThresholdMs(pollInterval: 30) == fiveMinMs)
-
-        // 60s poll interval -> 5 min minimum (90s < 5 min)
-        #expect(SparklinePathBuilder.gapThresholdMs(pollInterval: 60) == fiveMinMs)
-
-        // 10s poll interval -> 5 min minimum (15s < 5 min)
-        #expect(SparklinePathBuilder.gapThresholdMs(pollInterval: 10) == fiveMinMs)
+    @Test("gapThresholdMs is fixed at 60 minutes (2x max supported poll interval)")
+    func gapThresholdIsFixedConstant() {
+        // Fixed threshold: max(5min, 1800s * 1000 * 2) = 3,600,000 ms (60 min)
+        let expectedMs: Int64 = 3_600_000
+        #expect(SparklinePathBuilder.gapThresholdMs == expectedMs)
     }
 
-    @Test("gapThresholdMs falls back to 1.5x for very long poll intervals")
-    func gapThresholdFallsBackForLongIntervals() {
-        // 300s (5min) poll interval -> 1.5x = 450s = 7.5 min > 5 min minimum
-        #expect(SparklinePathBuilder.gapThresholdMs(pollInterval: 300) == 450_000)
+    @Test("maxSupportedPollInterval matches SettingsView.pollIntervalOptions.last (1800s)")
+    func maxSupportedPollIntervalMatchesSettings() {
+        // If a future story adds a longer poll interval to SettingsView.pollIntervalOptions,
+        // this constant MUST be updated to match — otherwise gap detection will misclassify
+        // data collected at the new interval as gaps.
+        #expect(SparklinePathBuilder.maxSupportedPollInterval == 1800,
+                "Must match SettingsView.pollIntervalOptions.last; update if new interval added")
+    }
 
-        // 600s (10min) poll interval -> 1.5x = 900s = 15 min > 5 min minimum
-        #expect(SparklinePathBuilder.gapThresholdMs(pollInterval: 600) == 900_000)
+    // MARK: - Adaptive Gap Detection (Story 19.1)
+
+    @Test("Data at 30s spacing is NOT treated as gaps (threshold = 60 min >> 30s)")
+    func shortIntervalDataNeverGaps() {
+        let size = CGSize(width: 200, height: 40)
+        // 100 polls at 30s intervals = 50 minutes of data
+        let polls: [UsagePoll] = (0..<100).map { i in
+            UsagePoll(
+                id: Int64(i),
+                timestamp: Int64(i) * 30_000,
+                fiveHourUtil: 10.0 + Double(i) * 0.5,
+                fiveHourResetsAt: 10_000_000,
+                sevenDayUtil: nil,
+                sevenDayResetsAt: nil
+            )
+        }
+
+        let segments = SparklinePathBuilder.buildSegments(
+            from: polls, size: size, gapThresholdMs: SparklinePathBuilder.gapThresholdMs
+        )
+        let gapSegments = segments.filter { $0.isGap }
+        #expect(gapSegments.isEmpty, "30s-spaced data should have zero gaps with 60-min threshold")
+    }
+
+    @Test("Data at 1800s spacing is NOT treated as gaps (threshold = 60 min > 30 min)")
+    func longIntervalDataNeverGaps() {
+        let size = CGSize(width: 200, height: 40)
+        // 10 polls at 1800s (30 min) intervals
+        let polls: [UsagePoll] = (0..<10).map { i in
+            UsagePoll(
+                id: Int64(i),
+                timestamp: Int64(i) * 1_800_000,
+                fiveHourUtil: 10.0 + Double(i) * 5.0,
+                fiveHourResetsAt: 100_000_000,
+                sevenDayUtil: nil,
+                sevenDayResetsAt: nil
+            )
+        }
+
+        let segments = SparklinePathBuilder.buildSegments(
+            from: polls, size: size, gapThresholdMs: SparklinePathBuilder.gapThresholdMs
+        )
+        let gapSegments = segments.filter { $0.isGap }
+        #expect(gapSegments.isEmpty, "1800s-spaced data should have zero gaps with 60-min threshold")
+    }
+
+    @Test("Data with 90-minute gap IS treated as a gap (90 min > 60 min threshold)")
+    func genuineOutageDetected() {
+        let size = CGSize(width: 200, height: 40)
+        let ninetyMinMs: Int64 = 90 * 60 * 1000
+        let polls = [
+            UsagePoll(id: 1, timestamp: 0, fiveHourUtil: 20.0, fiveHourResetsAt: 100_000_000, sevenDayUtil: nil, sevenDayResetsAt: nil),
+            UsagePoll(id: 2, timestamp: 30_000, fiveHourUtil: 22.0, fiveHourResetsAt: 100_000_000, sevenDayUtil: nil, sevenDayResetsAt: nil),
+            // 90-minute outage
+            UsagePoll(id: 3, timestamp: 30_000 + ninetyMinMs, fiveHourUtil: 5.0, fiveHourResetsAt: 100_000_000, sevenDayUtil: nil, sevenDayResetsAt: nil),
+            UsagePoll(id: 4, timestamp: 60_000 + ninetyMinMs, fiveHourUtil: 8.0, fiveHourResetsAt: 100_000_000, sevenDayUtil: nil, sevenDayResetsAt: nil),
+        ]
+
+        let segments = SparklinePathBuilder.buildSegments(
+            from: polls, size: size, gapThresholdMs: SparklinePathBuilder.gapThresholdMs
+        )
+        let gapSegments = segments.filter { $0.isGap }
+        #expect(gapSegments.count == 1, "90-min outage should produce exactly one gap")
+    }
+
+    @Test("Mixed-interval data — 30s then 600s spacing — all in one segment")
+    func mixedIntervalDataNoFalseGaps() {
+        let size = CGSize(width: 200, height: 40)
+        // 100 points at 30s spacing followed by 10 points at 600s spacing
+        var polls: [UsagePoll] = []
+        var ts: Int64 = 0
+        for i in 0..<100 {
+            polls.append(UsagePoll(
+                id: Int64(i),
+                timestamp: ts,
+                fiveHourUtil: 10.0 + Double(i) * 0.3,
+                fiveHourResetsAt: 100_000_000,
+                sevenDayUtil: nil,
+                sevenDayResetsAt: nil
+            ))
+            ts += 30_000
+        }
+        for i in 100..<110 {
+            polls.append(UsagePoll(
+                id: Int64(i),
+                timestamp: ts,
+                fiveHourUtil: 40.0 + Double(i - 100) * 2.0,
+                fiveHourResetsAt: 100_000_000,
+                sevenDayUtil: nil,
+                sevenDayResetsAt: nil
+            ))
+            ts += 600_000
+        }
+
+        let points = StepAreaChartView.makeChartPoints(from: polls)
+        let segments = Set(points.map { $0.segment })
+        #expect(segments.count == 1, "All 110 points should be in the same segment (zero gap transitions)")
+    }
+
+    @Test("Boundary condition — delta exactly equal to gapThresholdMs is NOT a gap (strict >)")
+    func boundaryExactThresholdNotGap() {
+        let size = CGSize(width: 200, height: 40)
+        let threshold = SparklinePathBuilder.gapThresholdMs
+        let polls = [
+            UsagePoll(id: 1, timestamp: 0, fiveHourUtil: 20.0, fiveHourResetsAt: 100_000_000, sevenDayUtil: nil, sevenDayResetsAt: nil),
+            // Delta exactly equals threshold
+            UsagePoll(id: 2, timestamp: threshold, fiveHourUtil: 25.0, fiveHourResetsAt: 100_000_000, sevenDayUtil: nil, sevenDayResetsAt: nil),
+        ]
+
+        let segments = SparklinePathBuilder.buildSegments(
+            from: polls, size: size, gapThresholdMs: threshold
+        )
+        let gapSegments = segments.filter { $0.isGap }
+        #expect(gapSegments.isEmpty, "Delta exactly equal to threshold should NOT be a gap (comparison is strict >)")
     }
 
     // MARK: - X-Axis Proportional Mapping (Subtask 3.9)
@@ -488,8 +597,7 @@ struct SparklinePathBuilderTests {
             )
         }
 
-        let gapThreshold = SparklinePathBuilder.gapThresholdMs(pollInterval: 30)
-        let segments = SparklinePathBuilder.buildSegments(from: polls, size: size, gapThresholdMs: gapThreshold)
+        let segments = SparklinePathBuilder.buildSegments(from: polls, size: size, gapThresholdMs: SparklinePathBuilder.gapThresholdMs)
 
         let dataSegments = segments.filter { !$0.isGap }
         #expect(dataSegments.count == 1, "Continuous polling with jittering resets_at should produce exactly one data segment, not \(dataSegments.count)")
@@ -668,14 +776,14 @@ struct SparklineComponentTests {
             UsagePoll(id: 1, timestamp: 1000, fiveHourUtil: 10.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
             UsagePoll(id: 2, timestamp: 2000, fiveHourUtil: 20.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
         ]
-        let sparkline = Sparkline(data: polls, pollInterval: 30)
+        let sparkline = Sparkline(data: polls)
         _ = sparkline.body
     }
 
     @Test("Sparkline renders placeholder with empty data")
     @MainActor
     func rendersPlaceholderWithEmptyData() {
-        let sparkline = Sparkline(data: [], pollInterval: 30)
+        let sparkline = Sparkline(data: [])
         _ = sparkline.body
     }
 
@@ -685,7 +793,7 @@ struct SparklineComponentTests {
         let polls = [
             UsagePoll(id: 1, timestamp: 1000, fiveHourUtil: 50.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
         ]
-        let sparkline = Sparkline(data: polls, pollInterval: 30)
+        let sparkline = Sparkline(data: polls)
         _ = sparkline.body
     }
 
@@ -698,7 +806,6 @@ struct SparklineComponentTests {
                 UsagePoll(id: 1, timestamp: 1000, fiveHourUtil: 10.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
                 UsagePoll(id: 2, timestamp: 2000, fiveHourUtil: 20.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
             ],
-            pollInterval: 30,
             onTap: { tapped = true }
         )
         _ = sparkline.body
@@ -714,7 +821,6 @@ struct SparklineComponentTests {
                 UsagePoll(id: 1, timestamp: 1000, fiveHourUtil: 10.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
                 UsagePoll(id: 2, timestamp: 2000, fiveHourUtil: 20.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
             ],
-            pollInterval: 30,
             isAnalyticsOpen: true
         )
         _ = sparkline.body
@@ -743,8 +849,7 @@ struct SparklineComponentTests {
         ]
 
         let size = CGSize(width: 200, height: 40)
-        let gapThreshold = SparklinePathBuilder.gapThresholdMs(pollInterval: 30)
-        let rawSegments = SparklinePathBuilder.buildSegments(from: polls, size: size, gapThresholdMs: gapThreshold)
+        let rawSegments = SparklinePathBuilder.buildSegments(from: polls, size: size, gapThresholdMs: SparklinePathBuilder.gapThresholdMs)
         let segments = SparklinePathBuilder.mergeShortSegments(rawSegments, size: size)
 
         // The Power Nap 2-poll segment should be absorbed into the gap
@@ -758,14 +863,14 @@ struct SparklineComponentTests {
         // they are not sandwiched between gaps (at array edges).
     }
 
-    @Test("Sparkline handles data with gaps")
+    @Test("Sparkline renders with widely-spaced data points")
     @MainActor
-    func handlesDataWithGaps() {
+    func rendersWithWidelySpacedData() {
         let polls = [
             UsagePoll(id: 1, timestamp: 0, fiveHourUtil: 10.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
-            UsagePoll(id: 2, timestamp: 100000, fiveHourUtil: 20.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil), // Big gap
+            UsagePoll(id: 2, timestamp: 100000, fiveHourUtil: 20.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil), // 100s apart (below 60-min gap threshold)
         ]
-        let sparkline = Sparkline(data: polls, pollInterval: 30)
+        let sparkline = Sparkline(data: polls)
         _ = sparkline.body
     }
 
@@ -776,7 +881,7 @@ struct SparklineComponentTests {
             UsagePoll(id: 1, timestamp: 1000, fiveHourUtil: 80.0, fiveHourResetsAt: 2000, sevenDayUtil: nil, sevenDayResetsAt: nil),
             UsagePoll(id: 2, timestamp: 2000, fiveHourUtil: 5.0, fiveHourResetsAt: 8000, sevenDayUtil: nil, sevenDayResetsAt: nil), // Reset
         ]
-        let sparkline = Sparkline(data: polls, pollInterval: 30)
+        let sparkline = Sparkline(data: polls)
         _ = sparkline.body
     }
 
@@ -790,7 +895,7 @@ struct SparklineComponentTests {
             UsagePoll(id: 4, timestamp: 4000, fiveHourUtil: 150.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil), // Invalid
             UsagePoll(id: 5, timestamp: 5000, fiveHourUtil: 30.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
         ]
-        let sparkline = Sparkline(data: polls, pollInterval: 30)
+        let sparkline = Sparkline(data: polls)
         _ = sparkline.body
     }
 
@@ -803,8 +908,7 @@ struct SparklineComponentTests {
             data: [
                 UsagePoll(id: 1, timestamp: 1000, fiveHourUtil: 10.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
                 UsagePoll(id: 2, timestamp: 2000, fiveHourUtil: 20.0, fiveHourResetsAt: nil, sevenDayUtil: nil, sevenDayResetsAt: nil),
-            ],
-            pollInterval: 30
+            ]
         )
         // Verify the view can render (accessibility modifiers are applied)
         _ = sparkline.body

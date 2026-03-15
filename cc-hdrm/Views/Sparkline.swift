@@ -306,14 +306,18 @@ struct SparklinePathBuilder {
     /// Only gaps >= 5 minutes create a visible break in the sparkline.
     static let sparklineGapThresholdMs: Int64 = 5 * 60 * 1000
 
-    /// Calculates the gap threshold based on poll interval.
-    /// Uses a fixed 5-minute minimum to absorb brief Power Nap wakes,
-    /// falling back to 1.5x poll interval if the poll interval is very long.
-    /// - Parameter pollInterval: The poll interval in seconds
-    /// - Returns: Gap threshold in milliseconds
-    static func gapThresholdMs(pollInterval: TimeInterval) -> Int64 {
-        max(sparklineGapThresholdMs, Int64(pollInterval * 1000 * 1.5))
-    }
+    /// Longest supported poll interval in seconds.
+    /// Must match `SettingsView.pollIntervalOptions.last` (currently 1800s / 30 min).
+    static let maxSupportedPollInterval: Double = 1800
+
+    /// Fixed gap threshold in milliseconds.
+    /// Uses 2x the maximum supported poll interval so that historical data collected
+    /// at any supported interval is never misclassified as a gap after the user
+    /// changes the poll interval. Value: max(300_000, 3_600_000) = 3,600,000 ms (60 min).
+    static let gapThresholdMs: Int64 = max(
+        sparklineGapThresholdMs,
+        Int64(maxSupportedPollInterval * 1000 * 2)
+    )
 }
 
 // MARK: - Sparkline View
@@ -323,8 +327,6 @@ struct SparklinePathBuilder {
 struct Sparkline: View {
     /// Poll data for rendering (sorted by timestamp ascending).
     let data: [UsagePoll]
-    /// Poll interval for gap detection (in seconds).
-    let pollInterval: TimeInterval
     /// Callback when the sparkline is tapped (for analytics window toggle).
     var onTap: (() -> Void)?
     /// Whether the analytics window is currently open.
@@ -365,8 +367,7 @@ struct Sparkline: View {
 
     private var chartView: some View {
         Canvas { context, size in
-            let gapThreshold = SparklinePathBuilder.gapThresholdMs(pollInterval: pollInterval)
-            let rawSegments = SparklinePathBuilder.buildSegments(from: data, size: size, gapThresholdMs: gapThreshold)
+            let rawSegments = SparklinePathBuilder.buildSegments(from: data, size: size, gapThresholdMs: SparklinePathBuilder.gapThresholdMs)
             let segments = SparklinePathBuilder.mergeShortSegments(rawSegments, size: size)
 
             for segment in segments {
@@ -479,25 +480,25 @@ private enum SparklinePreviewData {
 }
 
 #Preview("With Data") {
-    Sparkline(data: SparklinePreviewData.makeSamplePolls(), pollInterval: 30)
+    Sparkline(data: SparklinePreviewData.makeSamplePolls())
         .frame(width: 200, height: 40)
         .padding()
 }
 
 #Preview("Placeholder - No Data") {
-    Sparkline(data: [], pollInterval: 30)
+    Sparkline(data: [])
         .frame(width: 200, height: 40)
         .padding()
 }
 
 #Preview("With Analytics Indicator") {
-    Sparkline(data: SparklinePreviewData.makeSamplePolls(), pollInterval: 30, isAnalyticsOpen: true)
+    Sparkline(data: SparklinePreviewData.makeSamplePolls(), isAnalyticsOpen: true)
         .frame(width: 200, height: 40)
         .padding()
 }
 
 #Preview("Minimal Data") {
-    Sparkline(data: SparklinePreviewData.makeMinimalPolls(), pollInterval: 30)
+    Sparkline(data: SparklinePreviewData.makeMinimalPolls())
         .frame(width: 200, height: 40)
         .padding()
 }

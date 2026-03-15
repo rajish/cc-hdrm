@@ -91,8 +91,7 @@ struct AnalyticsView: View {
                 sevenDayVisible: sevenDayVisible,
                 isLoading: isLoading,
                 hasAnyHistoricalData: hasAnyHistoricalData,
-                outagePeriods: outagePeriods,
-                pollInterval: preferencesManager?.pollInterval ?? 30
+                outagePeriods: outagePeriods
             )
             valueSection
         }
