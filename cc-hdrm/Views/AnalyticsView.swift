@@ -108,6 +108,16 @@ struct AnalyticsView: View {
                     appState: appState
                 )
             }
+
+            // TPP Trend Visualization (Story 20.4)
+            if let tppStorageService {
+                Divider()
+                TPPSectionView(
+                    tppStorageService: tppStorageService,
+                    preferencesManager: preferencesManager,
+                    selectedTimeRange: selectedTimeRange
+                )
+            }
         }
         .padding()
         .onAppear {
