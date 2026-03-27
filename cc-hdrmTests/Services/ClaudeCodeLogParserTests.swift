@@ -406,7 +406,7 @@ struct ClaudeCodeLogParserTests {
         #expect(health.successfulExtractions == 3)
         #expect(health.failedLines == 2)
         #expect(health.filesScanned == 1)
-        #expect(!health.isDegraded) // 3/5 = 60% ... actually this is degraded
+        #expect(health.isDegraded) // 3/5 = 60% — below 80% threshold
     }
 
     @Test("Health degradation threshold at 80%")

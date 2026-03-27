@@ -1,6 +1,6 @@
 # Story 20.2: Claude Code Log Parser Service
 
-Status: dev-complete
+Status: done
 
 ## Story
 
@@ -274,6 +274,13 @@ Key test scenarios:
 - [Project context: Technology stack](../_bmad-output/planning-artifacts/project-context.md) — Swift 6, SwiftUI, zero external dependencies
 - [DatabaseManager pattern](cc-hdrm/Services/DatabaseManager.swift) — @unchecked Sendable with NSLock, singleton, App Support path convention
 - [SlopeCalculationServiceTests](cc-hdrmTests/Services/SlopeCalculationServiceTests.swift) — Swift Testing patterns, helper methods
+
+### Review Findings
+
+- [x] [Review][Patch] Broken file size cast silently disables incremental scanning [cc-hdrm/Services/ClaudeCodeLogParser.swift:258] — `(attrs[.size] as? UInt64) ?? 0` always returns 0 (Foundation bridges .size as Int, not UInt64). Every scan detects apparent truncation, re-scans files from byte 0, and accumulates duplicate records. Fixed: cast to `UInt64((attrs[.size] as? Int) ?? 0)` matching HistoricalDataService pattern. **FIXED**
+- [x] [Review][Patch] Inverted test assertion in `healthSuccessRate` — `#expect(!health.isDegraded)` asserts NOT degraded when success rate is 60% (3/5 lines), which is below the 80% threshold. Comment even says "actually this is degraded." Fixed: changed to `#expect(health.isDegraded)`. **FIXED**
+- [x] [Review][Patch] ISO8601DateFormatter allocated per line — `parseISO8601ToUnixMs` creates a new `ISO8601DateFormatter` on every call. This is expensive and called for every JSONL line. Fixed: extracted to two `private static let` properties. **FIXED**
+- [x] [Review][Patch] AppDelegate uses concrete type instead of protocol — `private var claudeCodeLogParser: ClaudeCodeLogParser?` should be `(any ClaudeCodeLogParserProtocol)?` to honor the protocol/implementation split. Fixed in AppDelegate.swift. **FIXED**
 
 ## Dev Agent Record
 

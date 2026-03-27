@@ -31,6 +31,18 @@ final class ClaudeCodeLogParser: ClaudeCodeLogParserProtocol, @unchecked Sendabl
         category: "logparser"
     )
 
+    private static let iso8601WithFractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
+    private static let iso8601WithoutFractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
     private let lock = NSLock()
 
     // MARK: - Protected State (access only under lock)
@@ -255,7 +267,7 @@ final class ClaudeCodeLogParser: ClaudeCodeLogParserProtocol, @unchecked Sendabl
         // Check file size for truncation detection
         do {
             let attrs = try fileManager.attributesOfItem(atPath: filePath)
-            let fileSize = (attrs[.size] as? UInt64) ?? 0
+            let fileSize = UInt64((attrs[.size] as? Int) ?? 0)
 
             if let stored = storedState {
                 if fileSize < stored.byteOffset {
@@ -416,14 +428,11 @@ final class ClaudeCodeLogParser: ClaudeCodeLogParserProtocol, @unchecked Sendabl
 
     /// Parse ISO 8601 timestamp string to Unix milliseconds.
     private func parseISO8601ToUnixMs(_ string: String) -> Int64 {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: string) {
+        if let date = Self.iso8601WithFractional.date(from: string) {
             return Int64(date.timeIntervalSince1970 * 1000)
         }
         // Try without fractional seconds
-        formatter.formatOptions = [.withInternetDateTime]
-        if let date = formatter.date(from: string) {
+        if let date = Self.iso8601WithoutFractional.date(from: string) {
             return Int64(date.timeIntervalSince1970 * 1000)
         }
         return Int64(Date().timeIntervalSince1970 * 1000)

@@ -18,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var oauthKeychainService: OAuthKeychainService?
     private var apiClient: (any APIClientProtocol)?
     private var slopeCalculationService: SlopeCalculationService?
-    private var claudeCodeLogParser: ClaudeCodeLogParser?
+    private var claudeCodeLogParser: (any ClaudeCodeLogParserProtocol)?
     private var historicalDataServiceRef: HistoricalDataService?
     private var headroomAnalysisServiceRef: (any HeadroomAnalysisServiceProtocol)?
     private var analyticsWindow: AnalyticsWindow?
