@@ -1,6 +1,6 @@
 # Story 20.3: TPP Data Model & Passive Measurement Engine
 
-Status: done
+Status: ready-for-dev
 
 ## Story
 
@@ -77,69 +77,63 @@ The `tpp_measurements` table was created in Story 20.1 (migration v6->v7) with a
 
 ## Tasks / Subtasks
 
-- [x] Task 1: Create `PassiveTPPEngine` protocol and implementation (AC: 2, 3, 4, 5)
-  - [x] 1.1 Create `cc-hdrm/Services/PassiveTPPEngineProtocol.swift` with protocol defining `processPoll(current:previous:)` and `getHealth()` and `resetAccumulation()`
-  - [x] 1.2 Create `cc-hdrm/Services/PassiveTPPEngine.swift` implementing the protocol
-  - [x] 1.3 Inject `ClaudeCodeLogParserProtocol` and `TPPStorageServiceProtocol` as dependencies
-  - [x] 1.4 Implement poll-pair processing: compute deltas, query log parser for tokens in window, store per-model TPP
-  - [x] 1.5 Implement accumulation window state: track window start timestamp, accumulated per-model tokens, starting utilization
-  - [x] 1.6 Implement 30-minute cap: discard accumulated tokens and restart window when cap exceeded
-  - [x] 1.7 Implement monotonic guard: discard window if utilization decreases during accumulation
-  - [x] 1.8 Implement reset detection: drop >= 50% in 5h utilization discards accumulation, skips TPP for that poll
-  - [x] 1.9 Implement multi-model attribution: separate records per model, shared delta, confidence = "low" when >1 model
-  - [x] 1.10 Implement delta-only record: store with model = "unknown" when delta > 0 but zero tokens found
-  - [x] 1.11 Implement confidence assignment: "medium" for single-model with >=3% delta, "low" for 1% delta or multi-model
+- [ ] Task 1: Create `PassiveTPPEngine` protocol and implementation (AC: 2, 3, 4, 5)
+  - [ ] 1.1 Create `cc-hdrm/Services/PassiveTPPEngineProtocol.swift` with protocol defining `processPoll(current:previous:)` and `getHealth()` and `resetAccumulation()`
+  - [ ] 1.2 Create `cc-hdrm/Services/PassiveTPPEngine.swift` implementing the protocol
+  - [ ] 1.3 Inject `ClaudeCodeLogParserProtocol` and `TPPStorageServiceProtocol` as dependencies
+  - [ ] 1.4 Implement poll-pair processing: compute deltas, query log parser for tokens in window, store per-model TPP
+  - [ ] 1.5 Implement accumulation window state: track window start timestamp, accumulated per-model tokens, starting utilization
+  - [ ] 1.6 Implement 30-minute cap: discard accumulated tokens and restart window when cap exceeded
+  - [ ] 1.7 Implement monotonic guard: discard window if utilization decreases during accumulation
+  - [ ] 1.8 Implement reset detection: drop >= 50% in 5h utilization discards accumulation, skips TPP for that poll
+  - [ ] 1.9 Implement multi-model attribution: separate records per model, shared delta, confidence = "low" when >1 model
+  - [ ] 1.10 Implement delta-only record: store with model = "unknown" when delta > 0 but zero tokens found
+  - [ ] 1.11 Implement confidence assignment: "medium" for single-model with >=3% delta, "low" for 1% delta or multi-model
 
-- [x] Task 2: Create `PassiveTPPHealth` model (AC: 6)
-  - [x] 2.1 Create `cc-hdrm/Models/PassiveTPPHealth.swift` struct with fields: `totalUtilizationChanges`, `windowsWithTokenData`, `coveragePercent`, `isDegraded`, `degradationSuggestion`
-  - [x] 2.2 Set degradation threshold at 70% coverage
+- [ ] Task 2: Create `PassiveTPPHealth` model (AC: 6)
+  - [ ] 2.1 Create `cc-hdrm/Models/PassiveTPPHealth.swift` struct with fields: `totalUtilizationChanges`, `windowsWithTokenData`, `coveragePercent`, `isDegraded`, `degradationSuggestion`
+  - [ ] 2.2 Set degradation threshold at 70% coverage
 
-- [x] Task 3: Extend `TPPStorageService` with passive write and query methods (AC: 1, 7)
-  - [x] 3.1 Add `storePassiveResult(_ measurement: TPPMeasurement)` to `TPPStorageServiceProtocol`
-  - [x] 3.2 Implement `storePassiveResult` in `TPPStorageService` -- same INSERT logic as `storeBenchmarkResult`, reuse the private helpers
-  - [x] 3.3 Add `getMeasurements(from:to:source:model:confidence:)` -> `[TPPMeasurement]` to protocol
-  - [x] 3.4 Implement query with optional WHERE clauses for source, model, confidence filters, ORDER BY timestamp ASC
-  - [x] 3.5 Add `getAverageTPP(from:to:model:source:)` -> `(fiveHour: Double?, sevenDay: Double?)` to protocol
-  - [x] 3.6 Implement aggregation query using AVG() on tpp_five_hour and tpp_seven_day columns
+- [ ] Task 3: Extend `TPPStorageService` with passive write and query methods (AC: 1, 7)
+  - [ ] 3.1 Add `storePassiveResult(_ measurement: TPPMeasurement)` to `TPPStorageServiceProtocol`
+  - [ ] 3.2 Implement `storePassiveResult` in `TPPStorageService` -- same INSERT logic as `storeBenchmarkResult`, reuse the private helpers
+  - [ ] 3.3 Add `getMeasurements(from:to:source:model:confidence:)` -> `[TPPMeasurement]` to protocol
+  - [ ] 3.4 Implement query with optional WHERE clauses for source, model, confidence filters, ORDER BY timestamp ASC
+  - [ ] 3.5 Add `getAverageTPP(from:to:model:source:)` -> `(fiveHour: Double?, sevenDay: Double?)` to protocol
+  - [ ] 3.6 Implement aggregation query using AVG() on tpp_five_hour and tpp_seven_day columns
 
-- [x] Task 4: Integrate passive engine into PollingEngine (AC: 2)
-  - [x] 4.1 Add `passiveTPPEngine: (any PassiveTPPEngineProtocol)?` parameter to `PollingEngine.init()`
-  - [x] 4.2 After successful poll persistence in `fetchUsageData()`, invoke passive engine processing
-  - [x] 4.3 Create the current and previous `UsagePoll` objects and pass to `passiveTPPEngine.processPoll(current:previous:)`
-  - [x] 4.4 Trigger a log parser incremental scan before passive processing: `await logParser?.scan()`
-  - [x] 4.5 Processing is fire-and-forget inside existing Task block -- failure must not affect other services
+- [ ] Task 4: Integrate passive engine into PollingEngine (AC: 2)
+  - [ ] 4.1 Add `passiveTPPEngine: (any PassiveTPPEngineProtocol)?` parameter to `PollingEngine.init()`
+  - [ ] 4.2 After successful poll persistence in `fetchUsageData()`, invoke passive engine processing
+  - [ ] 4.3 Create the current and previous `UsagePoll` objects and pass to `passiveTPPEngine.processPoll(current:previous:)`
+  - [ ] 4.4 Trigger a log parser incremental scan before passive processing: `await logParser?.scan()`
+  - [ ] 4.5 Processing is fire-and-forget inside existing Task block -- failure must not affect other services
 
-- [x] Task 5: Wire into AppDelegate (AC: all)
-  - [x] 5.1 Create `PassiveTPPEngine` instance in `AppDelegate.applicationDidFinishLaunching()` after log parser and TPP storage
-  - [x] 5.2 Pass `passiveTPPEngine` to `PollingEngine` constructor
-  - [x] 5.3 Pass `claudeCodeLogParser` to `PollingEngine` constructor (new optional parameter)
+- [ ] Task 5: Wire into AppDelegate (AC: all)
+  - [ ] 5.1 Create `PassiveTPPEngine` instance in `AppDelegate.applicationDidFinishLaunching()` after log parser and TPP storage
+  - [ ] 5.2 Pass `passiveTPPEngine` to `PollingEngine` constructor
+  - [ ] 5.3 Pass `claudeCodeLogParser` to `PollingEngine` constructor (new optional parameter)
 
-- [x] Task 6: Write tests (AC: all)
-  - [x] 6.1 Create `cc-hdrmTests/Services/PassiveTPPEngineTests.swift`
-  - [x] 6.2 Test basic passive measurement: 1 model, 5h delta >=1%, tokens found -> TPP stored
-  - [x] 6.3 Test zero delta accumulation: 0% delta with tokens -> tokens accumulated, not stored
-  - [x] 6.4 Test accumulation flush: accumulated tokens + subsequent poll with delta >=1% -> TPP stored with full window
-  - [x] 6.5 Test 30-minute cap: accumulation exceeds 30min -> tokens discarded, window restarts
-  - [x] 6.6 Test monotonic guard: utilization decreases during accumulation -> window discarded
-  - [x] 6.7 Test reset handling: 50%+ drop -> accumulation discarded, no TPP stored
-  - [x] 6.8 Test multi-model: 2 models in window -> 2 records, shared delta, confidence = "low"
-  - [x] 6.9 Test single model confidence: delta >=3% -> "medium", delta 1% -> "low"
-  - [x] 6.10 Test delta-only record: delta > 0 but zero tokens -> record with model = "unknown"
-  - [x] 6.11 Test coverage health: verify totalUtilizationChanges, windowsWithTokenData, coveragePercent calculation
-  - [x] 6.12 Create `cc-hdrmTests/Services/TPPStorageServiceQueryTests.swift` for new query methods
-  - [x] 6.13 Test getMeasurements with source/model/confidence filters
-  - [x] 6.14 Test getAverageTPP aggregation
+- [ ] Task 6: Write tests (AC: all)
+  - [ ] 6.1 Create `cc-hdrmTests/Services/PassiveTPPEngineTests.swift`
+  - [ ] 6.2 Test basic passive measurement: 1 model, 5h delta >=1%, tokens found -> TPP stored
+  - [ ] 6.3 Test zero delta accumulation: 0% delta with tokens -> tokens accumulated, not stored
+  - [ ] 6.4 Test accumulation flush: accumulated tokens + subsequent poll with delta >=1% -> TPP stored with full window
+  - [ ] 6.5 Test 30-minute cap: accumulation exceeds 30min -> tokens discarded, window restarts
+  - [ ] 6.6 Test monotonic guard: utilization decreases during accumulation -> window discarded
+  - [ ] 6.7 Test reset handling: 50%+ drop -> accumulation discarded, no TPP stored
+  - [ ] 6.8 Test multi-model: 2 models in window -> 2 records, shared delta, confidence = "low"
+  - [ ] 6.9 Test single model confidence: delta >=3% -> "medium", delta 1% -> "low"
+  - [ ] 6.10 Test delta-only record: delta > 0 but zero tokens -> record with model = "unknown"
+  - [ ] 6.11 Test coverage health: verify totalUtilizationChanges, windowsWithTokenData, coveragePercent calculation
+  - [ ] 6.12 Create `cc-hdrmTests/Services/TPPStorageServiceQueryTests.swift` for new query methods
+  - [ ] 6.13 Test getMeasurements with source/model/confidence filters
+  - [ ] 6.14 Test getAverageTPP aggregation
 
-- [x] Task 7: Run `xcodegen generate` and verify build
-  - [x] 7.1 Run `xcodegen generate` after all files are added
-  - [x] 7.2 Verify build compiles cleanly
+- [ ] Task 7: Run `xcodegen generate` and verify build
+  - [ ] 7.1 Run `xcodegen generate` after all files are added
+  - [ ] 7.2 Verify build compiles cleanly
   - [ ] 7.3 Verify all tests pass
-
-### Review Findings
-
-- [x] [Review][Patch] storePassiveResult was verbatim copy of storeBenchmarkResult [cc-hdrm/Services/TPPStorageService.swift] — Extracted shared INSERT logic into private `insertMeasurementRecord` helper; both public methods now delegate to it. Fixed.
-- [x] [Review][Patch] Logger calls inside lock.withLock blocks in accumulation branches [cc-hdrm/Services/PassiveTPPEngine.swift] — Moved all log calls outside the lock; introduced local `AccumulationAction` enum to return action result from lock closure. Fixed.
-- [x] [Review][Defer] Int32 truncation for token counts in sqlite3_bind_int — pre-existing pattern from storeBenchmarkResult in Story 20.1; all token columns use sqlite3_bind_int(Int32) despite schema using INTEGER (64-bit). Deferred: pre-existing
 
 ## Dev Notes
 
@@ -323,29 +317,9 @@ From Story 20.2:
 ## Dev Agent Record
 
 ### Agent Model Used
-claude-opus-4-6
 
 ### Debug Log References
-N/A
 
 ### Completion Notes List
-- All 7 tasks completed (Tasks 1-7)
-- Compilation verified clean with `swiftc -typecheck` (no new errors, only pre-existing warnings)
-- Test file compilation requires module build (uses @testable import cc_hdrm)
-- AppDelegate refactored: log parser and TPP storage service creation moved before PollingEngine to enable dependency injection
-- No database schema changes (reuses existing v7 tpp_measurements table)
 
 ### File List
-**New files:**
-- `cc-hdrm/Services/PassiveTPPEngineProtocol.swift` — Protocol for passive TPP engine
-- `cc-hdrm/Services/PassiveTPPEngine.swift` — Full implementation with accumulation, reset detection, multi-model support
-- `cc-hdrm/Models/PassiveTPPHealth.swift` — Health metrics struct with 70% degradation threshold
-- `cc-hdrmTests/Services/PassiveTPPEngineTests.swift` — 12 test cases covering all ACs
-- `cc-hdrmTests/Services/TPPStorageServiceQueryTests.swift` — 8 test cases for query/aggregation methods
-
-**Modified files:**
-- `cc-hdrm/Services/TPPStorageServiceProtocol.swift` — Added storePassiveResult, getMeasurements, getAverageTPP
-- `cc-hdrm/Services/TPPStorageService.swift` — Implemented new protocol methods
-- `cc-hdrm/Services/PollingEngine.swift` — Added passiveTPPEngine + claudeCodeLogParser params, passive processing in fire-and-forget Task
-- `cc-hdrm/App/AppDelegate.swift` — Moved log parser/TPP storage creation before PollingEngine, wired PassiveTPPEngine
-- `cc-hdrmTests/Services/BenchmarkServiceTests.swift` — Updated MockTPPStorageService to conform to extended protocol
