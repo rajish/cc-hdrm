@@ -1,6 +1,6 @@
 # Story 20.1: Active Benchmark Measurement ("Measure" Button)
 
-Status: in-progress
+Status: done
 
 ## Story
 
@@ -357,3 +357,13 @@ claude-opus-4-6
 - `cc-hdrmTests/Mocks/MockPreferencesManager.swift` — benchmark properties
 - `cc-hdrmTests/Services/DatabaseManagerTests.swift` — migration and schema tests
 - `cc-hdrmTests/Services/PreferencesManagerTests.swift` — benchmark preference tests
+
+### Review Findings
+
+- [x] [Review][Patch] Dead code in validatePreconditions guard: both if-branches inside else block return .tokenExpired making the conditional pointless; also .disconnected status treated as valid for benchmarking [cc-hdrm/Services/BenchmarkService.swift:137-143]
+- [x] [Review][Patch] Off-by-one in runVariant retry loop: `while retryCount <= maxRetries` allows 4 iterations for maxRetries=3 (spec says max 3 retries) [cc-hdrm/Services/BenchmarkService.swift:238]
+- [x] [Review][Patch] ForEach non-unique IDs: `ForEach(results, id: \.model)` produces duplicate IDs when multiple variants run for same model — SwiftUI runtime warning and wrong rendering [cc-hdrm/Views/BenchmarkSectionView.swift:134]
+- [x] [Review][Patch] SettingsView reset resets variant toggle states but does not call syncBenchmarkVariants() — preferences manager not updated until user toggles manually [cc-hdrm/Views/SettingsView.swift:1701]
+- [x] [Review][Patch] onProgress Task hop is redundant and causes ordering issue: BenchmarkService is @MainActor, calling Task { @MainActor in progress update } from within @MainActor context means isRunning=false races with final .completed update [cc-hdrm/Views/BenchmarkSectionView.swift:259]
+- [x] [Review][Defer] SQLITE_TRANSIENT_TPP duplicate constant in TPPStorageService.swift mirrors same constant defined per-file elsewhere — deferred, pre-existing project pattern
+- [x] [Review][Defer] readMeasurement uses hard-coded column indices with SELECT * — fragile if column order changes — deferred, same pattern used in HistoricalDataService

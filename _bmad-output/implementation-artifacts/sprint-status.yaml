@@ -183,7 +183,7 @@ development_status:
   19-1-adaptive-gap-detection: done  # Bug: changing poll interval causes historical data to show as missing
 
   epic-20: in-progress  # Token Efficiency Ratio (Phase 6)
-  20-1-active-benchmark-measurement: ready-for-dev  # Ground truth first — validates concept, discovers weighting
+  20-1-active-benchmark-measurement: done  # Code review passed 2026-03-27
   20-2-claude-code-log-parser-service: ready-for-dev  # Best-effort enrichment layer with health indicator
   20-3-tpp-data-model-passive-measurement-engine: backlog  # Continuous directional signal between benchmarks
   20-4-tpp-trend-visualization: backlog  # Two-tier viz: benchmark points + passive band

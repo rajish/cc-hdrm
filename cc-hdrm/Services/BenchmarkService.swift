@@ -133,12 +133,9 @@ final class BenchmarkService: BenchmarkServiceProtocol {
     }
 
     func validatePreconditions() async -> BenchmarkValidation {
-        // Check OAuth state
+        // Check OAuth state: must be authenticated and actively connected
         guard appState.oauthState == .authenticated,
-              appState.connectionStatus == .connected || appState.connectionStatus == .disconnected else {
-            if appState.connectionStatus == .tokenExpired || appState.connectionStatus == .noCredentials {
-                return .tokenExpired
-            }
+              appState.connectionStatus == .connected else {
             return .tokenExpired
         }
 

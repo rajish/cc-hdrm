@@ -131,7 +131,7 @@ struct BenchmarkSectionView: View {
 
     @ViewBuilder
     private var resultsView: some View {
-        ForEach(benchmarkState.results, id: \.model) { result in
+        ForEach(Array(benchmarkState.results.enumerated()), id: \.offset) { _, result in
             resultCard(for: result)
         }
 

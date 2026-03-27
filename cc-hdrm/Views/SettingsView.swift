@@ -472,6 +472,7 @@ struct SettingsView: View {
                     benchmarkVariantOutputHeavy = true
                     benchmarkVariantInputHeavy = false
                     benchmarkVariantCacheHeavy = false
+                    syncBenchmarkVariants()
                     onThresholdChange?()
                 }
                 .accessibilityLabel("Reset all settings to default values")
