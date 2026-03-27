@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var oauthKeychainService: OAuthKeychainService?
     private var apiClient: (any APIClientProtocol)?
     private var slopeCalculationService: SlopeCalculationService?
+    private var claudeCodeLogParser: (any ClaudeCodeLogParserProtocol)?
     private var historicalDataServiceRef: HistoricalDataService?
     private var headroomAnalysisServiceRef: (any HeadroomAnalysisServiceProtocol)?
     private var analyticsWindow: AnalyticsWindow?
@@ -275,6 +276,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Fire-and-forget update check — do not block app launch
         Task {
             await updateCheckService?.checkForUpdate()
+        }
+
+        // Initialize Claude Code log parser (fire-and-forget initial scan)
+        let logParser = ClaudeCodeLogParser(dataRetentionDays: preferences.dataRetentionDays)
+        self.claudeCodeLogParser = logParser
+        Task {
+            await logParser.scan()
+            Self.logger.info("Claude Code log parser initial scan complete")
         }
     }
 
