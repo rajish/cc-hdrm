@@ -21,6 +21,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var claudeCodeLogParser: (any ClaudeCodeLogParserProtocol)?
     private var historicalDataServiceRef: HistoricalDataService?
     private var headroomAnalysisServiceRef: (any HeadroomAnalysisServiceProtocol)?
+    private var benchmarkServiceRef: BenchmarkService?
+    private var tppStorageServiceRef: TPPStorageService?
     private var analyticsWindow: AnalyticsWindow?
     private var observationTask: Task<Void, Never>?
     private var onboardingWindowController: OnboardingWindowController?
@@ -146,6 +148,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
 
+        // Create TPPStorageService and BenchmarkService (Story 20.1)
+        if let histService = historicalDataServiceRef, let pollingEngine {
+            let tppStorage = TPPStorageService(databaseManager: DatabaseManager.shared)
+            self.tppStorageServiceRef = tppStorage
+            let benchmarkSvc = BenchmarkService(
+                appState: state,
+                keychainService: oauthKeychainService ?? OAuthKeychainService(),
+                pollingEngine: pollingEngine,
+                tppStorageService: tppStorage,
+                historicalDataService: histService
+            )
+            self.benchmarkServiceRef = benchmarkSvc
+        }
+
         // Configure AnalyticsWindow with AppState, HistoricalDataService, HeadroomAnalysisService, pattern detection, and tier recommendations
         if let histService = historicalDataServiceRef, let headroomService = headroomAnalysisServiceRef {
             let analyticsPatternDetector = SubscriptionPatternDetector(
@@ -162,7 +178,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 headroomAnalysisService: headroomService,
                 patternDetector: analyticsPatternDetector,
                 tierRecommendationService: tierRecommendationService,
-                preferencesManager: preferences
+                preferencesManager: preferences,
+                benchmarkService: benchmarkServiceRef,
+                tppStorageService: tppStorageServiceRef
             )
         }
 
