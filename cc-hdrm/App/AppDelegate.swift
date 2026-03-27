@@ -133,6 +133,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let apiClientInstance = APIClient()
             self.apiClient = apiClientInstance
 
+            // Create TPPStorageService, log parser, and PassiveTPPEngine before PollingEngine (Story 20.3)
+            let tppStorage = TPPStorageService(databaseManager: DatabaseManager.shared)
+            self.tppStorageServiceRef = tppStorage
+
+            let logParser = ClaudeCodeLogParser(dataRetentionDays: preferences.dataRetentionDays)
+            self.claudeCodeLogParser = logParser
+
+            let passiveEngine = PassiveTPPEngine(logParser: logParser, tppStorage: tppStorage)
+
             pollingEngine = PollingEngine(
                 keychainService: oauthKC,
                 tokenRefreshService: TokenRefreshService(),
@@ -144,14 +153,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 slopeCalculationService: slopeService,
                 patternDetector: patternDetector,
                 patternNotificationService: patternNotifService,
-                extraUsageAlertService: extraUsageAlertService
+                extraUsageAlertService: extraUsageAlertService,
+                passiveTPPEngine: passiveEngine,
+                claudeCodeLogParser: logParser
             )
         }
 
-        // Create TPPStorageService and BenchmarkService (Story 20.1)
-        if let histService = historicalDataServiceRef, let pollingEngine {
-            let tppStorage = TPPStorageService(databaseManager: DatabaseManager.shared)
-            self.tppStorageServiceRef = tppStorage
+        // Create BenchmarkService (Story 20.1) — TPPStorageService created above
+        if let histService = historicalDataServiceRef, let pollingEngine, let tppStorage = tppStorageServiceRef {
             let benchmarkSvc = BenchmarkService(
                 appState: state,
                 keychainService: oauthKeychainService ?? OAuthKeychainService(),
@@ -296,12 +305,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await updateCheckService?.checkForUpdate()
         }
 
-        // Initialize Claude Code log parser (fire-and-forget initial scan)
-        let logParser = ClaudeCodeLogParser(dataRetentionDays: preferences.dataRetentionDays)
-        self.claudeCodeLogParser = logParser
-        Task {
-            await logParser.scan()
-            Self.logger.info("Claude Code log parser initial scan complete")
+        // Fire-and-forget initial log parser scan (parser created earlier with PollingEngine services)
+        if let logParser = claudeCodeLogParser {
+            Task {
+                await logParser.scan()
+                Self.logger.info("Claude Code log parser initial scan complete")
+            }
         }
     }
 
