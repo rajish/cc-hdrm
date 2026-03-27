@@ -22,6 +22,11 @@ private final class MockPollingEngine: PollingEngineProtocol {
     func restartPolling() {
         restartPollingCallCount += 1
     }
+
+    var performForcedPollCallCount = 0
+    func performForcedPoll() async {
+        performForcedPollCallCount += 1
+    }
 }
 
 // MARK: - Mock Freshness Monitor

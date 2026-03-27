@@ -3,7 +3,7 @@ import os
 import SQLite3
 
 /// Current database schema version. Increment when schema changes require migration.
-private let currentSchemaVersion: Int = 6
+private let currentSchemaVersion: Int = 7
 
 /// SQLITE_TRANSIENT tells SQLite to make its own copy of the string data.
 /// Required when binding strings from Swift's withCString which uses temporary buffers.
@@ -117,6 +117,7 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
             try createResetEventsTable(connection)
             try createRollupMetadataTable(connection)
             try createApiOutagesTable(connection)
+            try createTppMeasurementsTable(connection)
             try setSchemaVersion(currentSchemaVersion)
             Self.logger.info("Database schema created successfully")
         } else if existingVersion < currentSchemaVersion {
@@ -174,6 +175,12 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
             let connection = try getConnection()
             try createApiOutagesTable(connection)
             Self.logger.info("Migration v5->v6: created api_outages table")
+        }
+
+        if existingVersion < 7 {
+            let connection = try getConnection()
+            try createTppMeasurementsTable(connection)
+            Self.logger.info("Migration v6->v7: created tpp_measurements table")
         }
 
         Self.logger.info("Migrations complete: \(existingVersion) -> \(currentSchemaVersion)")
@@ -353,6 +360,46 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
         try executeSQL(createIndex, on: connection)
 
         Self.logger.info("Created api_outages table and index")
+    }
+
+    private func createTppMeasurementsTable(_ connection: OpaquePointer) throws {
+        let createTable = """
+            CREATE TABLE IF NOT EXISTS tpp_measurements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp INTEGER NOT NULL,
+                window_start INTEGER,
+                model TEXT NOT NULL,
+                variant TEXT,
+                source TEXT NOT NULL,
+                five_hour_before REAL,
+                five_hour_after REAL,
+                five_hour_delta REAL,
+                seven_day_before REAL,
+                seven_day_after REAL,
+                seven_day_delta REAL,
+                input_tokens INTEGER NOT NULL,
+                output_tokens INTEGER NOT NULL,
+                cache_create_tokens INTEGER NOT NULL DEFAULT 0,
+                cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+                total_raw_tokens INTEGER NOT NULL,
+                tpp_five_hour REAL,
+                tpp_seven_day REAL,
+                confidence TEXT NOT NULL DEFAULT 'high',
+                message_count INTEGER DEFAULT 1
+            )
+            """
+        try executeSQL(createTable, on: connection)
+
+        try executeSQL(
+            "CREATE INDEX IF NOT EXISTS idx_tpp_timestamp ON tpp_measurements(timestamp)",
+            on: connection
+        )
+        try executeSQL(
+            "CREATE INDEX IF NOT EXISTS idx_tpp_model_source ON tpp_measurements(model, source)",
+            on: connection
+        )
+
+        Self.logger.info("Created tpp_measurements table and indexes")
     }
 
     // MARK: - Rollup Metadata Helpers

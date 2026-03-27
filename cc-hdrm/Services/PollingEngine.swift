@@ -86,6 +86,12 @@ final class PollingEngine: PollingEngineProtocol {
         startPollingLoop()
     }
 
+    func performForcedPoll() async {
+        Self.logger.info("Forced poll requested")
+        await performPollCycle()
+        Self.logger.info("Forced poll completed")
+    }
+
     // MARK: - Private Helpers
 
     /// Creates and assigns the polling loop task. Used by both `start()` and `restartPolling()`

@@ -26,6 +26,9 @@ final class MockPreferencesManager: PreferencesManagerProtocol {
     var extraUsageLastBillingPeriodKey: String?
     var apiStatusAlertsEnabled: Bool = PreferencesDefaults.apiStatusAlertsEnabled
     var hasCompletedOnboarding: Bool = false
+    var isBenchmarkEnabled: Bool = false
+    var benchmarkModels: [String] = []
+    var benchmarkVariants: [String] = [BenchmarkVariant.outputHeavy.rawValue]
     var resetToDefaultsCallCount = 0
 
     func resetToDefaults() {
@@ -53,5 +56,8 @@ final class MockPreferencesManager: PreferencesManagerProtocol {
         extraUsageLastBillingPeriodKey = nil
         apiStatusAlertsEnabled = PreferencesDefaults.apiStatusAlertsEnabled
         hasCompletedOnboarding = false
+        isBenchmarkEnabled = false
+        benchmarkModels = []
+        benchmarkVariants = [BenchmarkVariant.outputHeavy.rawValue]
     }
 }

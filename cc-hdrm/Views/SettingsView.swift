@@ -33,6 +33,10 @@ struct SettingsView: View {
     @State private var extraUsageThreshold75: Bool
     @State private var extraUsageThreshold90: Bool
     @State private var extraUsageEnteredAlert: Bool
+    @State private var benchmarkEnabled: Bool
+    @State private var benchmarkVariantOutputHeavy: Bool
+    @State private var benchmarkVariantInputHeavy: Bool
+    @State private var benchmarkVariantCacheHeavy: Bool
 
     /// Discrete poll interval options per AC #2.
     private static let pollIntervalOptions: [TimeInterval] = [10, 15, 30, 60, 120, 300, 600, 900, 1800]
@@ -81,6 +85,11 @@ struct SettingsView: View {
         _extraUsageThreshold75 = State(initialValue: preferencesManager.extraUsageThreshold75Enabled)
         _extraUsageThreshold90 = State(initialValue: preferencesManager.extraUsageThreshold90Enabled)
         _extraUsageEnteredAlert = State(initialValue: preferencesManager.extraUsageEnteredAlertEnabled)
+        _benchmarkEnabled = State(initialValue: preferencesManager.isBenchmarkEnabled)
+        let storedVariants = preferencesManager.benchmarkVariants
+        _benchmarkVariantOutputHeavy = State(initialValue: storedVariants.contains(BenchmarkVariant.outputHeavy.rawValue))
+        _benchmarkVariantInputHeavy = State(initialValue: storedVariants.contains(BenchmarkVariant.inputHeavy.rawValue))
+        _benchmarkVariantCacheHeavy = State(initialValue: storedVariants.contains(BenchmarkVariant.cacheHeavy.rawValue))
     }
 
     var body: some View {
@@ -288,6 +297,44 @@ struct SettingsView: View {
                 }
             }
 
+            // Token Efficiency section (Story 20.1)
+            Divider()
+
+            Text("Token Efficiency")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Toggle("Enable Measure button", isOn: $benchmarkEnabled)
+                .onChange(of: benchmarkEnabled) { _, newValue in
+                    preferencesManager.isBenchmarkEnabled = newValue
+                }
+                .accessibilityLabel("Enable benchmark measure button, \(benchmarkEnabled ? "on" : "off")")
+
+            if benchmarkEnabled {
+                Text("Benchmark variants")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Toggle("Output-heavy", isOn: $benchmarkVariantOutputHeavy)
+                    .padding(.leading, 16)
+                    .onChange(of: benchmarkVariantOutputHeavy) { _, _ in syncBenchmarkVariants() }
+                    .accessibilityLabel("Output heavy variant, \(benchmarkVariantOutputHeavy ? "on" : "off")")
+
+                Toggle("Input-heavy", isOn: $benchmarkVariantInputHeavy)
+                    .padding(.leading, 16)
+                    .onChange(of: benchmarkVariantInputHeavy) { _, _ in syncBenchmarkVariants() }
+                    .accessibilityLabel("Input heavy variant, \(benchmarkVariantInputHeavy ? "on" : "off")")
+
+                Toggle("Cache-heavy", isOn: $benchmarkVariantCacheHeavy)
+                    .padding(.leading, 16)
+                    .onChange(of: benchmarkVariantCacheHeavy) { _, _ in syncBenchmarkVariants() }
+                    .accessibilityLabel("Cache heavy variant, \(benchmarkVariantCacheHeavy ? "on" : "off")")
+
+                Text("Benchmark sends test requests per model to measure how many tokens equal 1% of your usage budget. Each variant uses ~2K-5K tokens. Running all variants for all models uses the most tokens but reveals the most about rate limit weighting.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             // Advanced section (Story 15.2: Custom credit limit override)
             Divider()
 
@@ -421,6 +468,10 @@ struct SettingsView: View {
                     extraUsageThreshold90 = preferencesManager.extraUsageThreshold90Enabled
                     extraUsageEnteredAlert = preferencesManager.extraUsageEnteredAlertEnabled
                     showAdvanced = false
+                    benchmarkEnabled = preferencesManager.isBenchmarkEnabled
+                    benchmarkVariantOutputHeavy = true
+                    benchmarkVariantInputHeavy = false
+                    benchmarkVariantCacheHeavy = false
                     onThresholdChange?()
                 }
                 .accessibilityLabel("Reset all settings to default values")
@@ -485,6 +536,15 @@ struct SettingsView: View {
     /// Returns the display label for a given retention days value.
     static func retentionLabel(for days: Int) -> String {
         retentionOptions.first { $0.days == days }?.label ?? "\(days) days"
+    }
+
+    /// Syncs benchmark variant toggles to the preferences manager.
+    private func syncBenchmarkVariants() {
+        var variants: [String] = []
+        if benchmarkVariantOutputHeavy { variants.append(BenchmarkVariant.outputHeavy.rawValue) }
+        if benchmarkVariantInputHeavy { variants.append(BenchmarkVariant.inputHeavy.rawValue) }
+        if benchmarkVariantCacheHeavy { variants.append(BenchmarkVariant.cacheHeavy.rawValue) }
+        preferencesManager.benchmarkVariants = variants
     }
 
     /// Result of validating credit limit text input.

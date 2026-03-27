@@ -16,6 +16,8 @@ struct AnalyticsView: View {
     var patternDetector: (any SubscriptionPatternDetectorProtocol)?
     var tierRecommendationService: (any TierRecommendationServiceProtocol)?
     var preferencesManager: (any PreferencesManagerProtocol)?
+    var benchmarkService: (any BenchmarkServiceProtocol)?
+    var tppStorageService: (any TPPStorageServiceProtocol)?
 
     /// Per-time-range toggle state for series visibility.
     /// Defaults both series to visible; stored as a simple value type for `@State` compatibility.
@@ -94,6 +96,18 @@ struct AnalyticsView: View {
                 outagePeriods: outagePeriods
             )
             valueSection
+
+            // Token Efficiency benchmark section (Story 20.1)
+            if let benchmarkService, let tppStorageService, let preferencesManager,
+               preferencesManager.isBenchmarkEnabled {
+                Divider()
+                BenchmarkSectionView(
+                    benchmarkService: benchmarkService,
+                    tppStorageService: tppStorageService,
+                    preferencesManager: preferencesManager,
+                    appState: appState
+                )
+            }
         }
         .padding()
         .onAppear {

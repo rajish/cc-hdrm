@@ -16,6 +16,8 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
     private var patternDetector: (any SubscriptionPatternDetectorProtocol)?
     private var tierRecommendationService: (any TierRecommendationServiceProtocol)?
     private var preferencesManager: (any PreferencesManagerProtocol)?
+    private var benchmarkService: (any BenchmarkServiceProtocol)?
+    private var tppStorageService: (any TPPStorageServiceProtocol)?
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -34,7 +36,9 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
         headroomAnalysisService: any HeadroomAnalysisServiceProtocol,
         patternDetector: (any SubscriptionPatternDetectorProtocol)? = nil,
         tierRecommendationService: (any TierRecommendationServiceProtocol)? = nil,
-        preferencesManager: (any PreferencesManagerProtocol)? = nil
+        preferencesManager: (any PreferencesManagerProtocol)? = nil,
+        benchmarkService: (any BenchmarkServiceProtocol)? = nil,
+        tppStorageService: (any TPPStorageServiceProtocol)? = nil
     ) {
         self.appState = appState
         self.historicalDataService = historicalDataService
@@ -42,6 +46,8 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
         self.patternDetector = patternDetector
         self.tierRecommendationService = tierRecommendationService
         self.preferencesManager = preferencesManager
+        self.benchmarkService = benchmarkService
+        self.tppStorageService = tppStorageService
     }
 
     /// Toggles the analytics window: opens if closed, brings to front if open.
@@ -129,7 +135,9 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
             headroomAnalysisService: headroomAnalysisService,
             patternDetector: patternDetector,
             tierRecommendationService: tierRecommendationService,
-            preferencesManager: preferencesManager
+            preferencesManager: preferencesManager,
+            benchmarkService: benchmarkService,
+            tppStorageService: tppStorageService
         )
         panel.contentView = NSHostingView(rootView: contentView)
 
@@ -165,6 +173,8 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
         patternDetector = nil
         tierRecommendationService = nil
         preferencesManager = nil
+        benchmarkService = nil
+        tppStorageService = nil
     }
     #endif
 }
