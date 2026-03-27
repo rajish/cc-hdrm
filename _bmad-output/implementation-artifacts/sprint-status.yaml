@@ -185,6 +185,6 @@ development_status:
   epic-20: in-progress  # Token Efficiency Ratio (Phase 6)
   20-1-active-benchmark-measurement: done  # Code review passed 2026-03-27
   20-2-claude-code-log-parser-service: done  # Best-effort enrichment layer with health indicator
-  20-3-tpp-data-model-passive-measurement-engine: ready-for-dev  # Continuous directional signal between benchmarks
-  20-4-tpp-trend-visualization: backlog  # Two-tier viz: benchmark points + passive band
+  20-3-tpp-data-model-passive-measurement-engine: done  # Code review passed 2026-03-27
+  20-4-tpp-trend-visualization: ready-for-dev  # Two-tier viz: benchmark points + passive band
   20-5-historical-tpp-backfill: ready-for-dev  # Nice-to-have, raw polls only, rollups low-confidence
