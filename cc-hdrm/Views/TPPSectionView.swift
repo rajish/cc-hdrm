@@ -27,11 +27,30 @@ struct TPPSectionView: View {
         category: "tpp-section"
     )
 
-    private var chartDataService: TPPChartDataService {
-        TPPChartDataService(tppStorage: tppStorageService)
+    private var isBenchmarkEnabled: Bool {
+        preferencesManager?.isBenchmarkEnabled ?? false
     }
 
     var body: some View {
+        // AC-1: Do not render an empty shell when there is no data and benchmark is disabled.
+        if isLoading || !chartData.isEmpty || isBenchmarkEnabled {
+            sectionContent
+                .task(id: TaskTrigger(timeRange: selectedTimeRange, model: selectedModel)) {
+                    await loadData()
+                }
+        } else {
+            // Emit nothing — no data and benchmark disabled. Still kick off load so we
+            // re-evaluate if passive data arrives.
+            Color.clear
+                .frame(width: 0, height: 0)
+                .task(id: TaskTrigger(timeRange: selectedTimeRange, model: selectedModel)) {
+                    await loadData()
+                }
+        }
+    }
+
+    @ViewBuilder
+    private var sectionContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Section header
             HStack {
@@ -76,9 +95,6 @@ struct TPPSectionView: View {
                     weightingCard(discovery)
                 }
             }
-        }
-        .task(id: TaskTrigger(timeRange: selectedTimeRange, model: selectedModel)) {
-            await loadData()
         }
     }
 
@@ -210,9 +226,7 @@ struct TPPSectionView: View {
                     .foregroundStyle(.secondary)
             }
 
-            let formatter = DateFormatter()
-            let _ = formatter.dateStyle = .medium
-            Text("Last measured: \(formatter.string(from: discovery.lastMeasuredDate))")
+            Text("Last measured: \(discovery.lastMeasuredDate.formatted(date: .abbreviated, time: .omitted))")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
@@ -228,7 +242,8 @@ struct TPPSectionView: View {
         defer { isLoading = false }
 
         do {
-            chartData = try await chartDataService.loadTPPData(
+            let service = TPPChartDataService(tppStorage: tppStorageService)
+            chartData = try await service.loadTPPData(
                 timeRange: selectedTimeRange,
                 model: selectedModel
             )

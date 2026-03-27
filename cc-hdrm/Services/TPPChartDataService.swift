@@ -5,7 +5,7 @@ import os
 ///
 /// Fetches from `TPPStorageServiceProtocol`, computes averages, trend lines,
 /// shift detection, insight text, and weighting discovery.
-final class TPPChartDataService: TPPChartDataServiceProtocol, @unchecked Sendable {
+final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
     private let tppStorage: any TPPStorageServiceProtocol
 
     private static let logger = Logger(
@@ -295,7 +295,7 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, @unchecked Sendabl
             )
 
             if let avgTPP = avgResult.fiveHour,
-               let latestTPP = benchmarkMeasurements.last?.tppFiveHour,
+               let latestTPP = benchmarkMeasurements.max(by: { $0.timestamp < $1.timestamp })?.tppFiveHour,
                avgTPP > 0 {
                 let changePercent = ((latestTPP - avgTPP) / avgTPP) * 100
 
