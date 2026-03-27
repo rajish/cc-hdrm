@@ -17,6 +17,8 @@ final class PollingEngine: PollingEngineProtocol {
     private let patternDetector: (any SubscriptionPatternDetectorProtocol)?
     private let patternNotificationService: (any PatternNotificationServiceProtocol)?
     private let extraUsageAlertService: (any ExtraUsageAlertServiceProtocol)?
+    private let passiveTPPEngine: (any PassiveTPPEngineProtocol)?
+    private let claudeCodeLogParser: (any ClaudeCodeLogParserProtocol)?
     private var pollingTask: Task<Void, Never>?
     private var sparklineRefreshTask: Task<Void, Never>?
     /// Guards against repeated profile backfill attempts when the profile genuinely has no tier.
@@ -43,6 +45,8 @@ final class PollingEngine: PollingEngineProtocol {
         patternDetector: (any SubscriptionPatternDetectorProtocol)? = nil,
         patternNotificationService: (any PatternNotificationServiceProtocol)? = nil,
         extraUsageAlertService: (any ExtraUsageAlertServiceProtocol)? = nil,
+        passiveTPPEngine: (any PassiveTPPEngineProtocol)? = nil,
+        claudeCodeLogParser: (any ClaudeCodeLogParserProtocol)? = nil,
         isLowPowerModeEnabled: @escaping () -> Bool = { ProcessInfo.processInfo.isLowPowerModeEnabled }
     ) {
         self.keychainService = keychainService
@@ -56,6 +60,8 @@ final class PollingEngine: PollingEngineProtocol {
         self.patternDetector = patternDetector
         self.patternNotificationService = patternNotificationService
         self.extraUsageAlertService = extraUsageAlertService
+        self.passiveTPPEngine = passiveTPPEngine
+        self.claudeCodeLogParser = claudeCodeLogParser
         self.isLowPowerModeEnabled = isLowPowerModeEnabled
     }
 
@@ -276,7 +282,17 @@ final class PollingEngine: PollingEngineProtocol {
             // Persist to database asynchronously (fire-and-forget, does not block UI)
             // Pass tier for reset event recording, then run pattern analysis
             let tier = effectiveCredentials.rateLimitTier
-            Task { [patternDetector, patternNotificationService] in
+            let pollTimestamp = Int64(Date().timeIntervalSince1970 * 1000)
+            Task { [patternDetector, patternNotificationService, passiveTPPEngine, claudeCodeLogParser, historicalDataService] in
+                // Capture previous poll BEFORE persisting the new one (Option A from story)
+                let previousPoll: UsagePoll?
+                do {
+                    previousPoll = try await historicalDataService?.getLastPoll()
+                } catch {
+                    Self.logger.error("Failed to get previous poll for passive TPP: \(error.localizedDescription)")
+                    previousPoll = nil
+                }
+
                 do {
                     try await historicalDataService?.persistPoll(response, tier: tier)
                 } catch {
@@ -294,6 +310,22 @@ final class PollingEngine: PollingEngineProtocol {
                     } catch {
                         Self.logger.error("Pattern analysis failed: \(error.localizedDescription)")
                     }
+                }
+
+                // Passive TPP engine processing (fire-and-forget — failures must not affect polling)
+                if let engine = passiveTPPEngine, let prevPoll = previousPoll {
+                    // Trigger incremental log parser scan before querying tokens
+                    await claudeCodeLogParser?.scan()
+
+                    let currentPoll = UsagePoll(
+                        id: 0,
+                        timestamp: pollTimestamp,
+                        fiveHourUtil: response.fiveHour?.utilization,
+                        fiveHourResetsAt: nil,
+                        sevenDayUtil: response.sevenDay?.utilization,
+                        sevenDayResetsAt: nil
+                    )
+                    await engine.processPoll(current: currentPoll, previous: prevPoll)
                 }
             }
 

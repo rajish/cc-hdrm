@@ -33,6 +33,18 @@ private final class MockTPPStorageService: TPPStorageServiceProtocol, @unchecked
     func lastBenchmarkTimestamp() async throws -> Int64? {
         return lastTimestamp
     }
+
+    func storePassiveResult(_ measurement: TPPMeasurement) async throws {
+        storedMeasurements.append(measurement)
+    }
+
+    func getMeasurements(from: Int64, to: Int64, source: MeasurementSource?, model: String?, confidence: MeasurementConfidence?) async throws -> [TPPMeasurement] {
+        return []
+    }
+
+    func getAverageTPP(from: Int64, to: Int64, model: String?, source: MeasurementSource?) async throws -> (fiveHour: Double?, sevenDay: Double?) {
+        return (nil, nil)
+    }
 }
 
 private final class MockBenchmarkKeychainService: KeychainServiceProtocol, @unchecked Sendable {
