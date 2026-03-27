@@ -187,4 +187,4 @@ development_status:
   20-2-claude-code-log-parser-service: done  # Best-effort enrichment layer with health indicator
   20-3-tpp-data-model-passive-measurement-engine: ready-for-dev  # Continuous directional signal between benchmarks
   20-4-tpp-trend-visualization: backlog  # Two-tier viz: benchmark points + passive band
-  20-5-historical-tpp-backfill: backlog  # Nice-to-have, raw polls only, rollups low-confidence
+  20-5-historical-tpp-backfill: ready-for-dev  # Nice-to-have, raw polls only, rollups low-confidence
