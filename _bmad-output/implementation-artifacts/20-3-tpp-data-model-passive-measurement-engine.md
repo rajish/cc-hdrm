@@ -1,6 +1,6 @@
 # Story 20.3: TPP Data Model & Passive Measurement Engine
 
-Status: dev-complete
+Status: done
 
 ## Story
 
@@ -134,6 +134,12 @@ The `tpp_measurements` table was created in Story 20.1 (migration v6->v7) with a
   - [x] 7.1 Run `xcodegen generate` after all files are added
   - [x] 7.2 Verify build compiles cleanly
   - [ ] 7.3 Verify all tests pass
+
+### Review Findings
+
+- [x] [Review][Patch] storePassiveResult was verbatim copy of storeBenchmarkResult [cc-hdrm/Services/TPPStorageService.swift] — Extracted shared INSERT logic into private `insertMeasurementRecord` helper; both public methods now delegate to it. Fixed.
+- [x] [Review][Patch] Logger calls inside lock.withLock blocks in accumulation branches [cc-hdrm/Services/PassiveTPPEngine.swift] — Moved all log calls outside the lock; introduced local `AccumulationAction` enum to return action result from lock closure. Fixed.
+- [x] [Review][Defer] Int32 truncation for token counts in sqlite3_bind_int — pre-existing pattern from storeBenchmarkResult in Story 20.1; all token columns use sqlite3_bind_int(Int32) despite schema using INTEGER (64-bit). Deferred: pre-existing
 
 ## Dev Notes
 

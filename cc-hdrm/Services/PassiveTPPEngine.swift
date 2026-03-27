@@ -169,11 +169,11 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
             }
         } else if totalTokensAcrossModels > 0 {
             // No meaningful delta but tokens consumed — accumulate
-            lock.withLock {
+            enum AccumulationAction { case capExceeded, monotonicViolation, accumulated, started }
+            let action: AccumulationAction = lock.withLock {
                 if var window = accumulationWindow {
                     // Check 30-minute cap
                     if current.timestamp - window.startTimestamp > Self.maxAccumulationMs {
-                        Self.logger.info("Accumulation window exceeded 30min cap — discarding and restarting")
                         accumulationWindow = AccumulationWindow(
                             startTimestamp: previous.timestamp,
                             startFiveHourUtil: previousFiveHour,
@@ -185,12 +185,11 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
                         for aggregate in tokenAggregates {
                             accumulationWindow?.tokensByModel[aggregate.model] = aggregate
                         }
-                        return
+                        return .capExceeded
                     }
 
                     // Monotonic guard: if utilization decreased during accumulation, discard
                     if currentFiveHour < window.startFiveHourUtil {
-                        Self.logger.info("Utilization decreased during accumulation — discarding window")
                         accumulationWindow = AccumulationWindow(
                             startTimestamp: previous.timestamp,
                             startFiveHourUtil: previousFiveHour,
@@ -201,7 +200,7 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
                         for aggregate in tokenAggregates {
                             accumulationWindow?.tokensByModel[aggregate.model] = aggregate
                         }
-                        return
+                        return .monotonicViolation
                     }
 
                     // Accumulate tokens into existing window
@@ -219,6 +218,7 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
                     }
                     window.lastPollTimestamp = current.timestamp
                     accumulationWindow = window
+                    return .accumulated
                 } else {
                     // Start new accumulation window
                     var tokensByModel: [String: TokenAggregate] = [:]
@@ -232,9 +232,17 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
                         tokensByModel: tokensByModel,
                         lastPollTimestamp: current.timestamp
                     )
+                    return .started
                 }
             }
-            Self.logger.debug("Tokens accumulated — no utilization delta yet")
+            switch action {
+            case .capExceeded:
+                Self.logger.info("Accumulation window exceeded 30min cap — discarding and restarting")
+            case .monotonicViolation:
+                Self.logger.info("Utilization decreased during accumulation — discarding window")
+            case .accumulated, .started:
+                Self.logger.debug("Tokens accumulated — no utilization delta yet")
+            }
         }
         // If no delta AND no tokens, nothing to do
     }

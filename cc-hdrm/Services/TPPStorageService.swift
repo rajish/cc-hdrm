@@ -24,59 +24,7 @@ final class TPPStorageService: TPPStorageServiceProtocol, @unchecked Sendable {
             Self.logger.debug("Database unavailable - skipping TPP measurement persistence")
             return
         }
-
-        let connection = try databaseManager.getConnection()
-
-        let sql = """
-            INSERT INTO tpp_measurements (
-                timestamp, window_start, model, variant, source,
-                five_hour_before, five_hour_after, five_hour_delta,
-                seven_day_before, seven_day_after, seven_day_delta,
-                input_tokens, output_tokens, cache_create_tokens, cache_read_tokens,
-                total_raw_tokens, tpp_five_hour, tpp_seven_day, confidence, message_count
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """
-
-        var statement: OpaquePointer?
-        defer {
-            if let statement { sqlite3_finalize(statement) }
-        }
-
-        let prepareResult = sqlite3_prepare_v2(connection, sql, -1, &statement, nil)
-        guard prepareResult == SQLITE_OK else {
-            let errorMessage = String(cString: sqlite3_errmsg(connection))
-            Self.logger.error("Failed to prepare INSERT: \(errorMessage, privacy: .public)")
-            throw AppError.databaseQueryFailed(underlying: SQLiteError.prepareFailed(code: prepareResult))
-        }
-
-        sqlite3_bind_int64(statement, 1, measurement.timestamp)
-        bindOptionalInt64(statement, 2, measurement.windowStart)
-        bindText(statement, 3, measurement.model)
-        bindOptionalText(statement, 4, measurement.variant)
-        bindText(statement, 5, measurement.source.rawValue)
-        bindOptionalDouble(statement, 6, measurement.fiveHourBefore)
-        bindOptionalDouble(statement, 7, measurement.fiveHourAfter)
-        bindOptionalDouble(statement, 8, measurement.fiveHourDelta)
-        bindOptionalDouble(statement, 9, measurement.sevenDayBefore)
-        bindOptionalDouble(statement, 10, measurement.sevenDayAfter)
-        bindOptionalDouble(statement, 11, measurement.sevenDayDelta)
-        sqlite3_bind_int(statement, 12, Int32(measurement.inputTokens))
-        sqlite3_bind_int(statement, 13, Int32(measurement.outputTokens))
-        sqlite3_bind_int(statement, 14, Int32(measurement.cacheCreateTokens))
-        sqlite3_bind_int(statement, 15, Int32(measurement.cacheReadTokens))
-        sqlite3_bind_int(statement, 16, Int32(measurement.totalRawTokens))
-        bindOptionalDouble(statement, 17, measurement.tppFiveHour)
-        bindOptionalDouble(statement, 18, measurement.tppSevenDay)
-        bindText(statement, 19, measurement.confidence.rawValue)
-        sqlite3_bind_int(statement, 20, Int32(measurement.messageCount))
-
-        let stepResult = sqlite3_step(statement)
-        guard stepResult == SQLITE_DONE else {
-            let errorMessage = String(cString: sqlite3_errmsg(connection))
-            Self.logger.error("Failed to INSERT measurement: \(errorMessage, privacy: .public)")
-            throw AppError.databaseQueryFailed(underlying: SQLiteError.execFailed(message: errorMessage))
-        }
-
+        try await insertMeasurementRecord(measurement)
         Self.logger.info("Stored TPP measurement: model=\(measurement.model, privacy: .public) source=\(measurement.source.rawValue, privacy: .public)")
     }
 
@@ -148,59 +96,7 @@ final class TPPStorageService: TPPStorageServiceProtocol, @unchecked Sendable {
             Self.logger.debug("Database unavailable - skipping passive TPP measurement persistence")
             return
         }
-
-        let connection = try databaseManager.getConnection()
-
-        let sql = """
-            INSERT INTO tpp_measurements (
-                timestamp, window_start, model, variant, source,
-                five_hour_before, five_hour_after, five_hour_delta,
-                seven_day_before, seven_day_after, seven_day_delta,
-                input_tokens, output_tokens, cache_create_tokens, cache_read_tokens,
-                total_raw_tokens, tpp_five_hour, tpp_seven_day, confidence, message_count
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """
-
-        var statement: OpaquePointer?
-        defer {
-            if let statement { sqlite3_finalize(statement) }
-        }
-
-        let prepareResult = sqlite3_prepare_v2(connection, sql, -1, &statement, nil)
-        guard prepareResult == SQLITE_OK else {
-            let errorMessage = String(cString: sqlite3_errmsg(connection))
-            Self.logger.error("Failed to prepare passive INSERT: \(errorMessage, privacy: .public)")
-            throw AppError.databaseQueryFailed(underlying: SQLiteError.prepareFailed(code: prepareResult))
-        }
-
-        sqlite3_bind_int64(statement, 1, measurement.timestamp)
-        bindOptionalInt64(statement, 2, measurement.windowStart)
-        bindText(statement, 3, measurement.model)
-        bindOptionalText(statement, 4, measurement.variant)
-        bindText(statement, 5, measurement.source.rawValue)
-        bindOptionalDouble(statement, 6, measurement.fiveHourBefore)
-        bindOptionalDouble(statement, 7, measurement.fiveHourAfter)
-        bindOptionalDouble(statement, 8, measurement.fiveHourDelta)
-        bindOptionalDouble(statement, 9, measurement.sevenDayBefore)
-        bindOptionalDouble(statement, 10, measurement.sevenDayAfter)
-        bindOptionalDouble(statement, 11, measurement.sevenDayDelta)
-        sqlite3_bind_int(statement, 12, Int32(measurement.inputTokens))
-        sqlite3_bind_int(statement, 13, Int32(measurement.outputTokens))
-        sqlite3_bind_int(statement, 14, Int32(measurement.cacheCreateTokens))
-        sqlite3_bind_int(statement, 15, Int32(measurement.cacheReadTokens))
-        sqlite3_bind_int(statement, 16, Int32(measurement.totalRawTokens))
-        bindOptionalDouble(statement, 17, measurement.tppFiveHour)
-        bindOptionalDouble(statement, 18, measurement.tppSevenDay)
-        bindText(statement, 19, measurement.confidence.rawValue)
-        sqlite3_bind_int(statement, 20, Int32(measurement.messageCount))
-
-        let stepResult = sqlite3_step(statement)
-        guard stepResult == SQLITE_DONE else {
-            let errorMessage = String(cString: sqlite3_errmsg(connection))
-            Self.logger.error("Failed to INSERT passive measurement: \(errorMessage, privacy: .public)")
-            throw AppError.databaseQueryFailed(underlying: SQLiteError.execFailed(message: errorMessage))
-        }
-
+        try await insertMeasurementRecord(measurement)
         Self.logger.info("Stored passive TPP measurement: model=\(measurement.model, privacy: .public) confidence=\(measurement.confidence.rawValue, privacy: .public)")
     }
 
@@ -311,6 +207,60 @@ final class TPPStorageService: TPPStorageServiceProtocol, @unchecked Sendable {
     }
 
     // MARK: - Private Helpers
+
+    private func insertMeasurementRecord(_ measurement: TPPMeasurement) async throws {
+        let connection = try databaseManager.getConnection()
+
+        let sql = """
+            INSERT INTO tpp_measurements (
+                timestamp, window_start, model, variant, source,
+                five_hour_before, five_hour_after, five_hour_delta,
+                seven_day_before, seven_day_after, seven_day_delta,
+                input_tokens, output_tokens, cache_create_tokens, cache_read_tokens,
+                total_raw_tokens, tpp_five_hour, tpp_seven_day, confidence, message_count
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+
+        var statement: OpaquePointer?
+        defer {
+            if let statement { sqlite3_finalize(statement) }
+        }
+
+        let prepareResult = sqlite3_prepare_v2(connection, sql, -1, &statement, nil)
+        guard prepareResult == SQLITE_OK else {
+            let errorMessage = String(cString: sqlite3_errmsg(connection))
+            Self.logger.error("Failed to prepare INSERT: \(errorMessage, privacy: .public)")
+            throw AppError.databaseQueryFailed(underlying: SQLiteError.prepareFailed(code: prepareResult))
+        }
+
+        sqlite3_bind_int64(statement, 1, measurement.timestamp)
+        bindOptionalInt64(statement, 2, measurement.windowStart)
+        bindText(statement, 3, measurement.model)
+        bindOptionalText(statement, 4, measurement.variant)
+        bindText(statement, 5, measurement.source.rawValue)
+        bindOptionalDouble(statement, 6, measurement.fiveHourBefore)
+        bindOptionalDouble(statement, 7, measurement.fiveHourAfter)
+        bindOptionalDouble(statement, 8, measurement.fiveHourDelta)
+        bindOptionalDouble(statement, 9, measurement.sevenDayBefore)
+        bindOptionalDouble(statement, 10, measurement.sevenDayAfter)
+        bindOptionalDouble(statement, 11, measurement.sevenDayDelta)
+        sqlite3_bind_int(statement, 12, Int32(measurement.inputTokens))
+        sqlite3_bind_int(statement, 13, Int32(measurement.outputTokens))
+        sqlite3_bind_int(statement, 14, Int32(measurement.cacheCreateTokens))
+        sqlite3_bind_int(statement, 15, Int32(measurement.cacheReadTokens))
+        sqlite3_bind_int(statement, 16, Int32(measurement.totalRawTokens))
+        bindOptionalDouble(statement, 17, measurement.tppFiveHour)
+        bindOptionalDouble(statement, 18, measurement.tppSevenDay)
+        bindText(statement, 19, measurement.confidence.rawValue)
+        sqlite3_bind_int(statement, 20, Int32(measurement.messageCount))
+
+        let stepResult = sqlite3_step(statement)
+        guard stepResult == SQLITE_DONE else {
+            let errorMessage = String(cString: sqlite3_errmsg(connection))
+            Self.logger.error("Failed to INSERT measurement: \(errorMessage, privacy: .public)")
+            throw AppError.databaseQueryFailed(underlying: SQLiteError.execFailed(message: errorMessage))
+        }
+    }
 
     private func readMeasurement(from statement: OpaquePointer) -> TPPMeasurement {
         let confidenceStr = String(cString: sqlite3_column_text(statement, 19))
