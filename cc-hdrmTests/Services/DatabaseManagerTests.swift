@@ -51,7 +51,7 @@ struct DatabaseManagerTests {
         #expect(manager.indexExists("idx_reset_events_timestamp"))
     }
 
-    @Test("Schema creation sets schema version to current (6)")
+    @Test("Schema creation sets schema version to current (7)")
     func schemaCreationSetsVersion() throws {
         let (manager, path) = makeManager()
         defer { cleanup(manager: manager, path: path) }
@@ -59,7 +59,7 @@ struct DatabaseManagerTests {
         try manager.ensureSchema()
 
         let version = try manager.getSchemaVersion()
-        #expect(version == 6)
+        #expect(version == 7)
     }
 
     @Test("Database path is correct")
@@ -202,7 +202,7 @@ struct DatabaseManagerTests {
         let version2 = try manager2.getSchemaVersion()
 
         #expect(version1 == version2)
-        #expect(version1 == 6)
+        #expect(version1 == 7)
     }
 
     @Test("Migration v1->v2 creates rollup_metadata table")
@@ -289,7 +289,7 @@ struct DatabaseManagerTests {
         #expect(util == 0.99)
 
         // Verify version bumped to current (migration runs all the way through)
-        #expect(try manager2.getSchemaVersion() == 6)
+        #expect(try manager2.getSchemaVersion() == 7)
     }
 
     @Test("Migration v2->v3 adds extra_usage columns to usage_polls")
@@ -377,7 +377,7 @@ struct DatabaseManagerTests {
         #expect(util == 0.88)
 
         // Verify version bumped to 6
-        #expect(try manager2.getSchemaVersion() == 6)
+        #expect(try manager2.getSchemaVersion() == 7)
     }
 
     // MARK: - Table Schema Verification (AC #1)
@@ -603,7 +603,7 @@ struct DatabaseManagerTests {
         let rollupResult = sqlite3_exec(connection2, "INSERT INTO usage_rollups (period_start, period_end, resolution, extra_usage_delta) VALUES (1000, 2000, '5min', 10.5)", nil, nil, &errorMessage)
         #expect(rollupResult == SQLITE_OK, "INSERT with extra_usage_delta into usage_rollups should succeed")
 
-        #expect(try manager2.getSchemaVersion() == 6)
+        #expect(try manager2.getSchemaVersion() == 7)
     }
 
     @Test("Migration v4->v5 backfills deltas from consecutive polls")
@@ -652,6 +652,121 @@ struct DatabaseManagerTests {
         #expect(deltas[2].delta == 15.0, "Poll 3 delta should be 15.0")
         #expect(deltas[3].delta == 0.0, "Poll 4 (billing reset) delta should be 0")
         #expect(deltas[4].delta == 0.0, "Poll 5 (NULL credits) delta should be 0")
+    }
+
+    // MARK: - Story 20.1: tpp_measurements Table
+
+    @Test("Schema creation creates tpp_measurements table")
+    func schemaCreatesTppMeasurementsTable() throws {
+        let (manager, path) = makeManager()
+        defer { cleanup(manager: manager, path: path) }
+
+        try manager.ensureSchema()
+
+        #expect(manager.tableExists("tpp_measurements"))
+        #expect(manager.indexExists("idx_tpp_timestamp"))
+        #expect(manager.indexExists("idx_tpp_model_source"))
+    }
+
+    @Test("tpp_measurements table has correct columns")
+    func tppMeasurementsTableHasCorrectColumns() throws {
+        let (manager, path) = makeManager()
+        defer { cleanup(manager: manager, path: path) }
+
+        try manager.ensureSchema()
+
+        let connection = try manager.getConnection()
+        var statement: OpaquePointer?
+        sqlite3_prepare_v2(connection, "PRAGMA table_info(tpp_measurements)", -1, &statement, nil)
+
+        var columns: [String] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            if let namePtr = sqlite3_column_text(statement, 1) {
+                columns.append(String(cString: namePtr))
+            }
+        }
+        sqlite3_finalize(statement)
+
+        #expect(columns.contains("id"))
+        #expect(columns.contains("timestamp"))
+        #expect(columns.contains("window_start"))
+        #expect(columns.contains("model"))
+        #expect(columns.contains("variant"))
+        #expect(columns.contains("source"))
+        #expect(columns.contains("five_hour_before"))
+        #expect(columns.contains("five_hour_after"))
+        #expect(columns.contains("five_hour_delta"))
+        #expect(columns.contains("seven_day_before"))
+        #expect(columns.contains("seven_day_after"))
+        #expect(columns.contains("seven_day_delta"))
+        #expect(columns.contains("input_tokens"))
+        #expect(columns.contains("output_tokens"))
+        #expect(columns.contains("cache_create_tokens"))
+        #expect(columns.contains("cache_read_tokens"))
+        #expect(columns.contains("total_raw_tokens"))
+        #expect(columns.contains("tpp_five_hour"))
+        #expect(columns.contains("tpp_seven_day"))
+        #expect(columns.contains("confidence"))
+        #expect(columns.contains("message_count"))
+    }
+
+    @Test("Migration v6 to v7 creates tpp_measurements table")
+    func migrationV6ToV7CreatesTppMeasurements() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let testPath = tempDir.appendingPathComponent("test_\(UUID().uuidString).db")
+
+        let manager1 = DatabaseManager(databasePath: testPath)
+        let connection = try manager1.getConnection()
+
+        sqlite3_exec(connection, """
+            CREATE TABLE IF NOT EXISTS usage_polls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp INTEGER NOT NULL,
+                five_hour_util REAL
+            )
+            """, nil, nil, nil)
+        sqlite3_exec(connection, """
+            CREATE TABLE IF NOT EXISTS usage_rollups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                period_start INTEGER NOT NULL,
+                period_end INTEGER NOT NULL,
+                resolution TEXT NOT NULL
+            )
+            """, nil, nil, nil)
+        sqlite3_exec(connection, """
+            CREATE TABLE IF NOT EXISTS reset_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp INTEGER NOT NULL
+            )
+            """, nil, nil, nil)
+        sqlite3_exec(connection, """
+            CREATE TABLE IF NOT EXISTS rollup_metadata (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+            """, nil, nil, nil)
+        sqlite3_exec(connection, """
+            CREATE TABLE IF NOT EXISTS api_outages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                started_at INTEGER NOT NULL,
+                ended_at INTEGER,
+                failure_reason TEXT NOT NULL
+            )
+            """, nil, nil, nil)
+        sqlite3_exec(connection, "PRAGMA user_version = 6", nil, nil, nil)
+
+        #expect(!manager1.tableExists("tpp_measurements"))
+
+        manager1.closeConnection()
+
+        let manager2 = DatabaseManager(databasePath: testPath)
+        defer { cleanup(manager: manager2, path: testPath) }
+        try manager2.ensureSchema()
+
+        #expect(manager2.tableExists("tpp_measurements"))
+        #expect(manager2.indexExists("idx_tpp_timestamp"))
+        #expect(manager2.indexExists("idx_tpp_model_source"))
+        #expect(try manager2.getSchemaVersion() == 7)
     }
 
     // MARK: - Protocol Conformance

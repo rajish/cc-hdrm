@@ -8,4 +8,7 @@ protocol PollingEngineProtocol: Sendable {
     /// Restarts the polling loop with the current poll interval.
     /// Cancels the in-flight sleep and starts a new loop WITHOUT an immediate poll cycle.
     func restartPolling()
+    /// Performs a single forced poll cycle immediately, bypassing the sleep loop.
+    /// Used by BenchmarkService to get updated utilization after sending a test request.
+    func performForcedPoll() async
 }

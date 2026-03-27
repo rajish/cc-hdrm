@@ -81,5 +81,14 @@ protocol PreferencesManagerProtocol: AnyObject {
     /// Stored in UserDefaults, NOT derived from credential presence.
     var hasCompletedOnboarding: Bool { get set }
 
+    // MARK: - Benchmark (Story 20.1)
+
+    /// Whether the Measure button is shown in analytics (default: false — opt-in).
+    var isBenchmarkEnabled: Bool { get set }
+    /// Model identifiers to benchmark (empty = auto-detect from recent usage).
+    var benchmarkModels: [String] { get set }
+    /// Benchmark variants to run (default: ["output-heavy"]).
+    var benchmarkVariants: [String] { get set }
+
     func resetToDefaults()
 }

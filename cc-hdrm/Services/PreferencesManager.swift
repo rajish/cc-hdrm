@@ -35,6 +35,9 @@ final class PreferencesManager: PreferencesManagerProtocol {
         static let extraUsageLastBillingPeriodKey = "com.cc-hdrm.extraUsageLastBillingPeriodKey"
         static let apiStatusAlertsEnabled = "com.cc-hdrm.apiStatusAlertsEnabled"
         static let hasCompletedOnboarding = "com.cc-hdrm.hasCompletedOnboarding"
+        static let benchmarkEnabled = "com.cc-hdrm.benchmarkEnabled"
+        static let benchmarkModels = "com.cc-hdrm.benchmarkModels"
+        static let benchmarkVariants = "com.cc-hdrm.benchmarkVariants"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -347,6 +350,29 @@ final class PreferencesManager: PreferencesManagerProtocol {
         }
     }
 
+    // MARK: - Benchmark (Story 20.1)
+
+    var isBenchmarkEnabled: Bool {
+        get { defaults.bool(forKey: Keys.benchmarkEnabled) }
+        set {
+            Self.logger.info("Benchmark enabled changed to \(newValue)")
+            defaults.set(newValue, forKey: Keys.benchmarkEnabled)
+        }
+    }
+
+    var benchmarkModels: [String] {
+        get { defaults.stringArray(forKey: Keys.benchmarkModels) ?? [] }
+        set { defaults.set(newValue, forKey: Keys.benchmarkModels) }
+    }
+
+    var benchmarkVariants: [String] {
+        get {
+            let stored = defaults.stringArray(forKey: Keys.benchmarkVariants)
+            return stored ?? [BenchmarkVariant.outputHeavy.rawValue]
+        }
+        set { defaults.set(newValue, forKey: Keys.benchmarkVariants) }
+    }
+
     // MARK: - Reset
 
     func resetToDefaults() {
@@ -374,5 +400,8 @@ final class PreferencesManager: PreferencesManagerProtocol {
         defaults.removeObject(forKey: Keys.extraUsageLastBillingPeriodKey)
         defaults.removeObject(forKey: Keys.apiStatusAlertsEnabled)
         defaults.removeObject(forKey: Keys.hasCompletedOnboarding)
+        defaults.removeObject(forKey: Keys.benchmarkEnabled)
+        defaults.removeObject(forKey: Keys.benchmarkModels)
+        defaults.removeObject(forKey: Keys.benchmarkVariants)
     }
 }
