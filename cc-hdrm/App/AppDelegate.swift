@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var headroomAnalysisServiceRef: (any HeadroomAnalysisServiceProtocol)?
     private var benchmarkServiceRef: BenchmarkService?
     private var tppStorageServiceRef: TPPStorageService?
+    internal var backfillServiceRef: HistoricalTPPBackfillService?
     private var analyticsWindow: AnalyticsWindow?
     private var observationTask: Task<Void, Never>?
     private var onboardingWindowController: OnboardingWindowController?
@@ -142,6 +143,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             let passiveEngine = PassiveTPPEngine(logParser: logParser, tppStorage: tppStorage)
 
+            let backfillService = HistoricalTPPBackfillService(
+                historicalDataService: historicalDataService,
+                logParser: logParser,
+                tppStorage: tppStorage,
+                preferencesManager: preferences
+            )
+            self.backfillServiceRef = backfillService
+
             pollingEngine = PollingEngine(
                 keychainService: oauthKC,
                 tokenRefreshService: TokenRefreshService(),
@@ -199,7 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pop.behavior = .transient
         // Task wrapper required: onThresholdChange is a synchronous closure (called from SwiftUI
         // .onChange), but reevaluateThresholds() is async — Task bridges sync→async context.
-        pop.contentViewController = NSHostingController(rootView: PopoverView(appState: state, preferencesManager: preferences, launchAtLoginService: launchAtLoginService!, historicalDataService: historicalDataServiceRef, onThresholdChange: { [weak self] in
+        pop.contentViewController = NSHostingController(rootView: PopoverView(appState: state, preferencesManager: preferences, launchAtLoginService: launchAtLoginService!, historicalDataService: historicalDataServiceRef, backfillService: backfillServiceRef, onThresholdChange: { [weak self] in
             guard let self else { return }
             Task { @MainActor in
                 await self.notificationService?.reevaluateThresholds()
@@ -305,11 +314,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await updateCheckService?.checkForUpdate()
         }
 
-        // Fire-and-forget initial log parser scan (parser created earlier with PollingEngine services)
+        // Fire-and-forget initial log parser scan + backfill (parser created earlier with PollingEngine services)
         if let logParser = claudeCodeLogParser {
+            let backfillSvc = self.backfillServiceRef
             Task {
                 await logParser.scan()
                 Self.logger.info("Claude Code log parser initial scan complete")
+                // Run historical TPP backfill after log data is loaded
+                await backfillSvc?.runBackfillIfNeeded()
             }
         }
     }

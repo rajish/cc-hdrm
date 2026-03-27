@@ -40,4 +40,8 @@ protocol TPPStorageServiceProtocol: Sendable {
     ///   - source: Optional source filter. Nil averages across all sources.
     /// - Returns: Tuple of average TPP values (nil if no data)
     func getAverageTPP(from: Int64, to: Int64, model: String?, source: MeasurementSource?) async throws -> (fiveHour: Double?, sevenDay: Double?)
+
+    /// Deletes all backfill records (passive-backfill and rollup-backfill sources).
+    /// Used by the force re-run backfill feature.
+    func deleteBackfillRecords() async throws
 }

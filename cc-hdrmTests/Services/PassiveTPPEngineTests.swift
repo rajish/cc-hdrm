@@ -59,6 +59,10 @@ private final class MockPassiveTPPStorage: TPPStorageServiceProtocol, @unchecked
     func getAverageTPP(from: Int64, to: Int64, model: String?, source: MeasurementSource?) async throws -> (fiveHour: Double?, sevenDay: Double?) {
         return (nil, nil)
     }
+
+    func deleteBackfillRecords() async throws {
+        storedMeasurements.removeAll { $0.source == .passiveBackfill || $0.source == .rollupBackfill }
+    }
 }
 
 // MARK: - Test Helpers

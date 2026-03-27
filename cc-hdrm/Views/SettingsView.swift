@@ -6,6 +6,7 @@ struct SettingsView: View {
     let preferencesManager: PreferencesManagerProtocol
     let launchAtLoginService: LaunchAtLoginServiceProtocol
     let historicalDataService: (any HistoricalDataServiceProtocol)?
+    let backfillService: (any HistoricalTPPBackfillServiceProtocol)?
     let appState: AppState?
     var onDone: (() -> Void)?
     var onThresholdChange: (() -> Void)?
@@ -37,6 +38,8 @@ struct SettingsView: View {
     @State private var benchmarkVariantOutputHeavy: Bool
     @State private var benchmarkVariantInputHeavy: Bool
     @State private var benchmarkVariantCacheHeavy: Bool
+    @State private var isBackfillRunning = false
+    @State private var backfillResultMessage: String?
 
     /// Discrete poll interval options per AC #2.
     private static let pollIntervalOptions: [TimeInterval] = [10, 15, 30, 60, 120, 300, 600, 900, 1800]
@@ -57,10 +60,11 @@ struct SettingsView: View {
     /// Warning threshold for database size (500 MB).
     private static let databaseSizeWarningThreshold: Int64 = 524_288_000
 
-    init(preferencesManager: PreferencesManagerProtocol, launchAtLoginService: LaunchAtLoginServiceProtocol, historicalDataService: (any HistoricalDataServiceProtocol)? = nil, appState: AppState? = nil, onDone: (() -> Void)? = nil, onThresholdChange: (() -> Void)? = nil, onPollIntervalChange: (() -> Void)? = nil, onClearHistory: (() -> Void)? = nil) {
+    init(preferencesManager: PreferencesManagerProtocol, launchAtLoginService: LaunchAtLoginServiceProtocol, historicalDataService: (any HistoricalDataServiceProtocol)? = nil, backfillService: (any HistoricalTPPBackfillServiceProtocol)? = nil, appState: AppState? = nil, onDone: (() -> Void)? = nil, onThresholdChange: (() -> Void)? = nil, onPollIntervalChange: (() -> Void)? = nil, onClearHistory: (() -> Void)? = nil) {
         self.preferencesManager = preferencesManager
         self.launchAtLoginService = launchAtLoginService
         self.historicalDataService = historicalDataService
+        self.backfillService = backfillService
         self.appState = appState
         self.onDone = onDone
         self.onThresholdChange = onThresholdChange
@@ -333,6 +337,30 @@ struct SettingsView: View {
                 Text("Benchmark sends test requests per model to measure how many tokens equal 1% of your usage budget. Each variant uses ~2K-5K tokens. Running all variants for all models uses the most tokens but reveals the most about rate limit weighting.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            if preferencesManager.tppBackfillCompleted, let backfillService {
+                HStack {
+                    Spacer()
+                    Button(isBackfillRunning ? "Running\u{2026}" : "Re-run TPP Backfill") {
+                        isBackfillRunning = true
+                        backfillResultMessage = nil
+                        Task {
+                            let count = await backfillService.runBackfill(force: true)
+                            backfillResultMessage = "Backfill complete — \(count) measurements generated"
+                            isBackfillRunning = false
+                        }
+                    }
+                    .disabled(isBackfillRunning)
+                    .accessibilityLabel("Re-run historical TPP backfill")
+                    Spacer()
+                }
+
+                if let message = backfillResultMessage {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             // Advanced section (Story 15.2: Custom credit limit override)
