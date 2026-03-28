@@ -7,6 +7,7 @@ struct PopoverFooterView: View {
     let preferencesManager: PreferencesManagerProtocol
     let launchAtLoginService: LaunchAtLoginServiceProtocol
     var historicalDataService: (any HistoricalDataServiceProtocol)?
+    var backfillService: (any HistoricalTPPBackfillServiceProtocol)?
     var onThresholdChange: (() -> Void)?
     var onPollIntervalChange: (() -> Void)?
     var onClearHistory: (() -> Void)?
@@ -30,7 +31,7 @@ struct PopoverFooterView: View {
             Spacer()
 
             // Right: gear menu (AC #3)
-            GearMenuView(preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, historicalDataService: historicalDataService, appState: appState, onThresholdChange: onThresholdChange, onPollIntervalChange: onPollIntervalChange, onClearHistory: onClearHistory, onSignOut: onSignOut)
+            GearMenuView(preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, historicalDataService: historicalDataService, backfillService: backfillService, appState: appState, onThresholdChange: onThresholdChange, onPollIntervalChange: onPollIntervalChange, onClearHistory: onClearHistory, onSignOut: onSignOut)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)

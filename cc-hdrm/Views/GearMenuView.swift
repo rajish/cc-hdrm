@@ -11,6 +11,7 @@ struct GearMenuView: View {
     let preferencesManager: PreferencesManagerProtocol
     let launchAtLoginService: LaunchAtLoginServiceProtocol
     var historicalDataService: (any HistoricalDataServiceProtocol)?
+    var backfillService: (any HistoricalTPPBackfillServiceProtocol)?
     var appState: AppState?
     var onThresholdChange: (() -> Void)?
     var onPollIntervalChange: (() -> Void)?
@@ -42,7 +43,7 @@ struct GearMenuView: View {
         .fixedSize()
         .accessibilityLabel("Settings")
         .popover(isPresented: $showingSettings, arrowEdge: .bottom) {
-            SettingsView(preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, historicalDataService: historicalDataService, appState: appState, onDone: {
+            SettingsView(preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, historicalDataService: historicalDataService, backfillService: backfillService, appState: appState, onDone: {
                 showingSettings = false
             }, onThresholdChange: onThresholdChange, onPollIntervalChange: onPollIntervalChange, onClearHistory: onClearHistory)
             .onDisappear {

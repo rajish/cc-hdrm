@@ -90,5 +90,10 @@ protocol PreferencesManagerProtocol: AnyObject {
     /// Benchmark variants to run (default: ["output-heavy"]).
     var benchmarkVariants: [String] { get set }
 
+    // MARK: - TPP Backfill (Story 20.5)
+
+    /// Whether the historical TPP backfill has completed (fast-path idempotency check).
+    var tppBackfillCompleted: Bool { get set }
+
     func resetToDefaults()
 }
