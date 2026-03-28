@@ -206,6 +206,39 @@ final class TPPStorageService: TPPStorageServiceProtocol, @unchecked Sendable {
         return (fiveHour, sevenDay)
     }
 
+    func deleteBackfillRecords() async throws {
+        guard databaseManager.isAvailable else {
+            Self.logger.debug("Database unavailable - skipping backfill record deletion")
+            return
+        }
+
+        let connection = try databaseManager.getConnection()
+
+        let sql = "DELETE FROM tpp_measurements WHERE source IN ('passive-backfill', 'rollup-backfill')"
+
+        var statement: OpaquePointer?
+        defer {
+            if let statement { sqlite3_finalize(statement) }
+        }
+
+        let prepareResult = sqlite3_prepare_v2(connection, sql, -1, &statement, nil)
+        guard prepareResult == SQLITE_OK else {
+            let errorMessage = String(cString: sqlite3_errmsg(connection))
+            Self.logger.error("Failed to prepare DELETE backfill: \(errorMessage, privacy: .public)")
+            throw AppError.databaseQueryFailed(underlying: SQLiteError.prepareFailed(code: prepareResult))
+        }
+
+        let stepResult = sqlite3_step(statement)
+        guard stepResult == SQLITE_DONE else {
+            let errorMessage = String(cString: sqlite3_errmsg(connection))
+            Self.logger.error("Failed to DELETE backfill records: \(errorMessage, privacy: .public)")
+            throw AppError.databaseQueryFailed(underlying: SQLiteError.execFailed(message: errorMessage))
+        }
+
+        let deletedCount = sqlite3_changes(connection)
+        Self.logger.info("Deleted \(deletedCount) backfill records")
+    }
+
     // MARK: - Private Helpers
 
     private func insertMeasurementRecord(_ measurement: TPPMeasurement) async throws {

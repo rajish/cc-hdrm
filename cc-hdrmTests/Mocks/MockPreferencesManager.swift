@@ -29,6 +29,7 @@ final class MockPreferencesManager: PreferencesManagerProtocol {
     var isBenchmarkEnabled: Bool = false
     var benchmarkModels: [String] = []
     var benchmarkVariants: [String] = [BenchmarkVariant.outputHeavy.rawValue]
+    var tppBackfillCompleted: Bool = false
     var resetToDefaultsCallCount = 0
 
     func resetToDefaults() {
@@ -59,5 +60,6 @@ final class MockPreferencesManager: PreferencesManagerProtocol {
         isBenchmarkEnabled = false
         benchmarkModels = []
         benchmarkVariants = [BenchmarkVariant.outputHeavy.rawValue]
+        tppBackfillCompleted = false
     }
 }

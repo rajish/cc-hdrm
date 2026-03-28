@@ -38,6 +38,7 @@ final class PreferencesManager: PreferencesManagerProtocol {
         static let benchmarkEnabled = "com.cc-hdrm.benchmarkEnabled"
         static let benchmarkModels = "com.cc-hdrm.benchmarkModels"
         static let benchmarkVariants = "com.cc-hdrm.benchmarkVariants"
+        static let tppBackfillCompleted = "com.cc-hdrm.tppBackfillCompleted"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -373,6 +374,13 @@ final class PreferencesManager: PreferencesManagerProtocol {
         set { defaults.set(newValue, forKey: Keys.benchmarkVariants) }
     }
 
+    // MARK: - TPP Backfill (Story 20.5)
+
+    var tppBackfillCompleted: Bool {
+        get { defaults.bool(forKey: Keys.tppBackfillCompleted) }
+        set { defaults.set(newValue, forKey: Keys.tppBackfillCompleted) }
+    }
+
     // MARK: - Reset
 
     func resetToDefaults() {
@@ -403,5 +411,6 @@ final class PreferencesManager: PreferencesManagerProtocol {
         defaults.removeObject(forKey: Keys.benchmarkEnabled)
         defaults.removeObject(forKey: Keys.benchmarkModels)
         defaults.removeObject(forKey: Keys.benchmarkVariants)
+        defaults.removeObject(forKey: Keys.tppBackfillCompleted)
     }
 }
