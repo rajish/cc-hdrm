@@ -31,13 +31,13 @@ final class ClaudeCodeLogParser: ClaudeCodeLogParserProtocol, @unchecked Sendabl
         category: "logparser"
     )
 
-    private static let iso8601WithFractional: ISO8601DateFormatter = {
+    nonisolated(unsafe) private static let iso8601WithFractional: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f
     }()
 
-    private static let iso8601WithoutFractional: ISO8601DateFormatter = {
+    nonisolated(unsafe) private static let iso8601WithoutFractional: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime]
         return f
