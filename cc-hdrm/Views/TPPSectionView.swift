@@ -83,7 +83,8 @@ struct TPPSectionView: View {
                     chartData: chartData,
                     showPassive: showPassive,
                     showBenchmark: showBenchmark,
-                    showTrend: showTrend
+                    showTrend: showTrend,
+                    timeRange: selectedTimeRange
                 )
 
                 // Legend

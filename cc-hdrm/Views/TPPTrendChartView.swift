@@ -13,6 +13,21 @@ struct TPPTrendChartView: View {
     let showPassive: Bool
     let showBenchmark: Bool
     let showTrend: Bool
+    var timeRange: TimeRange = .day
+
+    /// X-axis label format matched to the selected time range.
+    private var xAxisFormat: Date.FormatStyle {
+        switch timeRange {
+        case .day:
+            return .dateTime.hour()
+        case .week:
+            return .dateTime.weekday(.abbreviated).hour()
+        case .month:
+            return .dateTime.month(.abbreviated).day()
+        case .all:
+            return .dateTime.month(.abbreviated).day()
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -104,7 +119,7 @@ struct TPPTrendChartView: View {
         .chartXAxis {
             AxisMarks(values: .automatic) { _ in
                 AxisGridLine()
-                AxisValueLabel(format: .dateTime.month(.abbreviated).day())
+                AxisValueLabel(format: xAxisFormat)
             }
         }
         .chartYAxis {

@@ -51,15 +51,16 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
         // Convert benchmark measurements to chart points (always individual)
         let benchmarkPoints = benchmarkMeasurements.compactMap { toChartPoint($0) }
 
-        // Convert passive measurements based on time range resolution
+        // Convert passive measurements based on time range resolution, sorted by time
+        let sortedPassive = passiveMeasurements.sorted { $0.timestamp < $1.timestamp }
         let passivePoints: [TPPChartPoint]
         switch timeRange {
         case .day:
-            passivePoints = passiveMeasurements.compactMap { toChartPoint($0) }
+            passivePoints = sortedPassive.compactMap { toChartPoint($0) }
         case .week, .month:
-            passivePoints = computeDailyAverages(from: passiveMeasurements)
+            passivePoints = computeDailyAverages(from: sortedPassive)
         case .all:
-            passivePoints = computeWeeklyAverages(from: passiveMeasurements)
+            passivePoints = computeWeeklyAverages(from: sortedPassive)
         }
 
         // Compute trend line from passive data
@@ -274,7 +275,9 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
             }
         }
 
-        return annotations
+        // Cap annotations to avoid visual clutter — keep only the largest shifts
+        let sorted = annotations.sorted { abs($0.percentChange) > abs($1.percentChange) }
+        return Array(sorted.prefix(3))
     }
 
     // MARK: - Insight Text
