@@ -67,6 +67,14 @@ struct BenchmarkSectionView: View {
             // Results
             if !benchmarkState.results.isEmpty {
                 resultsView
+
+                Button("Clear Results") {
+                    benchmarkState.results = []
+                    benchmarkState.progress = .idle
+                }
+                .buttonStyle(.plain)
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
         }
         .alert("Recent Measurement", isPresented: $showRecentWarning) {
