@@ -1,6 +1,6 @@
 # Story 20.5: Historical TPP Backfill
 
-Status: dev-complete
+Status: done
 
 ## Story
 
@@ -105,6 +105,14 @@ So that I have some historical context when the TPP feature first launches.
   - [x] 6.1 Run `xcodegen generate` after all files are added
   - [x] 6.2 Verify build compiles cleanly
   - [x] 6.3 Verify all tests pass
+
+### Review Findings
+
+- [x] [Review][Patch] Duplicate rollup measurements: processRollups iterates [.week, .month] but .month already includes all .week data [cc-hdrm/Services/HistoricalTPPBackfillService.swift:264] — fixed: use .month only
+- [x] [Review][Patch] tppBackfillCompleted not set after force re-run with zero measurements [cc-hdrm/Services/HistoricalTPPBackfillService.swift:121] — fixed: always set preference after runBackfill completes
+- [x] [Review][Patch] DB slow-path idempotency check only queries .passiveBackfill, misses .rollupBackfill-only installs [cc-hdrm/Services/HistoricalTPPBackfillService.swift:50-55] — fixed: check both sources sequentially
+- [x] [Review][Patch] backfillServiceRef uses internal access modifier, should be private (inconsistent with all other service refs) [cc-hdrm/App/AppDelegate.swift:26] — fixed: changed to private
+- [x] [Review][Defer] AC-1 progress indicator for app-launch backfill path not implemented — deferred, pre-existing scope gap; no UI plumbing in place for launch-path progress; Story 20.4 or later can address
 
 ## Dev Notes
 

@@ -313,9 +313,8 @@ struct HistoricalTPPBackfillServiceTests {
         )
 
         let count = await service.runBackfill(force: false)
-        // 2 rollup ranges x 2 time ranges (week + month) = could be 4, but mock returns same data for both
-        // Actually mock returns same rolledUpDataToReturn for both .week and .month calls
-        #expect(count >= 2)
+        // .month range returns 2 rollup buckets: expect exactly 2 measurements
+        #expect(count == 2)
 
         let first = tppStorage.storedMeasurements[0]
         #expect(first.source == .rollupBackfill)
@@ -373,6 +372,72 @@ struct HistoricalTPPBackfillServiceTests {
         #expect(count == 0)
         #expect(tppStorage.storedMeasurements.isEmpty)
         #expect(prefs.tppBackfillCompleted == true) // Marked complete even with no data
+    }
+
+    @Test("Force re-run with no data still marks backfill completed")
+    func testForceEmptySetsPreference() async {
+        let histService = MockHistoricalDataService()
+        histService.recentPollsToReturn = []
+        histService.rolledUpDataToReturn = []
+
+        let logParser = MockBackfillLogParser()
+        let tppStorage = MockBackfillTPPStorage()
+        let prefs = MockPreferencesManager()
+        prefs.tppBackfillCompleted = true
+
+        let service = HistoricalTPPBackfillService(
+            historicalDataService: histService,
+            logParser: logParser,
+            tppStorage: tppStorage,
+            preferencesManager: prefs
+        )
+
+        // Force re-run with no data — preference should still be set to true after
+        let count = await service.runBackfill(force: true)
+        #expect(count == 0)
+        #expect(prefs.tppBackfillCompleted == true)
+    }
+
+    @Test("DB slow-path detects rollup-only backfill records")
+    func testDBSlowPathDetectsRollupRecords() async {
+        let histService = MockHistoricalDataService()
+        histService.recentPollsToReturn = [
+            makePoll(id: 1, timestamp: 1000, fiveHourUtil: 10),
+            makePoll(id: 2, timestamp: 2000, fiveHourUtil: 15),
+        ]
+
+        let logParser = MockBackfillLogParser()
+        logParser.tokensToReturn = [
+            TokenAggregate(model: "claude-opus-4-6", inputTokens: 500, outputTokens: 500, cacheCreateTokens: 0, cacheReadTokens: 0, messageCount: 1)
+        ]
+
+        let tppStorage = MockBackfillTPPStorage()
+        // Pre-populate with a rollup-backfill record only (no passive-backfill)
+        tppStorage.storedMeasurements = [
+            TPPMeasurement(
+                id: 1, timestamp: 500, windowStart: 100, model: "claude-opus-4-6", variant: nil,
+                source: .rollupBackfill, fiveHourBefore: 5, fiveHourAfter: 10, fiveHourDelta: 5,
+                sevenDayBefore: nil, sevenDayAfter: nil, sevenDayDelta: nil,
+                inputTokens: 250, outputTokens: 250, cacheCreateTokens: 0, cacheReadTokens: 0,
+                totalRawTokens: 500, tppFiveHour: 100.0, tppSevenDay: nil, confidence: .low, messageCount: 1
+            )
+        ]
+
+        let prefs = MockPreferencesManager()
+        prefs.tppBackfillCompleted = false
+
+        let service = HistoricalTPPBackfillService(
+            historicalDataService: histService,
+            logParser: logParser,
+            tppStorage: tppStorage,
+            preferencesManager: prefs
+        )
+
+        // runBackfillIfNeeded should detect the rollup record and skip
+        await service.runBackfillIfNeeded()
+        #expect(prefs.tppBackfillCompleted == true)
+        // Should still have only the 1 pre-existing record
+        #expect(tppStorage.storedMeasurements.count == 1)
     }
 
     @Test("Multi-model in raw poll: tokens from 2 models produce 2 records with confidence low")

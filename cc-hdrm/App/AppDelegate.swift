@@ -23,7 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var headroomAnalysisServiceRef: (any HeadroomAnalysisServiceProtocol)?
     private var benchmarkServiceRef: BenchmarkService?
     private var tppStorageServiceRef: TPPStorageService?
-    internal var backfillServiceRef: HistoricalTPPBackfillService?
+    private var backfillServiceRef: HistoricalTPPBackfillService?
     private var analyticsWindow: AnalyticsWindow?
     private var observationTask: Task<Void, Never>?
     private var onboardingWindowController: OnboardingWindowController?

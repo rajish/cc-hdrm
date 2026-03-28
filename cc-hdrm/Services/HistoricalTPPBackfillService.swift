@@ -45,16 +45,25 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
             return
         }
 
-        // Slow path: DB check for existing backfill records
+        // Slow path: DB check for existing backfill records (check both sources)
         do {
-            let existing = try await tppStorage.getMeasurements(
+            let existingPassive = try await tppStorage.getMeasurements(
                 from: 0,
                 to: Int64.max,
                 source: .passiveBackfill,
                 model: nil,
                 confidence: nil
             )
-            if !existing.isEmpty {
+            let existingRollup = existingPassive.isEmpty
+                ? try await tppStorage.getMeasurements(
+                    from: 0,
+                    to: Int64.max,
+                    source: .rollupBackfill,
+                    model: nil,
+                    confidence: nil
+                )
+                : []
+            if !existingPassive.isEmpty || !existingRollup.isEmpty {
                 Self.logger.info("Backfill records found in DB — marking preference and skipping")
                 preferencesManager.tppBackfillCompleted = true
                 return
@@ -118,9 +127,7 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
         let elapsed = CFAbsoluteTimeGetCurrent() - startTime
         Self.logger.info("Historical TPP backfill complete: \(totalMeasurements) total measurements in \(String(format: "%.2f", elapsed))s")
 
-        if totalMeasurements > 0 || !force {
-            preferencesManager.tppBackfillCompleted = true
-        }
+        preferencesManager.tppBackfillCompleted = true
 
         return totalMeasurements
     }
@@ -261,69 +268,37 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
     private func processRollups() async throws -> Int {
         var measurementCount = 0
 
-        for range in [TimeRange.week, TimeRange.month] {
-            let rollups = try await historicalDataService.getRolledUpData(range: range)
+        // Use .month only: it already includes all .week data (raw <24h + 5min 1-7d + hourly 7-30d).
+        // Querying .week separately would produce duplicate records for the 0-7d window.
+        let rollups = try await historicalDataService.getRolledUpData(range: .month)
 
-            for rollup in rollups {
-                // Skip buckets with resets (delta unreliable)
-                guard rollup.resetCount == 0 else { continue }
+        for rollup in rollups {
+            // Skip buckets with resets (delta unreliable)
+            guard rollup.resetCount == 0 else { continue }
 
-                // Skip buckets with missing peak/min
-                guard let peak = rollup.fiveHourPeak, let min = rollup.fiveHourMin else { continue }
+            // Skip buckets with missing peak/min
+            guard let peak = rollup.fiveHourPeak, let min = rollup.fiveHourMin else { continue }
 
-                // Approximate delta as peak - min
-                let approximateDelta = peak - min
-                guard approximateDelta >= Self.minDelta else { continue }
+            // Approximate delta as peak - min
+            let approximateDelta = peak - min
+            guard approximateDelta >= Self.minDelta else { continue }
 
-                // Query log parser for tokens in this rollup's window
-                let tokenAggregates = logParser.getTokens(from: rollup.periodStart, to: rollup.periodEnd)
-                let totalTokensAcrossModels = tokenAggregates.reduce(0) {
-                    $0 + $1.inputTokens + $1.outputTokens + $1.cacheCreateTokens + $1.cacheReadTokens
-                }
+            // Query log parser for tokens in this rollup's window
+            let tokenAggregates = logParser.getTokens(from: rollup.periodStart, to: rollup.periodEnd)
+            let totalTokensAcrossModels = tokenAggregates.reduce(0) {
+                $0 + $1.inputTokens + $1.outputTokens + $1.cacheCreateTokens + $1.cacheReadTokens
+            }
 
-                if totalTokensAcrossModels > 0 {
-                    for aggregate in tokenAggregates {
-                        let totalRaw = aggregate.inputTokens + aggregate.outputTokens + aggregate.cacheCreateTokens + aggregate.cacheReadTokens
-                        let tppFiveHour = Double(totalRaw) / approximateDelta
+            if totalTokensAcrossModels > 0 {
+                for aggregate in tokenAggregates {
+                    let totalRaw = aggregate.inputTokens + aggregate.outputTokens + aggregate.cacheCreateTokens + aggregate.cacheReadTokens
+                    let tppFiveHour = Double(totalRaw) / approximateDelta
 
-                        let measurement = TPPMeasurement(
-                            id: nil,
-                            timestamp: rollup.periodEnd,
-                            windowStart: rollup.periodStart,
-                            model: aggregate.model,
-                            variant: nil,
-                            source: .rollupBackfill,
-                            fiveHourBefore: min,
-                            fiveHourAfter: peak,
-                            fiveHourDelta: approximateDelta,
-                            sevenDayBefore: rollup.sevenDayMin,
-                            sevenDayAfter: rollup.sevenDayPeak,
-                            sevenDayDelta: nil,
-                            inputTokens: aggregate.inputTokens,
-                            outputTokens: aggregate.outputTokens,
-                            cacheCreateTokens: aggregate.cacheCreateTokens,
-                            cacheReadTokens: aggregate.cacheReadTokens,
-                            totalRawTokens: totalRaw,
-                            tppFiveHour: tppFiveHour,
-                            tppSevenDay: nil,
-                            confidence: .low,
-                            messageCount: aggregate.messageCount
-                        )
-
-                        do {
-                            try await tppStorage.storePassiveResult(measurement)
-                            measurementCount += 1
-                        } catch {
-                            Self.logger.error("Failed to store rollup backfill measurement: \(error.localizedDescription)")
-                        }
-                    }
-                } else {
-                    // Delta-only record for rollup
                     let measurement = TPPMeasurement(
                         id: nil,
                         timestamp: rollup.periodEnd,
                         windowStart: rollup.periodStart,
-                        model: "unknown",
+                        model: aggregate.model,
                         variant: nil,
                         source: .rollupBackfill,
                         fiveHourBefore: min,
@@ -332,23 +307,55 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
                         sevenDayBefore: rollup.sevenDayMin,
                         sevenDayAfter: rollup.sevenDayPeak,
                         sevenDayDelta: nil,
-                        inputTokens: 0,
-                        outputTokens: 0,
-                        cacheCreateTokens: 0,
-                        cacheReadTokens: 0,
-                        totalRawTokens: 0,
-                        tppFiveHour: nil,
+                        inputTokens: aggregate.inputTokens,
+                        outputTokens: aggregate.outputTokens,
+                        cacheCreateTokens: aggregate.cacheCreateTokens,
+                        cacheReadTokens: aggregate.cacheReadTokens,
+                        totalRawTokens: totalRaw,
+                        tppFiveHour: tppFiveHour,
                         tppSevenDay: nil,
                         confidence: .low,
-                        messageCount: 0
+                        messageCount: aggregate.messageCount
                     )
 
                     do {
                         try await tppStorage.storePassiveResult(measurement)
                         measurementCount += 1
                     } catch {
-                        Self.logger.error("Failed to store rollup delta-only record: \(error.localizedDescription)")
+                        Self.logger.error("Failed to store rollup backfill measurement: \(error.localizedDescription)")
                     }
+                }
+            } else {
+                // Delta-only record for rollup
+                let measurement = TPPMeasurement(
+                    id: nil,
+                    timestamp: rollup.periodEnd,
+                    windowStart: rollup.periodStart,
+                    model: "unknown",
+                    variant: nil,
+                    source: .rollupBackfill,
+                    fiveHourBefore: min,
+                    fiveHourAfter: peak,
+                    fiveHourDelta: approximateDelta,
+                    sevenDayBefore: rollup.sevenDayMin,
+                    sevenDayAfter: rollup.sevenDayPeak,
+                    sevenDayDelta: nil,
+                    inputTokens: 0,
+                    outputTokens: 0,
+                    cacheCreateTokens: 0,
+                    cacheReadTokens: 0,
+                    totalRawTokens: 0,
+                    tppFiveHour: nil,
+                    tppSevenDay: nil,
+                    confidence: .low,
+                    messageCount: 0
+                )
+
+                do {
+                    try await tppStorage.storePassiveResult(measurement)
+                    measurementCount += 1
+                } catch {
+                    Self.logger.error("Failed to store rollup delta-only record: \(error.localizedDescription)")
                 }
             }
         }
