@@ -15,6 +15,13 @@ struct TPPTrendChartView: View {
     let showTrend: Bool
     var timeRange: TimeRange = .day
 
+    /// X-axis domain matching the usage chart's time range.
+    private var xDomain: ClosedRange<Date> {
+        let now = Date()
+        let start = Date(timeIntervalSince1970: Double(timeRange.startTimestamp) / 1000.0)
+        return start...now
+    }
+
     /// X-axis label format matched to the selected time range.
     private var xAxisFormat: Date.FormatStyle {
         switch timeRange {
@@ -116,6 +123,7 @@ struct TPPTrendChartView: View {
                     }
             }
         }
+        .chartXScale(domain: xDomain)
         .chartXAxis {
             AxisMarks(values: .automatic) { _ in
                 AxisGridLine()

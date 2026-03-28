@@ -44,8 +44,8 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
             )
         }
 
-        // Separate by source
-        let passiveMeasurements = allMeasurements.filter { $0.source == .passive || $0.source == .passiveBackfill || $0.source == .rollupBackfill }
+        // Separate by source — exclude rollup-backfill (too noisy for charting)
+        let passiveMeasurements = allMeasurements.filter { $0.source == .passive || $0.source == .passiveBackfill }
         let benchmarkMeasurements = allMeasurements.filter { $0.source == .benchmark }
 
         // Convert benchmark measurements to chart points (always individual)
