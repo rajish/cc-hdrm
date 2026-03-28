@@ -32,20 +32,19 @@ struct TPPSectionView: View {
     }
 
     var body: some View {
-        // AC-1: Do not render an empty shell when there is no data and benchmark is disabled.
-        if isLoading || !chartData.isEmpty || isBenchmarkEnabled {
-            sectionContent
-                .task(id: TaskTrigger(timeRange: selectedTimeRange, model: selectedModel)) {
-                    await loadData()
-                }
-        } else {
-            // Emit nothing — no data and benchmark disabled. Still kick off load so we
-            // re-evaluate if passive data arrives.
-            Color.clear
-                .frame(width: 0, height: 0)
-                .task(id: TaskTrigger(timeRange: selectedTimeRange, model: selectedModel)) {
-                    await loadData()
-                }
+        // Use a single stable view tree to avoid structural if/else oscillation.
+        // When the condition is false the content is hidden but the view identity is preserved,
+        // preventing .task(id:) from being destroyed and recreated in a loop.
+        Group {
+            if isLoading || !chartData.isEmpty || isBenchmarkEnabled {
+                sectionContent
+            }
+        }
+        .task(id: selectedTimeRange) {
+            await loadData()
+        }
+        .onChange(of: selectedModel) { _, _ in
+            Task { await loadData() }
         }
     }
 
@@ -100,11 +99,8 @@ struct TPPSectionView: View {
 
     // MARK: - Task Trigger
 
-    /// Hashable trigger combining time range and model for `.task(id:)`.
-    private struct TaskTrigger: Equatable, Hashable {
-        let timeRange: TimeRange
-        let model: String?
-    }
+    // Task trigger removed — .task(id:) now uses selectedTimeRange directly.
+    // Model changes reload via .onChange below, not via task identity.
 
     // MARK: - Empty State (AC-8)
 
