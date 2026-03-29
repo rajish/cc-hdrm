@@ -56,21 +56,9 @@ struct TPPTrendChartView: View {
     @ViewBuilder
     private var chartContent: some View {
         Chart {
-            // Passive connecting lines
+            // Passive data points (dots only — connecting lines removed;
+            // the trend line provides the meaningful visual continuity)
             if showPassive {
-                ForEach(chartData.passivePoints) { point in
-                    LineMark(
-                        x: .value("Time", point.timestamp),
-                        y: .value("TPP", point.tppValue)
-                    )
-                    .foregroundStyle(Color.secondary.opacity(0.3))
-                    .lineStyle(StrokeStyle(lineWidth: 1))
-                    .interpolationMethod(.linear)
-                }
-                .symbol(.circle)
-                .symbolSize(20)
-
-                // Passive data points
                 ForEach(chartData.passivePoints) { point in
                     PointMark(
                         x: .value("Time", point.timestamp),
