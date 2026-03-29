@@ -54,18 +54,24 @@ struct TPPMeasurement: Sendable, Equatable {
     let confidence: MeasurementConfidence
     let messageCount: Int
 
-    /// Computes TPP for the 5-hour window from raw data.
+    /// Effective tokens that count toward rate limits.
+    /// cache_read is free; cache_create costs 1.25x base input.
+    var effectiveRateLimitTokens: Double {
+        Double(inputTokens + outputTokens) + Double(cacheCreateTokens) * 1.25
+    }
+
+    /// Computes TPP for the 5-hour window from rate-limit-effective tokens.
     /// Returns nil if delta is zero or negative (below detection threshold).
     var computedTppFiveHour: Double? {
         guard let delta = fiveHourDelta, delta > 0 else { return nil }
-        return Double(totalRawTokens) / delta
+        return effectiveRateLimitTokens / delta
     }
 
-    /// Computes TPP for the 7-day window from raw data.
+    /// Computes TPP for the 7-day window from rate-limit-effective tokens.
     /// Returns nil if delta is zero or negative (below detection threshold).
     var computedTppSevenDay: Double? {
         guard let delta = sevenDayDelta, delta > 0 else { return nil }
-        return Double(totalRawTokens) / delta
+        return effectiveRateLimitTokens / delta
     }
 
     /// Creates a TPPMeasurement with computed TPP values from the raw token/delta data.
@@ -86,11 +92,13 @@ struct TPPMeasurement: Sendable, Equatable {
             guard let before = sevenDayBefore, let after = sevenDayAfter else { return nil }
             return after - before
         }()
+        // cache_read is free; cache_create costs 1.25x base input
+        let effectiveTokens = Double(inputTokens + outputTokens) + Double(cacheCreateTokens) * 1.25
         let totalRaw = inputTokens + outputTokens + cacheCreateTokens + cacheReadTokens
-        let tpp5h = fiveHourDelta > 0 ? Double(totalRaw) / fiveHourDelta : nil
+        let tpp5h = fiveHourDelta > 0 ? effectiveTokens / fiveHourDelta : nil
         let tpp7d: Double? = {
             guard let delta = sevenDayDelta, delta > 0 else { return nil }
-            return Double(totalRaw) / delta
+            return effectiveTokens / delta
         }()
 
         return TPPMeasurement(

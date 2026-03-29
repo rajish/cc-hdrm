@@ -163,7 +163,7 @@ struct BenchmarkSectionView: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             } else if let m = result.measurement, let tpp = m.tppFiveHour {
-                let tokens = m.totalRawTokens
+                let tokens = Int(m.effectiveRateLimitTokens)
                 let delta = m.fiveHourDelta ?? 0
 
                 Text("\(tokens) tokens \u{2192} \(String(format: "%.1f", delta))% utilization change \u{2192} TPP = \(formatTPP(tpp))")

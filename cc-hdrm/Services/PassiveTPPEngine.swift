@@ -288,10 +288,12 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
 
         for (_, aggregate) in tokensByModel {
             let totalRaw = aggregate.inputTokens + aggregate.outputTokens + aggregate.cacheCreateTokens + aggregate.cacheReadTokens
-            let tppFiveHour: Double? = fiveHourDelta >= Self.minDelta ? Double(totalRaw) / fiveHourDelta : nil
+            // cache_read is free; cache_create costs 1.25x base input
+            let effectiveTokens = Double(aggregate.inputTokens + aggregate.outputTokens) + Double(aggregate.cacheCreateTokens) * 1.25
+            let tppFiveHour: Double? = fiveHourDelta >= Self.minDelta ? effectiveTokens / fiveHourDelta : nil
             let tppSevenDay: Double? = {
                 guard let sd = sevenDayDelta, sd >= Self.minDelta else { return nil }
-                return Double(totalRaw) / sd
+                return effectiveTokens / sd
             }()
 
             let confidence: MeasurementConfidence
