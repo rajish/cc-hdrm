@@ -159,24 +159,49 @@ struct TPPTrendChartView: View {
 
     // MARK: - Hover Tooltip
 
+    /// Find the nearest trend line point to a given date.
+    private func findNearestTrendPoint(to date: Date) -> TPPChartPoint? {
+        guard !chartData.trendLine.isEmpty else { return nil }
+        var best: TPPChartPoint?
+        var bestDistance: TimeInterval = .greatestFiniteMagnitude
+        for point in chartData.trendLine {
+            let distance = abs(point.timestamp.timeIntervalSince(date))
+            if distance < bestDistance {
+                bestDistance = distance
+                best = point
+            }
+        }
+        return best
+    }
+
     @ViewBuilder
     private func hoverTooltip(date: Date, proxy: ChartProxy, size: CGSize) -> some View {
         let nearest = findNearestPoint(to: date)
-        if let point = nearest, let xPos = proxy.position(forX: date) {
+        let nearestTrend = showTrend ? findNearestTrendPoint(to: date) : nil
+        if (nearest != nil || nearestTrend != nil), let xPos = proxy.position(forX: date) {
             let tooltipX = xPos < size.width / 2
                 ? xPos + 10
                 : xPos - 10
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(point.timestamp, format: .dateTime.hour().minute())
+                Text(date, format: .dateTime.hour().minute())
                     .font(.caption2.bold())
 
-                Text("TPP: \(formatTPP(point.tppValue))")
-                    .font(.caption2)
+                if let point = nearest {
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.secondary).frame(width: 6, height: 6)
+                        Text("\(point.source == .benchmark ? "Benchmark" : "Passive"): \(formatTPP(point.tppValue))")
+                            .font(.caption2)
+                    }
+                }
 
-                Text(point.source == .benchmark ? "Benchmark" : "Passive")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                if let trend = nearestTrend {
+                    HStack(spacing: 4) {
+                        Circle().fill(Color.orange).frame(width: 6, height: 6)
+                        Text("Trend: \(formatTPP(trend.tppValue))")
+                            .font(.caption2)
+                    }
+                }
             }
             .padding(6)
             .background(Color(nsColor: .controlBackgroundColor).opacity(0.9))
