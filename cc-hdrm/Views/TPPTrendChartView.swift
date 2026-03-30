@@ -143,7 +143,12 @@ struct TPPTrendChartView: View {
                     .onContinuousHover { phase in
                         switch phase {
                         case .active(let location):
-                            hoveredDate = proxy.value(atX: location.x)
+                            guard let date: Date = proxy.value(atX: location.x),
+                                  date <= Date() else {
+                                hoveredDate = nil
+                                return
+                            }
+                            hoveredDate = date
                         case .ended:
                             hoveredDate = nil
                         }
