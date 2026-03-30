@@ -62,7 +62,7 @@ struct TPPTrendChartView: View {
                 ForEach(chartData.passivePoints) { point in
                     PointMark(
                         x: .value("Time", point.timestamp),
-                        y: .value("TPP", point.tppValue)
+                        y: .value("Passive", point.tppValue)
                     )
                     .foregroundStyle(Color.secondary.opacity(opacityForConfidence(point.confidence, base: 0.5)))
                     .symbol(.circle)
@@ -75,7 +75,7 @@ struct TPPTrendChartView: View {
                 ForEach(chartData.benchmarkPoints) { point in
                     PointMark(
                         x: .value("Time", point.timestamp),
-                        y: .value("TPP", point.tppValue)
+                        y: .value("Benchmark", point.tppValue)
                     )
                     .foregroundStyle(Color.accentColor.opacity(opacityForConfidence(point.confidence, base: 1.0)))
                     .symbol(.diamond)
@@ -83,12 +83,14 @@ struct TPPTrendChartView: View {
                 }
             }
 
-            // Trend line (smooth)
+            // Trend line (smooth) — uses distinct series ID to prevent
+            // Swift Charts from merging it with the passive PointMark data
             if showTrend && !chartData.trendLine.isEmpty {
                 ForEach(chartData.trendLine) { point in
                     LineMark(
                         x: .value("Time", point.timestamp),
-                        y: .value("TPP", point.tppValue)
+                        y: .value("Trend", point.tppValue),
+                        series: .value("Series", "trend")
                     )
                     .foregroundStyle(Color.orange.opacity(0.7))
                     .lineStyle(StrokeStyle(lineWidth: 2))
