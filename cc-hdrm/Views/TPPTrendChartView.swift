@@ -4,16 +4,19 @@ import SwiftUI
 /// Swift Charts view rendering TPP trend data with two-tier visualization.
 ///
 /// Renders:
-/// - Passive points as circles with connecting lines (reduced opacity)
-/// - Benchmark points as diamond markers (full opacity, accent color)
-/// - Smoothed trend line (catmull-rom interpolation)
+/// - Passive points as scatter dots
+/// - Benchmark points as diamond markers (accent color)
+/// - Smoothed trend line (monotone interpolation, separate series)
 /// - Shift annotations as vertical rule marks
+/// - Hover cursor with vertical line and value tooltip
 struct TPPTrendChartView: View {
     let chartData: TPPChartData
     let showPassive: Bool
     let showBenchmark: Bool
     let showTrend: Bool
     var timeRange: TimeRange = .day
+
+    @State private var hoveredDate: Date?
 
     /// X-axis domain matching the usage chart's time range.
     private var xDomain: ClosedRange<Date> {
@@ -56,21 +59,20 @@ struct TPPTrendChartView: View {
     @ViewBuilder
     private var chartContent: some View {
         Chart {
-            // Passive data points (dots only — connecting lines removed;
-            // the trend line provides the meaningful visual continuity)
+            // Passive data points (scatter dots)
             if showPassive {
                 ForEach(chartData.passivePoints) { point in
                     PointMark(
                         x: .value("Time", point.timestamp),
                         y: .value("Passive", point.tppValue)
                     )
-                    .foregroundStyle(Color.secondary.opacity(opacityForConfidence(point.confidence, base: 0.5)))
+                    .foregroundStyle(Color.secondary.opacity(opacityForConfidence(point.confidence, base: 0.7)))
                     .symbol(.circle)
-                    .symbolSize(30)
+                    .symbolSize(50)
                 }
             }
 
-            // Benchmark points (diamond, full opacity, accent color)
+            // Benchmark points (diamond, accent color)
             if showBenchmark {
                 ForEach(chartData.benchmarkPoints) { point in
                     PointMark(
@@ -79,12 +81,11 @@ struct TPPTrendChartView: View {
                     )
                     .foregroundStyle(Color.accentColor.opacity(opacityForConfidence(point.confidence, base: 1.0)))
                     .symbol(.diamond)
-                    .symbolSize(50)
+                    .symbolSize(70)
                 }
             }
 
-            // Trend line (smooth) — uses distinct series ID to prevent
-            // Swift Charts from merging it with the passive PointMark data
+            // Trend line — monotone interpolation prevents non-monotonic X artifacts
             if showTrend && !chartData.trendLine.isEmpty {
                 ForEach(chartData.trendLine) { point in
                     LineMark(
@@ -94,7 +95,7 @@ struct TPPTrendChartView: View {
                     )
                     .foregroundStyle(Color.orange.opacity(0.7))
                     .lineStyle(StrokeStyle(lineWidth: 2))
-                    .interpolationMethod(.catmullRom)
+                    .interpolationMethod(.monotone)
                 }
             }
 
@@ -112,6 +113,13 @@ struct TPPTrendChartView: View {
                             .cornerRadius(3)
                     }
             }
+
+            // Hover cursor vertical line
+            if let date = hoveredDate {
+                RuleMark(x: .value("Cursor", date))
+                    .foregroundStyle(Color.white.opacity(0.6))
+                    .lineStyle(StrokeStyle(lineWidth: 1))
+            }
         }
         .chartXScale(domain: xDomain)
         .chartXAxis {
@@ -127,6 +135,87 @@ struct TPPTrendChartView: View {
             }
         }
         .chartYAxisLabel("tokens/%", position: .trailing)
+        .chartOverlay { proxy in
+            GeometryReader { geometry in
+                Rectangle()
+                    .fill(Color.clear)
+                    .contentShape(Rectangle())
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case .active(let location):
+                            hoveredDate = proxy.value(atX: location.x)
+                        case .ended:
+                            hoveredDate = nil
+                        }
+                    }
+
+                // Tooltip
+                if let date = hoveredDate {
+                    hoverTooltip(date: date, proxy: proxy, size: geometry.size)
+                }
+            }
+        }
+    }
+
+    // MARK: - Hover Tooltip
+
+    @ViewBuilder
+    private func hoverTooltip(date: Date, proxy: ChartProxy, size: CGSize) -> some View {
+        let nearest = findNearestPoint(to: date)
+        if let point = nearest, let xPos = proxy.position(forX: date) {
+            let tooltipX = xPos < size.width / 2
+                ? xPos + 10
+                : xPos - 10
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(point.timestamp, format: .dateTime.hour().minute())
+                    .font(.caption2.bold())
+
+                Text("TPP: \(formatTPP(point.tppValue))")
+                    .font(.caption2)
+
+                Text(point.source == .benchmark ? "Benchmark" : "Passive")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(6)
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.9))
+            .cornerRadius(4)
+            .position(
+                x: tooltipX,
+                y: 30
+            )
+            .allowsHitTesting(false)
+        }
+    }
+
+    /// Find the nearest passive or benchmark point to a given date.
+    private func findNearestPoint(to date: Date) -> TPPChartPoint? {
+        let allPoints = (showPassive ? chartData.passivePoints : [])
+            + (showBenchmark ? chartData.benchmarkPoints : [])
+        guard !allPoints.isEmpty else { return nil }
+
+        let maxDistance: TimeInterval = {
+            switch timeRange {
+            case .day: return 600    // 10 min
+            case .week: return 3600  // 1 hour
+            case .month: return 86400 // 1 day
+            case .all: return 604800  // 1 week
+            }
+        }()
+
+        var best: TPPChartPoint?
+        var bestDistance: TimeInterval = .greatestFiniteMagnitude
+
+        for point in allPoints {
+            let distance = abs(point.timestamp.timeIntervalSince(date))
+            if distance < bestDistance {
+                bestDistance = distance
+                best = point
+            }
+        }
+
+        return bestDistance <= maxDistance ? best : nil
     }
 
     // MARK: - Empty State
@@ -150,6 +239,16 @@ struct TPPTrendChartView: View {
         case .high: return base
         case .medium: return base * 0.7
         case .low: return base * 0.5
+        }
+    }
+
+    private func formatTPP(_ tpp: Double) -> String {
+        if tpp >= 1_000_000 {
+            return String(format: "%.1fM", tpp / 1_000_000)
+        } else if tpp >= 1000 {
+            return String(format: "%.0fK", tpp / 1000)
+        } else {
+            return String(format: "%.0f", tpp)
         }
     }
 }
