@@ -82,3 +82,8 @@ Alex doesn't just see what happened — cc-hdrm tells him what it means. Slow-bu
 ## Epic 17: Extra Usage Visibility & Alerts (Phase 5)
 
 Alex doesn't just hit the wall anymore — when his 5h or 7d plan quota runs out, Anthropic's pay-as-you-go overflow kicks in and cc-hdrm shows him exactly what it's costing. The menu bar glows amber when extra credits are burning, the popover shows a live spend bar with balance and reset date, and the analytics window reveals which cycles crossed the 100% line and by how much. Configurable alerts fire when extra spend crosses thresholds.
+
+## Epic 20: Token Efficiency Ratio (Phase 6)
+
+Alex doesn't just know how much headroom he has — he knows what he's getting for it. By correlating actual token consumption from Claude Code session logs with utilization % changes, cc-hdrm computes a "Tokens per Percent" (TPP) metric that reveals how many tokens it takes to burn 1% of the 5h budget. When Anthropic silently tightens the rate limits, the TPP trend line drops and Alex sees it. An opt-in "Measure" button sends a known-size request for calibrated readings.
+**Stories:** 20.1 Active Benchmark (per-model, token type discovery), 20.2 Log Parser (health indicator), 20.3 Passive TPP Engine (per-model, capped accumulation), 20.4 TPP Visualization (two-tier: benchmark + passive), 20.5 Historical Backfill (nice-to-have)
