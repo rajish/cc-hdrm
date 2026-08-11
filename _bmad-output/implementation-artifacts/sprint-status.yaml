@@ -123,7 +123,7 @@ development_status:
   13-7-gap-rendering-in-charts: done
   epic-13-retrospective: optional
 
-  epic-14: in-progress  # Renamed: Subscription Value & Usage Insights
+  epic-14: done  # Renamed: Subscription Value & Usage Insights
   14-1-rate-limit-tier-credit-limits: done  # Absorbed into Story 3.3
   14-2-headroom-analysis-service: done
   14-3-headroom-breakdown-bar-component: done
@@ -153,22 +153,22 @@ development_status:
   17-5-extra-usage-delta-chart-rendering: done
   epic-17-retrospective: optional
 
-  epic-18: in-progress  # Independent OAuth Authentication — reopened for onboarding
+  epic-18: done  # Independent OAuth Authentication — reopened for onboarding, completed
   18-1-independent-oauth-authentication: done
   18-2-oauth-profile-tier-resolution: done
   18-3-first-run-onboarding-popup: done  # Sprint change proposal 2026-03-02
 
   # Sprint Change Proposal 2026-03-02 — new stories
-  epic-4: in-progress  # Detailed Usage Panel — reopened for ring click
+  epic-4: done  # Detailed Usage Panel — reopened for ring click, completed
   4-6-clickable-ring-gauges-analytics-launcher: done  # Sprint change proposal 2026-03-02
 
-  epic-5: in-progress  # Threshold Notifications — reopened for API downtime
+  epic-5: done  # Threshold Notifications — reopened for API downtime, completed
   5-4-api-connectivity-notifications: done  # Sprint change proposal 2026-03-02
 
-  epic-10: in-progress  # Data Persistence — reopened for outage tracking
+  epic-10: done  # Data Persistence — reopened for outage tracking, completed
   10-6-api-outage-period-persistence: done  # Sprint change proposal 2026-03-02
 
-  epic-13: in-progress  # Full Analytics Window — reopened for outage rendering
+  epic-13: done  # Full Analytics Window — reopened for outage rendering, completed
   13-8-outage-background-rendering: done  # Sprint change proposal 2026-03-02
   13-9-analytics-live-data-refresh: done
 
@@ -179,7 +179,7 @@ development_status:
   2-5-poll-interval-hot-reload: done  # Bug: changing poll interval doesn't interrupt current sleep
 
   # Chart Visualization Fixes
-  epic-19: in-progress  # Chart Visualization Fixes
+  epic-19: done  # Chart Visualization Fixes
   19-1-adaptive-gap-detection: done  # Bug: changing poll interval causes historical data to show as missing
 
   epic-20: done  # Token Efficiency Ratio (Phase 6)
