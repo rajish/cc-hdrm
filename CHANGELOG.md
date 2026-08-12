@@ -20,6 +20,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-12
+
+This release ships the Token Efficiency Ratio feature (Epic 20) and fixes the Homebrew quarantine issue.
+
+**Token Efficiency Ratio (TPP)**: cc-hdrm now correlates token consumption from Claude Code session logs with utilization changes, showing how many tokens burn 1% of the 5h budget. Includes an opt-in Measure button for calibrated readings, a trend chart in the analytics window, and historical backfill.
+
+**Homebrew fix**: the cask now strips the Gatekeeper quarantine flag automatically after install/upgrade, so the app launches without the manual xattr workaround (fixes issue 101).
+
+### Changed
+
+- release: 1.5.0 — Token Efficiency Ratio, Homebrew quarantine fix (#107)
+- chore: close stale in-progress epic markers in sprint status
+- fix: strip quarantine xattr in Homebrew cask postflight
+- docs: add launch-prep brainstorming and market research artifacts
+- docs: add Epic 20 Token Efficiency Ratio to epic list
+- fix: clamp TPP chart hover cursor to not exceed current time
+- feat: show trend value in TPP chart hover tooltip
+- fix: monotone trend interpolation, larger points, hover cursor
+- fix: separate chart series for passive, benchmark, and trend
+- fix: remove LineMark connecting lines for passive TPP data
+- fix: exclude cache_read from TPP, weight cache_create at 1.25x
+- fix: align TPP chart X-axis with usage chart, filter rollup backfill
+- fix: TPP chart X-axis shows hours for 24h view, cap shift annotations
+- fix: add Clear Results button to dismiss benchmark results
+- fix: TPPSectionView oscillation loop causing analytics blinking
+- fix: ClaudeCodeLogParser concurrency safety for ISO8601DateFormatter
+- docs: mark Epic 20 complete — all stories done
+- feat: historical TPP backfill (Story 20.5) (#106)
+- feat: TPP trend visualization (Story 20.4) (#105)
+- docs: add story file for Story 20.4
+- docs: add story file for Story 20.5
+- feat: TPP passive measurement engine (Story 20.3) (#104)
+- docs: add story file for Story 20.3
+- docs: update sprint status — Batch 1 complete (Stories 20.1, 20.2 done)
+- feat: active benchmark measurement (Story 20.1) (#103)
+- feat: Claude Code log parser service (Story 20.2) (#102)
+- docs: add story files for Stories 20.1 and 20.2
+
 ## [1.4.9] - 2026-03-15
 
 ### Changed
@@ -240,7 +278,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Launch at login via SMAppService
 - Xcode project with XcodeGen configuration
 
-[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.4.9...HEAD
+[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/rajish/cc-hdrm/compare/v1.4.9...v1.5.0
 [1.4.9]: https://github.com/rajish/cc-hdrm/compare/v1.4.8...v1.4.9
 [1.4.8]: https://github.com/rajish/cc-hdrm/compare/v1.4.7...v1.4.8
 [1.4.7]: https://github.com/rajish/cc-hdrm/compare/v1.4.6...v1.4.7
