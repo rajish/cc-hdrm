@@ -58,22 +58,21 @@ gh pr edit N --title "[patch] feat: my feature"
 gh pr merge N --squash
 ```
 
-## BMAD Methodology — Story Lifecycle
+## BMAD Methodology — Story Lifecycle (v6.11+)
 
 This project follows the **BMAD workflow** for all feature development. The story lifecycle is:
 
-1. **Create Story** (`/bmad-bmm-create-story`) — SM creates the story file in `_bmad-output/implementation-artifacts/{epic}-{story}-{slug}.md`
-2. **Implement Story** (`/bmad-bmm-dev-story`) — Dev implements all tasks, writes tests, updates the story file per acceptance criteria
-3. **Code Review** (`/bmad-bmm-code-review`) — Adversarial senior dev review that finds specific problems; auto-fix with user approval
-4. **PR + CI + CodeRabbit** — Create PR, wait for CI and CodeRabbit review, address findings
-5. **Merge** — Squash-merge to master
-6. **Next Story** — Repeat from step 1
+1. **Build Story** (`bmad-build` skill) — the official implementation loop: clarify intent, plan, implement, review, present. Replaces the old create-story + dev-story pair. Story artifacts live in `_bmad-output/implementation-artifacts/`
+2. **Code Review** (`bmad-code-review` skill) — adversarial senior dev review, an extra layer on top of Build's built-in review; auto-fix with user approval
+3. **PR + CI + CodeRabbit** — Create PR, wait for CI and CodeRabbit review, address findings
+4. **Merge** — Squash-merge to master
+5. **Next Story** — Repeat from step 1
 
 **NEVER skip the BMAD workflows.** Each step has a dedicated workflow that enforces templates, instructions, and validation checklists. Do NOT perform these steps manually — hand-rolled output bypasses quality gates and produces artifacts missing critical context.
 
-- **`/bmad-bmm-create-story`** — Enforces the story template and runs the validation checklist. Do NOT manually write story files; they will lack structure, dev context, and disaster-prevention checks.
-- **`/bmad-bmm-dev-story`** — Guides implementation against acceptance criteria, enforces task completion tracking, and updates the story file. Do NOT just start coding from the story file without running this workflow.
-- **`/bmad-bmm-code-review`** — Runs an adversarial review that must find specific problems. Do NOT substitute a casual self-review or skip this step before creating a PR.
+- **`bmad-build`** — Enforces story structure, dev context, acceptance criteria tracking, and its own review pass. Do NOT hand-roll story files or start coding without it. `bmad-create-story` and `bmad-dev-story` are deprecated shims that forward here — do not invoke them.
+- **`bmad-code-review`** — Runs an adversarial review that must find specific problems. Do NOT substitute a casual self-review or skip this step before creating a PR.
+- **`bmad-sprint-planning`** — Owns the readiness gate and `sprint-status.yaml` generation/repair; also serves sprint status summaries (the old `bmad-sprint-status` forwards here).
 
 **Key files:**
 - Sprint status: `_bmad-output/implementation-artifacts/sprint-status.yaml` — shared resource, each branch should only update its own story status
