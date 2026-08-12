@@ -74,6 +74,7 @@ struct SlopeLevelTests {
 // MARK: - Color Tests (Story 11.2)
 
 @Suite("SlopeLevel Color Tests")
+@MainActor
 struct SlopeLevelColorTests {
 
     // MARK: - SwiftUI Color Tests
@@ -167,6 +168,7 @@ struct SlopeLevelColorTests {
 // MARK: - Actionability Tests (Story 11.2)
 
 @Suite("SlopeLevel Actionability Tests")
+@MainActor
 struct SlopeLevelActionabilityTests {
 
     @Test("flat is not actionable")

@@ -31,14 +31,14 @@ struct DatabaseManagerOutageTests {
         #expect(manager.indexExists("idx_api_outages_started_at"))
     }
 
-    @Test("Fresh install sets schema version to 6")
-    func freshInstallSetsVersion6() throws {
+    @Test("Fresh install sets schema version to current")
+    func freshInstallSetsCurrentVersion() throws {
         let (manager, path) = makeManager()
         defer { cleanup(manager: manager, path: path) }
 
         try manager.ensureSchema()
 
-        #expect(try manager.getSchemaVersion() == 6)
+        #expect(try manager.getSchemaVersion() == 7)
     }
 
     @Test("Migration v5->v6 creates api_outages table and index")
@@ -130,8 +130,8 @@ struct DatabaseManagerOutageTests {
         #expect(sqlite3_column_double(stmt, 0) == 0.99)
         sqlite3_finalize(stmt)
 
-        // Verify version bumped to 6
-        #expect(try manager2.getSchemaVersion() == 6)
+        // Verify version bumped to current
+        #expect(try manager2.getSchemaVersion() == 7)
     }
 
     @Test("api_outages table has correct columns")

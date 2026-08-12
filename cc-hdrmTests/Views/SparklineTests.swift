@@ -5,6 +5,7 @@ import Testing
 // MARK: - SparklinePathBuilder Tests
 
 @Suite("SparklinePathBuilder Tests")
+@MainActor
 struct SparklinePathBuilderTests {
 
     // MARK: - Gap Threshold Constant (Story 19.1)

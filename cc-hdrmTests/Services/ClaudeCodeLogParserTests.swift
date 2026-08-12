@@ -84,9 +84,11 @@ struct ClaudeCodeLogParserTests {
 
         let parser = makeParser(tempDir: tempDir)
         let projectDir = tempDir.appendingPathComponent("projects/proj1")
+        let isoNow = ISO8601DateFormatter().string(from: Date())
         _ = try writeJSONLFile(at: projectDir, lines: [
             assistantLine(
                 requestId: "req_001",
+                timestamp: isoNow,
                 model: "claude-opus-4-6",
                 inputTokens: 100,
                 outputTokens: 200,

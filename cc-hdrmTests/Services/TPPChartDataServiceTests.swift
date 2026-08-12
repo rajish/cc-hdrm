@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import cc_hdrm
 
@@ -6,7 +7,7 @@ import Testing
 private final class MockChartTPPStorage: TPPStorageServiceProtocol, @unchecked Sendable {
     var measurements: [TPPMeasurement] = []
     var averageResult: (fiveHour: Double?, sevenDay: Double?) = (nil, nil)
-    var latestBenchmarks: [String: TPPMeasurement] = []  // keyed by "model-variant"
+    var latestBenchmarks: [String: TPPMeasurement] = [:]  // keyed by "model-variant"
 
     func storeBenchmarkResult(_ measurement: TPPMeasurement) async throws {
         measurements.append(measurement)
@@ -37,6 +38,8 @@ private final class MockChartTPPStorage: TPPStorageServiceProtocol, @unchecked S
     func getAverageTPP(from: Int64, to: Int64, model: String?, source: MeasurementSource?) async throws -> (fiveHour: Double?, sevenDay: Double?) {
         return averageResult
     }
+
+    func deleteBackfillRecords() async throws {}
 }
 
 // MARK: - Test Helpers
@@ -283,7 +286,7 @@ struct TPPChartDataServiceTests {
         let model = "claude-sonnet-4-6"
 
         // output-heavy: TPP=1000 (cheaper, more tokens per %)
-        storage.latestBenchmarks["\(model)-output-heavy"] = makeMeasurement(
+        let outputHeavy = makeMeasurement(
             timestamp: nowMs,
             model: model,
             variant: "output-heavy",
@@ -291,13 +294,16 @@ struct TPPChartDataServiceTests {
             tppFiveHour: 1000.0
         )
         // input-heavy: TPP=5000 (most tokens per %)
-        storage.latestBenchmarks["\(model)-input-heavy"] = makeMeasurement(
+        let inputHeavy = makeMeasurement(
             timestamp: nowMs,
             model: model,
             variant: "input-heavy",
             source: .benchmark,
             tppFiveHour: 5000.0
         )
+        storage.latestBenchmarks["\(model)-output-heavy"] = outputHeavy
+        storage.latestBenchmarks["\(model)-input-heavy"] = inputHeavy
+        storage.measurements = [outputHeavy, inputHeavy]
 
         let service = TPPChartDataService(tppStorage: storage)
         let data = try await service.loadTPPData(timeRange: .week, model: model)

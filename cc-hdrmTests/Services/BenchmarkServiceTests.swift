@@ -4,6 +4,23 @@ import Testing
 
 // MARK: - Test Mocks
 
+private final class ProgressCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [BenchmarkProgress] = []
+
+    func append(_ progress: BenchmarkProgress) {
+        lock.lock()
+        defer { lock.unlock() }
+        storage.append(progress)
+    }
+
+    var values: [BenchmarkProgress] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+}
+
 @MainActor
 private final class MockBenchmarkPollingEngine: PollingEngineProtocol {
     var startCallCount = 0
@@ -192,7 +209,7 @@ struct BenchmarkServiceTests {
         // Simulate utilization change during forced poll
         // The polling engine mock doesn't change appState, so delta will be 0
         // and the result will be inconclusive (that is the expected behavior with mocks)
-        var progressUpdates: [BenchmarkProgress] = []
+        let progressUpdates = ProgressCollector()
         let results = try await service.runBenchmark(
             models: ["claude-sonnet-4-6"],
             variants: [.outputHeavy],
@@ -213,7 +230,7 @@ struct BenchmarkServiceTests {
         #expect(results[0].variant == .outputHeavy)
 
         // Verify progress was reported
-        #expect(progressUpdates.contains(.completed))
+        #expect(progressUpdates.values.contains(.completed))
     }
 
     @Test("cancel stops the benchmark")
@@ -244,17 +261,25 @@ struct BenchmarkServiceTests {
             headerFields: nil
         )!
 
+        // runBenchmark resets the cancel flag on entry, so cancel mid-run
+        // via the data loader: the first API call cancels the service.
+        final class ServiceBox: @unchecked Sendable {
+            @MainActor var service: BenchmarkService?
+        }
+        let box = ServiceBox()
+
         let service = BenchmarkService(
             appState: appState,
             keychainService: MockBenchmarkKeychainService(),
             pollingEngine: MockBenchmarkPollingEngine(),
             tppStorageService: MockTPPStorageService(),
             historicalDataService: MockHistoricalDataService(),
-            dataLoader: { _ in (responseData, httpResponse) }
+            dataLoader: { _ in
+                await MainActor.run { box.service?.cancel() }
+                return (responseData, httpResponse)
+            }
         )
-
-        // Cancel immediately
-        service.cancel()
+        box.service = service
 
         let results = try await service.runBenchmark(
             models: ["claude-sonnet-4-6", "claude-opus-4-6"],

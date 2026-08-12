@@ -30,12 +30,12 @@ private final class MockBackfillLogParser: ClaudeCodeLogParserProtocol, @uncheck
 
     func getHealth() -> LogParserHealth {
         LogParserHealth(
-            totalFilesScanned: 0,
             totalLinesProcessed: 0,
-            totalLinesFailed: 0,
+            successfulExtractions: 0,
+            failedLines: 0,
             successRate: 100.0,
-            lastScanTimestamp: nil,
-            lastScanDuration: nil
+            lastScanTimestamp: Date(),
+            filesScanned: 0
         )
     }
 }

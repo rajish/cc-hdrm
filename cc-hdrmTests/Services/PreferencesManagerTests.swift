@@ -451,6 +451,70 @@ struct PreferencesManagerTests {
         defer { cleanup(suiteName: suite) }
         let _: any PreferencesManagerProtocol = manager
     }
+
+    // MARK: - Benchmark Preferences (Story 20.1)
+
+    @Test("isBenchmarkEnabled defaults to false")
+    func benchmarkEnabledDefault() {
+        let (prefs, _, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        #expect(prefs.isBenchmarkEnabled == false)
+    }
+
+    @Test("isBenchmarkEnabled round-trips correctly")
+    func benchmarkEnabledRoundTrip() {
+        let (prefs, _, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        prefs.isBenchmarkEnabled = true
+        #expect(prefs.isBenchmarkEnabled == true)
+        prefs.isBenchmarkEnabled = false
+        #expect(prefs.isBenchmarkEnabled == false)
+    }
+
+    @Test("benchmarkModels defaults to empty array")
+    func benchmarkModelsDefault() {
+        let (prefs, _, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        #expect(prefs.benchmarkModels.isEmpty)
+    }
+
+    @Test("benchmarkModels round-trips correctly")
+    func benchmarkModelsRoundTrip() {
+        let (prefs, _, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        prefs.benchmarkModels = ["claude-sonnet-4-6", "claude-opus-4-6"]
+        #expect(prefs.benchmarkModels == ["claude-sonnet-4-6", "claude-opus-4-6"])
+    }
+
+    @Test("benchmarkVariants defaults to output-heavy")
+    func benchmarkVariantsDefault() {
+        let (prefs, _, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        #expect(prefs.benchmarkVariants == ["output-heavy"])
+    }
+
+    @Test("benchmarkVariants round-trips correctly")
+    func benchmarkVariantsRoundTrip() {
+        let (prefs, _, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        prefs.benchmarkVariants = ["output-heavy", "input-heavy"]
+        #expect(prefs.benchmarkVariants == ["output-heavy", "input-heavy"])
+    }
+
+    @Test("resetToDefaults clears benchmark preferences")
+    func resetClearsBenchmarkPrefs() {
+        let (prefs, _, suite) = makeManager()
+        defer { cleanup(suiteName: suite) }
+        prefs.isBenchmarkEnabled = true
+        prefs.benchmarkModels = ["claude-opus-4-6"]
+        prefs.benchmarkVariants = ["cache-heavy"]
+
+        prefs.resetToDefaults()
+
+        #expect(prefs.isBenchmarkEnabled == false)
+        #expect(prefs.benchmarkModels.isEmpty)
+        #expect(prefs.benchmarkVariants == ["output-heavy"])
+    }
 }
 
 // MARK: - NotificationService + PreferencesManager Integration
@@ -538,60 +602,4 @@ struct NotificationServicePreferencesTests {
         #expect(fire2 == true)
     }
 
-    // MARK: - Benchmark Preferences (Story 20.1)
-
-    @Test("isBenchmarkEnabled defaults to false")
-    func benchmarkEnabledDefault() {
-        let prefs = PreferencesManager(defaults: defaults)
-        #expect(prefs.isBenchmarkEnabled == false)
-    }
-
-    @Test("isBenchmarkEnabled round-trips correctly")
-    func benchmarkEnabledRoundTrip() {
-        let prefs = PreferencesManager(defaults: defaults)
-        prefs.isBenchmarkEnabled = true
-        #expect(prefs.isBenchmarkEnabled == true)
-        prefs.isBenchmarkEnabled = false
-        #expect(prefs.isBenchmarkEnabled == false)
-    }
-
-    @Test("benchmarkModels defaults to empty array")
-    func benchmarkModelsDefault() {
-        let prefs = PreferencesManager(defaults: defaults)
-        #expect(prefs.benchmarkModels.isEmpty)
-    }
-
-    @Test("benchmarkModels round-trips correctly")
-    func benchmarkModelsRoundTrip() {
-        let prefs = PreferencesManager(defaults: defaults)
-        prefs.benchmarkModels = ["claude-sonnet-4-6", "claude-opus-4-6"]
-        #expect(prefs.benchmarkModels == ["claude-sonnet-4-6", "claude-opus-4-6"])
-    }
-
-    @Test("benchmarkVariants defaults to output-heavy")
-    func benchmarkVariantsDefault() {
-        let prefs = PreferencesManager(defaults: defaults)
-        #expect(prefs.benchmarkVariants == ["output-heavy"])
-    }
-
-    @Test("benchmarkVariants round-trips correctly")
-    func benchmarkVariantsRoundTrip() {
-        let prefs = PreferencesManager(defaults: defaults)
-        prefs.benchmarkVariants = ["output-heavy", "input-heavy"]
-        #expect(prefs.benchmarkVariants == ["output-heavy", "input-heavy"])
-    }
-
-    @Test("resetToDefaults clears benchmark preferences")
-    func resetClearsBenchmarkPrefs() {
-        let prefs = PreferencesManager(defaults: defaults)
-        prefs.isBenchmarkEnabled = true
-        prefs.benchmarkModels = ["claude-opus-4-6"]
-        prefs.benchmarkVariants = ["cache-heavy"]
-
-        prefs.resetToDefaults()
-
-        #expect(prefs.isBenchmarkEnabled == false)
-        #expect(prefs.benchmarkModels.isEmpty)
-        #expect(prefs.benchmarkVariants == ["output-heavy"])
-    }
 }
