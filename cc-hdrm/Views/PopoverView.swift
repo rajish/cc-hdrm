@@ -127,6 +127,15 @@ struct PopoverView: View {
                 .padding(.vertical, 8)
         }
 
+        // Model-scoped limit gauges (hidden entirely when the API reports none)
+        if showsScopedLimitSection {
+            Divider()
+
+            ScopedLimitGaugeSection(appState: appState)
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+        }
+
         // Extra usage card (Story 17.2): spend/limit/utilization with color-coded progress bar
         if appState.extraUsageEnabled {
             Divider()
@@ -167,6 +176,12 @@ struct PopoverView: View {
         PopoverFooterView(appState: appState, preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, historicalDataService: historicalDataService, backfillService: backfillService, onThresholdChange: onThresholdChange, onPollIntervalChange: onPollIntervalChange, onClearHistory: onClearHistory, onSignOut: onSignOut)
             .padding(.horizontal)
             .padding(.vertical, 8)
+    }
+
+    /// Whether the scoped-limit gauge section is shown.
+    /// Internal (not private) to allow @testable import verification.
+    var showsScopedLimitSection: Bool {
+        !appState.scopedLimits.isEmpty
     }
 
     /// Resolves which status message (if any) to display based on current AppState.

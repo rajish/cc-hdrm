@@ -346,6 +346,71 @@ struct PopoverViewExtraUsageCardTests {
     }
 }
 
+// MARK: - Scoped Limit Gauge Integration Tests (Story 21.2)
+
+@Suite("PopoverView Scoped Limit Gauge Tests")
+struct PopoverViewScopedLimitTests {
+
+    @Test("PopoverView with scoped limits renders the scoped section without crash")
+    @MainActor
+    func scopedLimitsPresent() {
+        let appState = AppState()
+        appState.updateOAuthState(.authenticated)
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: WindowState(utilization: 35.0, resetsAt: Date().addingTimeInterval(2 * 86400))
+        )
+        appState.updateScopedLimits([
+            ScopedLimitState(displayName: "Fable", utilization: 63.0, resetsAt: Date().addingTimeInterval(3 * 86400))
+        ])
+        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
+        let controller = NSHostingController(rootView: view)
+        _ = controller.view
+        #expect(view.showsScopedLimitSection)
+    }
+
+    @Test("PopoverView with empty scopedLimits does NOT render the scoped section")
+    @MainActor
+    func scopedLimitsAbsent() {
+        let appState = AppState()
+        appState.updateOAuthState(.authenticated)
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: WindowState(utilization: 35.0, resetsAt: Date().addingTimeInterval(2 * 86400))
+        )
+        let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
+        let controller = NSHostingController(rootView: view)
+        _ = controller.view
+        #expect(!view.showsScopedLimitSection)
+    }
+
+    @Test("Observation triggers when scopedLimits changes")
+    @MainActor
+    func observationTriggersOnScopedLimitsChange() {
+        let appState = AppState()
+        appState.updateOAuthState(.authenticated)
+        appState.updateConnectionStatus(.connected)
+
+        let expectation = OSAllocatedUnfairLock(initialState: false)
+        withObservationTracking {
+            let view = PopoverView(appState: appState, preferencesManager: MockPreferencesManager(), launchAtLoginService: MockLaunchAtLoginService())
+            _ = view.body
+        } onChange: {
+            expectation.withLock { $0 = true }
+        }
+
+        // scopedLimits is read directly by PopoverView.body (the `!appState.scopedLimits.isEmpty` guard)
+        appState.updateScopedLimits([
+            ScopedLimitState(displayName: "Fable", utilization: 63.0, resetsAt: Date().addingTimeInterval(86400))
+        ])
+
+        let detected = expectation.withLock { $0 }
+        #expect(detected, "Observation should detect scopedLimits change read by PopoverView.body")
+    }
+}
+
 // MARK: - 5h Gauge Integration Tests (Story 4.2, Task 9)
 
 @Suite("PopoverView 5h Gauge Integration Tests")
