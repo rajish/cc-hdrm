@@ -1,7 +1,9 @@
 ---
 stepsCompleted: [step-01-init, step-02-discovery, step-03-success, step-04-journeys, step-05-domain, step-06-innovation, step-07-project-type, step-08-scoping, step-09-functional, step-10-nonfunctional, step-11-polish, step-e-01-discovery, step-e-02-review, step-e-03-edit]
-lastEdited: '2026-02-10'
+lastEdited: '2026-08-12'
 editHistory:
+  - date: '2026-08-12'
+    changes: 'Added Phase 7 Codex Usage Tracking (FR49-FR60), amended NFR8 endpoint allowlist with chatgpt.com, added NFR14-NFR15 (Codex credential handling, provider failure isolation) per sprint change proposal 2026-08-12 (Codex)'
   - date: '2026-02-10'
     changes: 'Replaced waste terminology with neutral unused capacity framing (FR40, headroom categories), moved extra usage from Phase 4 to Phase 3, added FR46-FR48 for subscription intelligence (pattern detection, total cost comparison, analytics display)'
   - date: '2026-02-03'
@@ -71,29 +73,38 @@ The usage API lives at `https://api.anthropic.com/api/oauth/usage` -- NOT `claud
 ```json
 {
   "five_hour": {
-    "utilization": 18.0,
-    "resets_at": "2026-01-31T01:59:59.782798+00:00"
+    "utilization": 15.0,
+    "resets_at": "2026-08-12T03:40:00.059198+00:00"
   },
   "seven_day": {
-    "utilization": 6.0,
-    "resets_at": "2026-02-06T08:59:59.782818+00:00"
-  },
-  "seven_day_sonnet": {
-    "utilization": 0.0,
-    "resets_at": null
+    "utilization": 67.0,
+    "resets_at": "2026-08-12T22:00:01.059220+00:00"
   },
   "extra_usage": {
     "is_enabled": false,
     "monthly_limit": null,
     "used_credits": null,
     "utilization": null
-  }
+  },
+  "limits": [
+    { "kind": "session", "group": "session", "percent": 15, "severity": "normal",
+      "resets_at": "2026-08-12T03:40:00.059198+00:00", "scope": null, "is_active": false },
+    { "kind": "weekly_all", "group": "weekly", "percent": 67, "severity": "normal",
+      "resets_at": "2026-08-12T22:00:01.059220+00:00", "scope": null, "is_active": true },
+    { "kind": "weekly_scoped", "group": "weekly", "percent": 63, "severity": "normal",
+      "resets_at": "2026-08-12T22:00:00.059415+00:00",
+      "scope": { "model": { "id": null, "display_name": "Fable" }, "surface": null },
+      "is_active": false }
+  ]
 }
 ```
 
 - `utilization` -- percentage (0-100)
 - `resets_at` -- ISO 8601 timestamp or null
-- Additional fields: `seven_day_oauth_apps`, `seven_day_opus`, `seven_day_cowork`, `iguana_necktie` (all nullable)
+- `limits` (added 2026-08) -- array of limit entries: `kind` (`session`, `weekly_all`, `weekly_scoped`), `percent`, `severity`, `resets_at`, `is_active`, and `scope.model.display_name` for model-scoped caps (e.g. Fable's 50%-of-weekly cap). Source of truth for per-model tracking (Epic 21).
+- Legacy per-model windows `seven_day_sonnet`, `seven_day_opus` now return `null` -- superseded by `weekly_scoped` entries in `limits`.
+- Additional fields (all nullable, unparsed): `seven_day_oauth_apps`, `seven_day_cowork`, `spend` (usage-credits object), extended `extra_usage` fields (`daily`, `weekly`, `currency`), plus obfuscated experiment fields (`iguana_necktie`, `nimbus_quill`, ...)
+- Window objects also carry `limit_dollars` / `used_dollars` / `remaining_dollars` (null on subscription plans)
 
 ### Token Refresh
 
@@ -233,9 +244,25 @@ Replaces the original "limit prediction" concept. Explicit time-to-exhaustion pr
 
 ### Phase 4: Future
 
-- Sonnet-specific usage breakdown (API returns `seven_day_sonnet` data)
+- ~~Sonnet-specific usage breakdown~~ -- Superseded by Epic 21 model-scoped limit tracking (API moved per-model windows to the `limits` array; `seven_day_sonnet` now null). Sprint change proposal 2026-08-12.
 - Linux tray support
 - ~~Extra usage / spending tracking~~ -- Moved to Phase 3 / Epic 16 (data already available and persisted via PR 43)
+- Codex Token Efficiency Ratio, unused-capacity breakdown, tier recommendation (deferred from Phase 7)
+
+### Phase 7: Codex Usage Tracking
+
+Extend cc-hdrm to monitor OpenAI Codex subscription limits alongside Claude, with full feature parity for core tracking: dedicated menu bar item, popover panel, threshold notifications, historical persistence, and analytics integration. (Sprint change proposal 2026-08-12, Codex.)
+
+**Kill Condition:** If the Codex usage endpoint cannot be reached from a standalone macOS process using `~/.codex/auth.json` credentials, Phase 7 is killed (spike story 22.1).
+
+**Data source (to be validated by spike):**
+
+- Credentials: `~/.codex/auth.json` (or `$CODEX_HOME/auth.json`), JWT claims carry plan type
+- Usage: `GET https://chatgpt.com/backend-api/wham/usage` -- `rate_limit.primary_window` (5h session), `rate_limit.secondary_window` (weekly), `additional_rate_limits[]`, credits (balance / hasCredits / unlimited)
+- Credits inventory: `GET https://chatgpt.com/backend-api/wham/rate-limit-reset-credits`
+- Token refresh: mechanism TBD in spike
+
+**Deferred beyond Phase 7:** Codex TPP, Codex unused-capacity breakdown, Codex tier recommendation.
 
 ### Risk Mitigation
 
@@ -416,6 +443,21 @@ Without cc-hdrm, he'd have kept going, gotten cut off mid-response, lost context
 - FR47: Tier recommendation computes total cost (base subscription + extra usage charges) when comparing tiers
 - FR48: Analytics displays total cost breakdown when extra usage data is available
 
+### Codex Usage Tracking (Phase 7)
+
+- FR49: App can read Codex OAuth credentials from `~/.codex/auth.json` (or `$CODEX_HOME/auth.json`) without user interaction, read-only
+- FR50: App can detect the user's Codex plan type from stored credentials
+- FR51: App can fetch current Codex usage data (5h primary window, weekly secondary window, credits) from the ChatGPT backend usage endpoint
+- FR52: App can detect expired/invalid Codex credentials and display an actionable status message ("run codex to refresh" or equivalent validated by spike)
+- FR53: User can see Codex 5h headroom in a dedicated second menu bar item with the same color/weight coding as Claude
+- FR54: User can click the Codex menu bar item to expand a Codex panel with 5h and weekly gauges, reset countdowns, plan type, and credits balance when available
+- FR55: User can see per-window slope indicators for Codex (menu bar + popover), reusing the 4-level slope model
+- FR56: User can receive threshold notifications for Codex 5h and weekly windows at configurable headroom thresholds
+- FR57: User can enable/disable Codex tracking in settings; the Codex menu bar item auto-hides when no credentials are found or tracking is disabled
+- FR58: App persists Codex poll snapshots to SQLite with a provider dimension, participating in the existing tiered rollup strategy
+- FR59: User can view Codex historical data in the analytics window via provider selection
+- FR60: Codex polling failures degrade gracefully and independently -- Claude tracking is never affected by Codex errors, and vice versa
+
 ## Non-Functional Requirements
 
 ### Performance
@@ -430,7 +472,9 @@ Without cc-hdrm, he'd have kept going, gotten cut off mid-response, lost context
 
 - NFR6: OAuth credentials are read from Keychain at runtime and never persisted to disk, logs, or user defaults
 - NFR7: OAuth tokens are read fresh from Keychain each poll cycle and not cached in application state between cycles
-- NFR8: No credentials or usage data are transmitted to any endpoint other than `api.anthropic.com` (usage data) and `platform.claude.com` (token refresh)
+- NFR8: No credentials or usage data are transmitted to any endpoint other than `api.anthropic.com` (Claude usage), `platform.claude.com` (Claude token refresh), and `chatgpt.com` (Codex usage; plus the Codex token-refresh endpoint documented by the Phase 7 spike)
+- NFR14: Codex credentials are read from `auth.json` fresh each poll cycle, never written back, never persisted elsewhere, and never logged
+- NFR15: Claude and Codex polling lanes are failure-isolated -- an error in one provider's pipeline must not affect the other's display, notifications, or persistence
 - NFR9: API requests use HTTPS exclusively
 
 ### Integration

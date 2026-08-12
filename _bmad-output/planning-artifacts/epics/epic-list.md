@@ -87,3 +87,32 @@ Alex doesn't just hit the wall anymore — when his 5h or 7d plan quota runs out
 
 Alex doesn't just know how much headroom he has — he knows what he's getting for it. By correlating actual token consumption from Claude Code session logs with utilization % changes, cc-hdrm computes a "Tokens per Percent" (TPP) metric that reveals how many tokens it takes to burn 1% of the 5h budget. When Anthropic silently tightens the rate limits, the TPP trend line drops and Alex sees it. An opt-in "Measure" button sends a known-size request for calibrated readings.
 **Stories:** 20.1 Active Benchmark (per-model, token type discovery), 20.2 Log Parser (health indicator), 20.3 Passive TPP Engine (per-model, capped accumulation), 20.4 TPP Visualization (two-tier: benchmark + passive), 20.5 Historical Backfill (nice-to-have)
+
+## Epic 21: Fable Model Usage Tracking (Phase 6)
+
+Alex uses Fable 5 for the hard problems — and it has its own weekly cap, invisible until now. cc-hdrm parses the API's model-scoped limits, shows a Fable utilization row in the popover, persists the history, charts it in analytics, and fires the same 20%/5% headroom alerts Alex already trusts. The TPP benchmark learns Fable's token economics too.
+**Stories:** 21.1 Scoped-limits parsing, 21.2 Popover display, 21.3 Persistence + analytics series, 21.4 Threshold notifications, 21.5 Benchmark default model update (Sprint change proposal 2026-08-12)
+
+## Epic 22: Codex Data Pipeline & API Spike (Phase 7)
+
+Alex uses Codex alongside Claude — cc-hdrm silently finds his Codex credentials in `~/.codex/auth.json` and starts polling his usage. Story 22.1 is a kill-gate spike mirroring the Claude API spike: validate endpoint reachability, document auth, response format, and token refresh. Codex polling runs in its own failure-isolated lane.
+**FRs covered:** FR49, FR50, FR51, FR52, FR60
+**Stories:** 22.1 API Spike (kill gate), 22.2 Codex Credentials Service, 22.3 Codex API Client & Defensive Parsing, 22.4 Codex Polling Lane & Expiry Handling (Sprint change proposal 2026-08-12, Codex)
+
+## Epic 23: Codex Menu Bar & Popover (Phase 7)
+
+Alex glances at a second menu bar item and knows his Codex headroom instantly — same color coding, same weight escalation. Clicking it opens a Codex popover with 5h and weekly ring gauges, countdowns, plan type, credits balance, and slope indicators. The item auto-hides when Codex isn't installed.
+**FRs covered:** FR53, FR54, FR55, FR57 (auto-hide)
+**Stories:** 23.1 Second Status Item & Headroom Display, 23.2 Codex Popover Panel, 23.3 Codex Error & Status States, 23.4 Codex Slope Indicators
+
+## Epic 24: Codex Notifications & Settings (Phase 7)
+
+Alex never hits the Codex wall by surprise — threshold notifications fire for both Codex windows with reset context, and settings let him tune thresholds or switch Codex tracking off entirely.
+**FRs covered:** FR56, FR57
+**Stories:** 24.1 Codex Threshold Notifications, 24.2 Codex Settings Integration
+
+## Epic 25: Codex History & Analytics (Phase 7)
+
+Alex's Codex usage builds the same permanent record his Claude usage does — poll snapshots persisted with a provider dimension, rolled up on the existing tiers, and explorable in the analytics window via provider selection.
+**FRs covered:** FR58, FR59
+**Stories:** 25.1 Provider-Dimension Schema Migration (additive, non-destructive), 25.2 Codex Poll Persistence & Rollups, 25.3 Analytics Provider Integration
