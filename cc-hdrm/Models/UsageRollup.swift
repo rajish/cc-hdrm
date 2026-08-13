@@ -36,6 +36,15 @@ struct UsageRollup: Sendable, Equatable {
     /// Extra usage delta: SUM of credits consumed across polls/rollups in this period.
     /// Persisted in rollup DB schema since v5.
     var extraUsageDelta: Double? = nil
+    /// Average model-scoped (Fable) weekly utilization for the period (0-100).
+    /// Persisted in rollup DB schema since v8.
+    var fableWeeklyAvg: Double? = nil
+    /// Peak (max) model-scoped (Fable) weekly utilization for the period.
+    /// Persisted in rollup DB schema since v8.
+    var fableWeeklyPeak: Double? = nil
+    /// Minimum model-scoped (Fable) weekly utilization for the period.
+    /// Persisted in rollup DB schema since v8.
+    var fableWeeklyMin: Double? = nil
 
     /// Resolution tier for aggregated usage data.
     enum Resolution: String, Codable, CaseIterable, Sendable {

@@ -124,6 +124,9 @@ struct OutageTooltipView: View {
 struct StepAreaChartView: View {
     let fiveHourVisible: Bool
     let sevenDayVisible: Bool
+    let fableVisible: Bool
+    /// Display label for the model-scoped (Fable) series — from the live API display name.
+    let fableLabel: String
 
     // Pre-computed in init — never recomputed
     let chartPoints: [ChartPoint]
@@ -131,6 +134,8 @@ struct StepAreaChartView: View {
     let fiveHourPoints: [ChartPoint]
     /// Flat array of points with non-nil sevenDayUtil
     let sevenDayPoints: [ChartPoint]
+    /// Flat array of points with non-nil fableWeeklyUtil
+    let fablePoints: [ChartPoint]
     /// Flat array of points where extra usage is active (delta > 0, prominent layer)
     let extraUsagePoints: [ChartPoint]
     /// Flat array of points where extraUsageUtilization > 0 (faint cumulative background)
@@ -143,6 +148,8 @@ struct StepAreaChartView: View {
 
     /// 7-day series color — distinct blue.
     static let sevenDayColor = Color.blue
+    /// Model-scoped (Fable) weekly series color — distinct from 5h green and 7d blue.
+    static let fableColor = Color.indigo
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -151,9 +158,18 @@ struct StepAreaChartView: View {
 
     // MARK: - Init
 
-    init(polls: [UsagePoll], fiveHourVisible: Bool, sevenDayVisible: Bool, outagePeriods: [OutagePeriod] = []) {
+    init(
+        polls: [UsagePoll],
+        fiveHourVisible: Bool,
+        sevenDayVisible: Bool,
+        fableVisible: Bool = false,
+        fableLabel: String = "Model",
+        outagePeriods: [OutagePeriod] = []
+    ) {
         self.fiveHourVisible = fiveHourVisible
         self.sevenDayVisible = sevenDayVisible
+        self.fableVisible = fableVisible
+        self.fableLabel = fableLabel
 
         let points = Self.makeChartPoints(from: polls)
 
@@ -168,6 +184,7 @@ struct StepAreaChartView: View {
         self.resetTimestamps = Self.findResetTimestamps(in: polls)
         self.fiveHourPoints = cleanedPoints.filter { $0.fiveHourUtil != nil }
         self.sevenDayPoints = cleanedPoints.filter { $0.sevenDayUtil != nil }
+        self.fablePoints = cleanedPoints.filter { $0.fableWeeklyUtil != nil }
         self.extraUsagePoints = cleanedPoints.filter { $0.extraUsageActive == true }
         self.extraUsageBackgroundPoints = cleanedPoints.filter { ($0.extraUsageUtilization ?? 0) > 0 }
         self.gapRanges = Self.findGapRanges(in: cleanedPoints)
@@ -183,7 +200,7 @@ struct StepAreaChartView: View {
     /// of the next segment (where the segment ID differs).
     private static func findGapRanges(in points: [ChartPoint]) -> [GapRange] {
         // Only consider points that have actual data (non-nil utilization)
-        let dataPoints = points.filter { $0.fiveHourUtil != nil || $0.sevenDayUtil != nil }
+        let dataPoints = points.filter { $0.fiveHourUtil != nil || $0.sevenDayUtil != nil || $0.fableWeeklyUtil != nil }
         guard dataPoints.count >= 2 else { return [] }
 
         var gaps: [GapRange] = []
@@ -263,7 +280,8 @@ struct StepAreaChartView: View {
                     extraUsageUsedCredits: nil,
                     extraUsageUtilization: nil,
                     extraUsageMonthlyLimit: nil,
-                    extraUsageDelta: nil
+                    extraUsageDelta: nil,
+                    fableWeeklyUtil: nil
                 )
             }
             return point
@@ -277,13 +295,16 @@ struct StepAreaChartView: View {
             chartPoints: chartPoints,
             fiveHourPoints: fiveHourPoints,
             sevenDayPoints: sevenDayPoints,
+            fablePoints: fablePoints,
             extraUsagePoints: extraUsagePoints,
             extraUsageBackgroundPoints: extraUsageBackgroundPoints,
             resetTimestamps: resetTimestamps,
             gapRanges: gapRanges,
             outageRanges: outageRanges,
             fiveHourVisible: fiveHourVisible,
-            sevenDayVisible: sevenDayVisible
+            sevenDayVisible: sevenDayVisible,
+            fableVisible: fableVisible,
+            fableLabel: fableLabel
         )
         .accessibilityLabel("24-hour step-area usage chart")
     }
@@ -302,6 +323,7 @@ struct StepAreaChartView: View {
         var extraUsageUtilization: Double? = nil
         var extraUsageMonthlyLimit: Double? = nil
         var extraUsageDelta: Double? = nil
+        var fableWeeklyUtil: Double? = nil
     }
 
     /// A time range where no poll data exists (sleep, system off, etc.)
@@ -342,7 +364,8 @@ struct StepAreaChartView: View {
                 extraUsageUsedCredits: poll.extraUsageUsedCredits,
                 extraUsageUtilization: poll.extraUsageUtilization,
                 extraUsageMonthlyLimit: poll.extraUsageMonthlyLimit,
-                extraUsageDelta: poll.extraUsageDelta
+                extraUsageDelta: poll.extraUsageDelta,
+                fableWeeklyUtil: poll.fableWeeklyUtil
             )
         }
     }
@@ -437,6 +460,7 @@ struct StepAreaChartView: View {
         let resetDropThreshold: Double = 10.0
         var maxFiveHour: Double?
         var maxSevenDay: Double?
+        var maxFable: Double?
         var currentSegment = points[0].segment
 
         var result: [ChartPoint] = []
@@ -447,6 +471,7 @@ struct StepAreaChartView: View {
             if point.segment != currentSegment {
                 maxFiveHour = nil
                 maxSevenDay = nil
+                maxFable = nil
                 currentSegment = point.segment
             }
 
@@ -488,7 +513,26 @@ struct StepAreaChartView: View {
                 clampedSeven = nil
             }
 
-            if clampedFive == point.fiveHourUtil && clampedSeven == point.sevenDayUtil {
+            // Fable weekly: independent tracker — its weekly reset is unrelated to 5h/7d resets
+            if let util = point.fableWeeklyUtil, let maxFb = maxFable,
+               maxFb - util >= resetDropThreshold {
+                maxFable = nil
+            }
+
+            let clampedFable: Double?
+            if let util = point.fableWeeklyUtil {
+                if let maxFb = maxFable {
+                    clampedFable = max(util, maxFb)
+                } else {
+                    clampedFable = util
+                }
+                maxFable = clampedFable
+            } else {
+                clampedFable = nil
+            }
+
+            if clampedFive == point.fiveHourUtil && clampedSeven == point.sevenDayUtil
+                && clampedFable == point.fableWeeklyUtil {
                 result.append(point)
             } else {
                 result.append(ChartPoint(
@@ -502,7 +546,8 @@ struct StepAreaChartView: View {
                     extraUsageUsedCredits: point.extraUsageUsedCredits,
                     extraUsageUtilization: point.extraUsageUtilization,
                     extraUsageMonthlyLimit: point.extraUsageMonthlyLimit,
-                    extraUsageDelta: point.extraUsageDelta
+                    extraUsageDelta: point.extraUsageDelta,
+                    fableWeeklyUtil: clampedFable
                 ))
             }
         }
@@ -520,6 +565,7 @@ private struct ChartWithHoverOverlay: View {
     let chartPoints: [StepAreaChartView.ChartPoint]
     let fiveHourPoints: [StepAreaChartView.ChartPoint]
     let sevenDayPoints: [StepAreaChartView.ChartPoint]
+    let fablePoints: [StepAreaChartView.ChartPoint]
     let extraUsagePoints: [StepAreaChartView.ChartPoint]
     let extraUsageBackgroundPoints: [StepAreaChartView.ChartPoint]
     let resetTimestamps: [Date]
@@ -527,6 +573,8 @@ private struct ChartWithHoverOverlay: View {
     let outageRanges: [OutageRange]
     let fiveHourVisible: Bool
     let sevenDayVisible: Bool
+    let fableVisible: Bool
+    let fableLabel: String
 
     @State private var hoveredIndex: Int?
     /// The resolved cursor date from ChartProxy — used for gap range detection.
@@ -536,13 +584,15 @@ private struct ChartWithHoverOverlay: View {
         StaticChartContent(
             fiveHourPoints: fiveHourPoints,
             sevenDayPoints: sevenDayPoints,
+            fablePoints: fablePoints,
             extraUsagePoints: extraUsagePoints,
             extraUsageBackgroundPoints: extraUsageBackgroundPoints,
             resetTimestamps: resetTimestamps,
             gapRanges: gapRanges,
             outageRanges: outageRanges,
             fiveHourVisible: fiveHourVisible,
-            sevenDayVisible: sevenDayVisible
+            sevenDayVisible: sevenDayVisible,
+            fableVisible: fableVisible
         )
         .chartOverlay { proxy in
             GeometryReader { geometry in
@@ -573,6 +623,8 @@ private struct ChartWithHoverOverlay: View {
                         hoveredDate: hoveredDate,
                         fiveHourVisible: fiveHourVisible,
                         sevenDayVisible: sevenDayVisible,
+                        fableVisible: fableVisible,
+                        fableLabel: fableLabel,
                         proxy: proxy,
                         size: geometry.size
                     )
@@ -626,6 +678,7 @@ private struct ChartWithHoverOverlay: View {
 private struct StaticChartContent: View {
     let fiveHourPoints: [StepAreaChartView.ChartPoint]
     let sevenDayPoints: [StepAreaChartView.ChartPoint]
+    let fablePoints: [StepAreaChartView.ChartPoint]
     let extraUsagePoints: [StepAreaChartView.ChartPoint]
     let extraUsageBackgroundPoints: [StepAreaChartView.ChartPoint]
     let resetTimestamps: [Date]
@@ -633,6 +686,7 @@ private struct StaticChartContent: View {
     let outageRanges: [OutageRange]
     let fiveHourVisible: Bool
     let sevenDayVisible: Bool
+    let fableVisible: Bool
 
     var body: some View {
         Chart {
@@ -699,6 +753,21 @@ private struct StaticChartContent: View {
                         series: .value("Seg", "7d-\(point.segment)")
                     )
                     .foregroundStyle(StepAreaChartView.sevenDayColor)
+                    .interpolationMethod(.stepEnd)
+                    .lineStyle(StrokeStyle(lineWidth: 2))
+                }
+            }
+
+            // Fable weekly series: line only (indigo)
+            // series: "fable-N" — separate from 5h/7d and per-segment
+            if fableVisible {
+                ForEach(fablePoints) { point in
+                    LineMark(
+                        x: .value("Time", point.date),
+                        y: .value("Utilization", point.fableWeeklyUtil ?? 0),
+                        series: .value("Seg", "fable-\(point.segment)")
+                    )
+                    .foregroundStyle(StepAreaChartView.fableColor)
                     .interpolationMethod(.stepEnd)
                     .lineStyle(StrokeStyle(lineWidth: 2))
                 }
@@ -794,6 +863,8 @@ private struct HoverOverlayContent: View {
     let hoveredDate: Date?
     let fiveHourVisible: Bool
     let sevenDayVisible: Bool
+    let fableVisible: Bool
+    let fableLabel: String
     let proxy: ChartProxy
     let size: CGSize
 
@@ -874,6 +945,16 @@ private struct HoverOverlayContent: View {
                         .position(x: xPos, y: yPos)
                 }
 
+                // Fable point marker
+                if fableVisible, let util = point.fableWeeklyUtil,
+                   let yPos = proxy.position(forY: util) {
+                    Circle()
+                        .fill(StepAreaChartView.fableColor)
+                        .stroke(Color.white.opacity(0.8), lineWidth: 1)
+                        .frame(width: 8, height: 8)
+                        .position(x: xPos, y: yPos)
+                }
+
                 // Tooltip
                 tooltipView(for: point)
                     .fixedSize()
@@ -921,6 +1002,14 @@ private struct HoverOverlayContent: View {
                 HStack(spacing: 3) {
                     Circle().fill(StepAreaChartView.sevenDayColor).frame(width: 6, height: 6)
                     Text(String(format: "7d: %.1f%%", util))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if fableVisible, let util = point.fableWeeklyUtil {
+                HStack(spacing: 3) {
+                    Circle().fill(StepAreaChartView.fableColor).frame(width: 6, height: 6)
+                    Text(String(format: "%@: %.1f%%", fableLabel, util))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

@@ -11,6 +11,11 @@ struct UsageChart: View {
     let timeRange: TimeRange
     let fiveHourVisible: Bool
     let sevenDayVisible: Bool
+    /// Whether the model-scoped (Fable) series is visible. Callers pass the effective
+    /// visibility (toggle state AND data presence) so absent data renders identically to today.
+    var fableVisible: Bool = false
+    /// Display label for the Fable series — from the live API display name.
+    var fableLabel: String = "Model"
     let isLoading: Bool
     /// Whether any historical data exists in the database (across all time ranges).
     /// When false and data is empty, shows "No data yet" instead of "No data for this time range".
@@ -25,7 +30,7 @@ struct UsageChart: View {
 
     /// Whether at least one series is toggled on.
     private var anySeriesVisible: Bool {
-        fiveHourVisible || sevenDayVisible
+        fiveHourVisible || sevenDayVisible || fableVisible
     }
 
     var body: some View {
@@ -53,6 +58,8 @@ struct UsageChart: View {
                 polls: pollData,
                 fiveHourVisible: fiveHourVisible,
                 sevenDayVisible: sevenDayVisible,
+                fableVisible: fableVisible,
+                fableLabel: fableLabel,
                 outagePeriods: outagePeriods
             )
         } else {
@@ -61,6 +68,8 @@ struct UsageChart: View {
                 timeRange: timeRange,
                 fiveHourVisible: fiveHourVisible,
                 sevenDayVisible: sevenDayVisible,
+                fableVisible: fableVisible,
+                fableLabel: fableLabel,
                 outagePeriods: outagePeriods
             )
         }

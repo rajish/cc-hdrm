@@ -14,6 +14,7 @@ struct UsageChartTests {
         timeRange: TimeRange = .week,
         fiveHourVisible: Bool = true,
         sevenDayVisible: Bool = true,
+        fableVisible: Bool = false,
         isLoading: Bool = false,
         hasAnyHistoricalData: Bool = true,
         outagePeriods: [OutagePeriod] = []
@@ -24,6 +25,7 @@ struct UsageChartTests {
             timeRange: timeRange,
             fiveHourVisible: fiveHourVisible,
             sevenDayVisible: sevenDayVisible,
+            fableVisible: fableVisible,
             isLoading: isLoading,
             hasAnyHistoricalData: hasAnyHistoricalData,
             outagePeriods: outagePeriods
@@ -1259,6 +1261,261 @@ struct UsageChartTests {
         let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .week)
         #expect(barPoints.count == 1)
         #expect(barPoints[0].extraUsageSpend == nil)
+    }
+
+    // MARK: - Story 21.3: Fable Weekly Series
+
+    @Test("makeChartPoints carries fableWeeklyUtil from polls")
+    func chartPointsCarryFableUtil() {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let polls = [
+            UsagePoll(id: 1, timestamp: nowMs - 30_000, fiveHourUtil: 30.0,
+                      fiveHourResetsAt: nil, sevenDayUtil: 20.0, sevenDayResetsAt: nil,
+                      fableWeeklyUtil: 63.0),
+            UsagePoll(id: 2, timestamp: nowMs, fiveHourUtil: 31.0,
+                      fiveHourResetsAt: nil, sevenDayUtil: 21.0, sevenDayResetsAt: nil)
+        ]
+        let points = StepAreaChartView.makeChartPoints(from: polls)
+        #expect(points.count == 2)
+        #expect(points[0].fableWeeklyUtil == 63.0)
+        #expect(points[1].fableWeeklyUtil == nil)
+    }
+
+    @Test("StepAreaChartView filters fablePoints to non-nil fable values")
+    func fablePointsFiltered() {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        var polls: [UsagePoll] = []
+        for i in 0..<10 {
+            polls.append(UsagePoll(
+                id: Int64(i), timestamp: nowMs - Int64(9 - i) * 30_000,
+                fiveHourUtil: 30.0, fiveHourResetsAt: nil,
+                sevenDayUtil: 20.0, sevenDayResetsAt: nil,
+                fableWeeklyUtil: i < 5 ? nil : 40.0 + Double(i)
+            ))
+        }
+        let view = StepAreaChartView(
+            polls: polls,
+            fiveHourVisible: true,
+            sevenDayVisible: true,
+            fableVisible: true,
+            fableLabel: "Fable"
+        )
+        #expect(view.fablePoints.count == 5, "Only points with non-nil fable util belong to the fable series")
+        let _ = view.body
+    }
+
+    @Test("Series line starts partway through window when fable data begins mid-range")
+    func fableSeriesStartsPartwayThroughWindow() {
+        // Pre-migration boundary: NULLs before, values after — fable's own filtered
+        // array starts where the data starts; the 5h/7d series are unaffected.
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        var polls: [UsagePoll] = []
+        for i in 0..<20 {
+            polls.append(UsagePoll(
+                id: Int64(i), timestamp: nowMs - Int64(19 - i) * 30_000,
+                fiveHourUtil: 30.0 + Double(i), fiveHourResetsAt: nil,
+                sevenDayUtil: nil, sevenDayResetsAt: nil,
+                fableWeeklyUtil: i >= 10 ? 50.0 + Double(i) : nil
+            ))
+        }
+        let view = StepAreaChartView(
+            polls: polls,
+            fiveHourVisible: true,
+            sevenDayVisible: true,
+            fableVisible: true
+        )
+        #expect(view.fiveHourPoints.count == 20)
+        #expect(view.fablePoints.count == 10)
+        #expect(view.gapRanges.isEmpty, "Missing fable values alone must not create gaps when 5h data is continuous")
+    }
+
+    @Test("Fable-only polls participate in gap detection")
+    func fableOnlyPollsDriveGapDetection() {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let intervalMs: Int64 = 60_000
+
+        func fableOnlyPoll(id: Int, timestamp: Int64) -> UsagePoll {
+            UsagePoll(id: Int64(id), timestamp: timestamp,
+                      fiveHourUtil: nil, fiveHourResetsAt: nil,
+                      sevenDayUtil: nil, sevenDayResetsAt: nil,
+                      fableWeeklyUtil: 40.0 + Double(id))
+        }
+
+        // Continuous fable-only data (1 min spacing) — no gaps
+        let continuous = (0..<10).map { i in
+            fableOnlyPoll(id: i, timestamp: nowMs - Int64(9 - i) * intervalMs)
+        }
+        let continuousView = StepAreaChartView(
+            polls: continuous, fiveHourVisible: false, sevenDayVisible: false, fableVisible: true
+        )
+        #expect(continuousView.gapRanges.isEmpty, "Continuous fable-only data must not produce gaps")
+
+        // Two fable-only clusters separated by 2h (> 60 min gap threshold) — one gap
+        let gapMs: Int64 = 2 * 3_600_000
+        let firstCluster = (0..<10).map { i in
+            fableOnlyPoll(id: i, timestamp: nowMs - gapMs - Int64(19 - i) * intervalMs)
+        }
+        let secondCluster = (0..<10).map { i in
+            fableOnlyPoll(id: 10 + i, timestamp: nowMs - Int64(9 - i) * intervalMs)
+        }
+        let gappedView = StepAreaChartView(
+            polls: firstCluster + secondCluster, fiveHourVisible: false, sevenDayVisible: false, fableVisible: true
+        )
+        #expect(gappedView.gapRanges.count == 1, "A real time gap in fable-only data must produce a gap range")
+    }
+
+    @Test("enforceMonotonicWithinSegments clamps fable dips and resets on weekly reset drop")
+    func monotonicClampAppliesToFable() {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let utils: [Double] = [50.0, 49.5, 51.0, 5.0, 6.0] // noise dip, then real reset
+        let polls = utils.enumerated().map { i, util in
+            UsagePoll(id: Int64(i), timestamp: nowMs - Int64(utils.count - 1 - i) * 30_000,
+                      fiveHourUtil: nil, fiveHourResetsAt: nil,
+                      sevenDayUtil: nil, sevenDayResetsAt: nil,
+                      fableWeeklyUtil: util)
+        }
+        let points = StepAreaChartView.enforceMonotonicWithinSegments(
+            StepAreaChartView.makeChartPoints(from: polls)
+        )
+        #expect(points[1].fableWeeklyUtil == 50.0, "Noise dip should clamp to running max")
+        #expect(points[2].fableWeeklyUtil == 51.0)
+        #expect(points[3].fableWeeklyUtil == 5.0, "Large drop is a weekly reset — tracker resets")
+        #expect(points[4].fableWeeklyUtil == 6.0)
+    }
+
+    @Test("makeBarPoints aggregates fable avg/peak/min across rollups")
+    func barPointsAggregateFable() {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let calendar = Calendar.current
+        let hourStart = calendar.dateInterval(
+            of: .hour,
+            for: Date(timeIntervalSince1970: Double(nowMs) / 1000.0)
+        )!.start
+        let hourStartMs = Int64(hourStart.timeIntervalSince1970 * 1000)
+        let fiveMinMs: Int64 = 300_000
+
+        let rollups = [
+            UsageRollup(
+                id: 1, periodStart: hourStartMs, periodEnd: hourStartMs + fiveMinMs,
+                resolution: .fiveMin,
+                fiveHourAvg: 30.0, fiveHourPeak: 45.0, fiveHourMin: 20.0,
+                sevenDayAvg: 15.0, sevenDayPeak: 25.0, sevenDayMin: 10.0,
+                resetCount: 0, unusedCredits: nil,
+                fableWeeklyAvg: 40.0, fableWeeklyPeak: 45.0, fableWeeklyMin: 35.0
+            ),
+            UsageRollup(
+                id: 2, periodStart: hourStartMs + fiveMinMs, periodEnd: hourStartMs + 2 * fiveMinMs,
+                resolution: .fiveMin,
+                fiveHourAvg: 35.0, fiveHourPeak: 50.0, fiveHourMin: 25.0,
+                sevenDayAvg: 18.0, sevenDayPeak: 30.0, sevenDayMin: 12.0,
+                resetCount: 0, unusedCredits: nil,
+                fableWeeklyAvg: 60.0, fableWeeklyPeak: 65.0, fableWeeklyMin: 55.0
+            ),
+        ]
+
+        let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .week)
+        #expect(barPoints.count == 1)
+        #expect(barPoints[0].fableAvg == 50.0, "Avg of 40/60 should be 50")
+        #expect(barPoints[0].fablePeak == 65.0)
+        #expect(barPoints[0].fableMin == 35.0)
+    }
+
+    @Test("BarPoint fable fields default to nil when rollups carry no fable data")
+    func barPointFableDefaultNil() {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let rollups = [
+            UsageRollup(
+                id: 1, periodStart: nowMs - 300_000, periodEnd: nowMs,
+                resolution: .fiveMin,
+                fiveHourAvg: 30.0, fiveHourPeak: 45.0, fiveHourMin: 20.0,
+                sevenDayAvg: 15.0, sevenDayPeak: 25.0, sevenDayMin: 10.0,
+                resetCount: 0, unusedCredits: nil
+            )
+        ]
+        let barPoints = BarChartView.makeBarPoints(from: rollups, timeRange: .week)
+        #expect(barPoints.count == 1)
+        #expect(barPoints[0].fablePeak == nil)
+        #expect(barPoints[0].fableAvg == nil)
+        #expect(barPoints[0].fableMin == nil)
+    }
+
+    @Test("slotBounds reproduces the original single-series and two-series layout exactly")
+    func slotBoundsMatchesLegacyLayout() {
+        let duration: TimeInterval = 3600
+        let outerPadding = duration * 0.05  // 180
+        let innerGap = duration * 0.02      // 72
+        let half = duration * 0.5           // 1800
+
+        // Single series: 90% span with 5% padding each side
+        let single = BarChartView.slotBounds(index: 0, count: 1, duration: duration)
+        #expect(single.start == outerPadding)
+        #expect(single.end == duration - outerPadding)
+
+        // Two series: original formula — A: [outer, half - gap], B: [half + gap, duration - outer]
+        let first = BarChartView.slotBounds(index: 0, count: 2, duration: duration)
+        #expect(first.start == outerPadding)
+        #expect(first.end == half - innerGap)
+        let second = BarChartView.slotBounds(index: 1, count: 2, duration: duration)
+        #expect(second.start == half + innerGap)
+        #expect(second.end == duration - outerPadding)
+    }
+
+    @Test("slotBounds with three series produces ordered, non-overlapping slots within the period")
+    func slotBoundsThreeSeriesNoOverlap() {
+        let duration: TimeInterval = 3600
+        let slots = (0..<3).map { BarChartView.slotBounds(index: $0, count: 3, duration: duration) }
+
+        #expect(slots[0].start == duration * 0.05, "First slot keeps the 5% outer padding")
+        #expect(slots[2].end == duration - duration * 0.05, "Last slot keeps the 5% outer padding")
+
+        for slot in slots {
+            #expect(slot.start < slot.end, "Each slot must have positive width")
+            #expect(slot.start >= 0 && slot.end <= duration, "Slots stay inside the period")
+        }
+        #expect(slots[0].end < slots[1].start, "Slots 0 and 1 must not overlap")
+        #expect(slots[1].end < slots[2].start, "Slots 1 and 2 must not overlap")
+    }
+
+    @Test("BarChartView renders without crash with all three series visible")
+    func barChartRendersWithFableSeries() {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let rollups = [
+            UsageRollup(
+                id: 1, periodStart: nowMs - 300_000, periodEnd: nowMs,
+                resolution: .fiveMin,
+                fiveHourAvg: 30.0, fiveHourPeak: 45.0, fiveHourMin: 20.0,
+                sevenDayAvg: 15.0, sevenDayPeak: 25.0, sevenDayMin: 10.0,
+                resetCount: 0, unusedCredits: nil,
+                fableWeeklyAvg: 60.0, fableWeeklyPeak: 65.0, fableWeeklyMin: 55.0
+            )
+        ]
+        let view = BarChartView(
+            rollups: rollups,
+            timeRange: .week,
+            fiveHourVisible: true,
+            sevenDayVisible: true,
+            fableVisible: true,
+            fableLabel: "Fable"
+        )
+        let _ = view.body
+    }
+
+    @Test("UsageChart with only fable visible renders chart, not the no-series message")
+    func usageChartFableOnlyVisible() {
+        let polls = [
+            UsagePoll(id: 1, timestamp: Int64(Date().timeIntervalSince1970 * 1000),
+                      fiveHourUtil: 30.0, fiveHourResetsAt: nil,
+                      sevenDayUtil: 20.0, sevenDayResetsAt: nil,
+                      fableWeeklyUtil: 63.0)
+        ]
+        let chart = makeChart(
+            pollData: polls,
+            timeRange: .day,
+            fiveHourVisible: false,
+            sevenDayVisible: false,
+            fableVisible: true
+        )
+        let _ = chart.body
     }
 
     // MARK: - Issue #66 / #39 / #40 Regression Tests

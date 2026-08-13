@@ -51,7 +51,7 @@ struct DatabaseManagerTests {
         #expect(manager.indexExists("idx_reset_events_timestamp"))
     }
 
-    @Test("Schema creation sets schema version to current (7)")
+    @Test("Schema creation sets schema version to current (8)")
     func schemaCreationSetsVersion() throws {
         let (manager, path) = makeManager()
         defer { cleanup(manager: manager, path: path) }
@@ -59,7 +59,7 @@ struct DatabaseManagerTests {
         try manager.ensureSchema()
 
         let version = try manager.getSchemaVersion()
-        #expect(version == 7)
+        #expect(version == 8)
     }
 
     @Test("Database path is correct")
@@ -202,7 +202,7 @@ struct DatabaseManagerTests {
         let version2 = try manager2.getSchemaVersion()
 
         #expect(version1 == version2)
-        #expect(version1 == 7)
+        #expect(version1 == 8)
     }
 
     @Test("Migration v1->v2 creates rollup_metadata table")
@@ -289,7 +289,7 @@ struct DatabaseManagerTests {
         #expect(util == 0.99)
 
         // Verify version bumped to current (migration runs all the way through)
-        #expect(try manager2.getSchemaVersion() == 7)
+        #expect(try manager2.getSchemaVersion() == 8)
     }
 
     @Test("Migration v2->v3 adds extra_usage columns to usage_polls")
@@ -376,8 +376,8 @@ struct DatabaseManagerTests {
         sqlite3_finalize(dataStmt)
         #expect(util == 0.88)
 
-        // Verify version bumped to 6
-        #expect(try manager2.getSchemaVersion() == 7)
+        // Verify version bumped to current
+        #expect(try manager2.getSchemaVersion() == 8)
     }
 
     // MARK: - Table Schema Verification (AC #1)
@@ -412,6 +412,8 @@ struct DatabaseManagerTests {
         #expect(columns.contains("extra_usage_used_credits"))
         #expect(columns.contains("extra_usage_utilization"))
         #expect(columns.contains("extra_usage_delta"))
+        #expect(columns.contains("fable_weekly_util"))
+        #expect(columns.contains("fable_weekly_resets_at"))
     }
 
     @Test("usage_rollups table has correct columns")
@@ -448,6 +450,9 @@ struct DatabaseManagerTests {
         #expect(columns.contains("extra_usage_used_credits"))
         #expect(columns.contains("extra_usage_utilization"))
         #expect(columns.contains("extra_usage_delta"))
+        #expect(columns.contains("fable_weekly_avg"))
+        #expect(columns.contains("fable_weekly_peak"))
+        #expect(columns.contains("fable_weekly_min"))
     }
 
     @Test("reset_events table has correct columns")
@@ -603,7 +608,7 @@ struct DatabaseManagerTests {
         let rollupResult = sqlite3_exec(connection2, "INSERT INTO usage_rollups (period_start, period_end, resolution, extra_usage_delta) VALUES (1000, 2000, '5min', 10.5)", nil, nil, &errorMessage)
         #expect(rollupResult == SQLITE_OK, "INSERT with extra_usage_delta into usage_rollups should succeed")
 
-        #expect(try manager2.getSchemaVersion() == 7)
+        #expect(try manager2.getSchemaVersion() == 8)
     }
 
     @Test("Migration v4->v5 backfills deltas from consecutive polls")
@@ -766,7 +771,141 @@ struct DatabaseManagerTests {
         #expect(manager2.tableExists("tpp_measurements"))
         #expect(manager2.indexExists("idx_tpp_timestamp"))
         #expect(manager2.indexExists("idx_tpp_model_source"))
-        #expect(try manager2.getSchemaVersion() == 7)
+        #expect(try manager2.getSchemaVersion() == 8)
+    }
+
+    // MARK: - Story 21.3: Migration v7->v8 (fable weekly columns)
+
+    /// Creates a full v7-schema database at the given connection (all tables, no fable columns).
+    private func createV7Schema(_ connection: OpaquePointer) {
+        sqlite3_exec(connection, """
+            CREATE TABLE IF NOT EXISTS usage_polls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp INTEGER NOT NULL,
+                five_hour_util REAL,
+                five_hour_resets_at INTEGER,
+                seven_day_util REAL,
+                seven_day_resets_at INTEGER,
+                extra_usage_enabled INTEGER,
+                extra_usage_monthly_limit REAL,
+                extra_usage_used_credits REAL,
+                extra_usage_utilization REAL,
+                extra_usage_delta REAL
+            )
+            """, nil, nil, nil)
+        sqlite3_exec(connection, """
+            CREATE TABLE IF NOT EXISTS usage_rollups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                period_start INTEGER NOT NULL,
+                period_end INTEGER NOT NULL,
+                resolution TEXT NOT NULL,
+                five_hour_avg REAL,
+                five_hour_peak REAL,
+                five_hour_min REAL,
+                seven_day_avg REAL,
+                seven_day_peak REAL,
+                seven_day_min REAL,
+                reset_count INTEGER DEFAULT 0,
+                waste_credits REAL,
+                extra_usage_used_credits REAL,
+                extra_usage_utilization REAL,
+                extra_usage_delta REAL
+            )
+            """, nil, nil, nil)
+        sqlite3_exec(connection, "CREATE TABLE IF NOT EXISTS reset_events (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INTEGER NOT NULL, five_hour_peak REAL, seven_day_util REAL, tier TEXT, used_credits REAL, constrained_credits REAL, waste_credits REAL)", nil, nil, nil)
+        sqlite3_exec(connection, "CREATE TABLE IF NOT EXISTS rollup_metadata (key TEXT PRIMARY KEY, value TEXT)", nil, nil, nil)
+        sqlite3_exec(connection, "CREATE TABLE IF NOT EXISTS api_outages (id INTEGER PRIMARY KEY AUTOINCREMENT, started_at INTEGER NOT NULL, ended_at INTEGER, failure_reason TEXT NOT NULL)", nil, nil, nil)
+        sqlite3_exec(connection, "CREATE TABLE IF NOT EXISTS tpp_measurements (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INTEGER NOT NULL, window_start INTEGER, model TEXT NOT NULL, variant TEXT, source TEXT NOT NULL, five_hour_before REAL, five_hour_after REAL, five_hour_delta REAL, seven_day_before REAL, seven_day_after REAL, seven_day_delta REAL, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cache_create_tokens INTEGER NOT NULL DEFAULT 0, cache_read_tokens INTEGER NOT NULL DEFAULT 0, total_raw_tokens INTEGER NOT NULL, tpp_five_hour REAL, tpp_seven_day REAL, confidence TEXT NOT NULL DEFAULT 'high', message_count INTEGER DEFAULT 1)", nil, nil, nil)
+        sqlite3_exec(connection, "PRAGMA user_version = 7", nil, nil, nil)
+    }
+
+    /// Reads ordered column names for a table.
+    private func columnOrder(_ connection: OpaquePointer, table: String) -> [String] {
+        var statement: OpaquePointer?
+        sqlite3_prepare_v2(connection, "PRAGMA table_info(\(table))", -1, &statement, nil)
+        var columns: [String] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            if let namePtr = sqlite3_column_text(statement, 1) {
+                columns.append(String(cString: namePtr))
+            }
+        }
+        sqlite3_finalize(statement)
+        return columns
+    }
+
+    @Test("Migration v7->v8 adds fable columns and preserves existing rows with NULL fable values")
+    func migrationV7ToV8AddsFableColumns() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let testPath = tempDir.appendingPathComponent("test_\(UUID().uuidString).db")
+
+        let manager1 = DatabaseManager(databasePath: testPath)
+        let connection = try manager1.getConnection()
+        createV7Schema(connection)
+
+        // Insert pre-migration data
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util) VALUES (777, 0.77)", nil, nil, &errorMessage)
+        sqlite3_exec(connection, "INSERT INTO usage_rollups (period_start, period_end, resolution, five_hour_avg) VALUES (1000, 2000, '5min', 42.0)", nil, nil, &errorMessage)
+
+        manager1.closeConnection()
+
+        // New manager triggers migration
+        let manager2 = DatabaseManager(databasePath: testPath)
+        defer { cleanup(manager: manager2, path: testPath) }
+        try manager2.ensureSchema()
+
+        let connection2 = try manager2.getConnection()
+
+        // New columns accept inserts
+        let pollResult = sqlite3_exec(connection2, "INSERT INTO usage_polls (timestamp, fable_weekly_util, fable_weekly_resets_at) VALUES (999, 63.0, 1754952000000)", nil, nil, &errorMessage)
+        #expect(pollResult == SQLITE_OK, "INSERT with fable columns into usage_polls should succeed")
+        let rollupResult = sqlite3_exec(connection2, "INSERT INTO usage_rollups (period_start, period_end, resolution, fable_weekly_avg, fable_weekly_peak, fable_weekly_min) VALUES (2000, 3000, '5min', 60.0, 65.0, 55.0)", nil, nil, &errorMessage)
+        #expect(rollupResult == SQLITE_OK, "INSERT with fable columns into usage_rollups should succeed")
+
+        // Pre-migration rows survive with NULL fable values
+        var stmt: OpaquePointer?
+        sqlite3_prepare_v2(connection2, "SELECT five_hour_util, fable_weekly_util, fable_weekly_resets_at FROM usage_polls WHERE timestamp = 777", -1, &stmt, nil)
+        #expect(sqlite3_step(stmt) == SQLITE_ROW)
+        #expect(sqlite3_column_double(stmt, 0) == 0.77)
+        #expect(sqlite3_column_type(stmt, 1) == SQLITE_NULL, "Pre-migration poll should have NULL fable_weekly_util")
+        #expect(sqlite3_column_type(stmt, 2) == SQLITE_NULL, "Pre-migration poll should have NULL fable_weekly_resets_at")
+        sqlite3_finalize(stmt)
+
+        sqlite3_prepare_v2(connection2, "SELECT five_hour_avg, fable_weekly_avg FROM usage_rollups WHERE period_start = 1000", -1, &stmt, nil)
+        #expect(sqlite3_step(stmt) == SQLITE_ROW)
+        #expect(sqlite3_column_double(stmt, 0) == 42.0)
+        #expect(sqlite3_column_type(stmt, 1) == SQLITE_NULL, "Pre-migration rollup should have NULL fable_weekly_avg")
+        sqlite3_finalize(stmt)
+
+        #expect(try manager2.getSchemaVersion() == 8)
+    }
+
+    @Test("Migrated v7 database has identical column order to fresh v8 database")
+    func migratedAndFreshSchemasHaveIdenticalColumnOrder() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+
+        // Migrated DB: v7 schema -> migration
+        let migratedPath = tempDir.appendingPathComponent("test_\(UUID().uuidString).db")
+        let migratedSetup = DatabaseManager(databasePath: migratedPath)
+        createV7Schema(try migratedSetup.getConnection())
+        migratedSetup.closeConnection()
+        let migratedManager = DatabaseManager(databasePath: migratedPath)
+        defer { cleanup(manager: migratedManager, path: migratedPath) }
+        try migratedManager.ensureSchema()
+
+        // Fresh DB: created at v8 directly
+        let (freshManager, freshPath) = makeManager()
+        defer { cleanup(manager: freshManager, path: freshPath) }
+        try freshManager.ensureSchema()
+
+        let migratedConn = try migratedManager.getConnection()
+        let freshConn = try freshManager.getConnection()
+
+        for table in ["usage_polls", "usage_rollups"] {
+            let migratedColumns = columnOrder(migratedConn, table: table)
+            let freshColumns = columnOrder(freshConn, table: table)
+            #expect(migratedColumns == freshColumns, "\(table) column order must match between migrated and fresh databases (rows are read positionally)")
+        }
     }
 
     // MARK: - Protocol Conformance

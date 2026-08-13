@@ -14,6 +14,13 @@ struct UsageResponse: Codable, Sendable, Equatable {
         case limits
         case extraUsage = "extra_usage"
     }
+
+    /// Model-scoped weekly cap entries (`kind == "weekly_scoped"`) that report a percent,
+    /// in API order. Shared by live display (PollingEngine) and persistence so the two
+    /// extractions cannot drift.
+    var weeklyScopedEntries: [LimitEntry] {
+        (limits ?? []).filter { $0.kind == "weekly_scoped" && $0.percent != nil }
+    }
 }
 
 /// Usage data for a single time window (e.g., 5-hour or 7-day).
