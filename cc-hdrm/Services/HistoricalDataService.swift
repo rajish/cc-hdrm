@@ -100,6 +100,13 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             extraUsageDelta = nil
         }
 
+        // Model-scoped weekly cap: first weekly_scoped entry (shared helper with PollingEngine)
+        let fableEntry = response.weeklyScopedEntries.first
+        let fableWeeklyUtil = fableEntry?.percent
+        let fableWeeklyResetsAt = fableEntry?.resetsAt
+            .flatMap { Date.fromISO8601($0) }
+            .map { Int64($0.timeIntervalSince1970 * 1000) }
+
         // Prepare INSERT statement
         let sql = """
             INSERT INTO usage_polls (
@@ -112,8 +119,10 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 extra_usage_monthly_limit,
                 extra_usage_used_credits,
                 extra_usage_utilization,
-                extra_usage_delta
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                extra_usage_delta,
+                fable_weekly_util,
+                fable_weekly_resets_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
 
         var statement: OpaquePointer?
@@ -187,6 +196,18 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             sqlite3_bind_null(statement, 10)
         }
 
+        if let util = fableWeeklyUtil {
+            sqlite3_bind_double(statement, 11, util)
+        } else {
+            sqlite3_bind_null(statement, 11)
+        }
+
+        if let resetsAt = fableWeeklyResetsAt {
+            sqlite3_bind_int64(statement, 12, resetsAt)
+        } else {
+            sqlite3_bind_null(statement, 12)
+        }
+
         // Execute
         let stepResult = sqlite3_step(statement)
         guard stepResult == SQLITE_DONE else {
@@ -230,7 +251,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         let sql = """
             SELECT id, timestamp, five_hour_util, five_hour_resets_at, seven_day_util, seven_day_resets_at,
                    extra_usage_enabled, extra_usage_monthly_limit, extra_usage_used_credits, extra_usage_utilization,
-                   extra_usage_delta
+                   extra_usage_delta, fable_weekly_util, fable_weekly_resets_at
             FROM usage_polls
             WHERE timestamp >= ?
             ORDER BY timestamp ASC
@@ -290,7 +311,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         let sql = """
             SELECT id, timestamp, five_hour_util, five_hour_resets_at, seven_day_util, seven_day_resets_at,
                    extra_usage_enabled, extra_usage_monthly_limit, extra_usage_used_credits, extra_usage_utilization,
-                   extra_usage_delta
+                   extra_usage_delta, fable_weekly_util, fable_weekly_resets_at
             FROM usage_polls
             ORDER BY timestamp DESC
             LIMIT 1
@@ -418,7 +439,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
     /// Expects columns: id(0), timestamp(1), five_hour_util(2), five_hour_resets_at(3),
     /// seven_day_util(4), seven_day_resets_at(5), extra_usage_enabled(6),
     /// extra_usage_monthly_limit(7), extra_usage_used_credits(8), extra_usage_utilization(9),
-    /// extra_usage_delta(10).
+    /// extra_usage_delta(10), fable_weekly_util(11), fable_weekly_resets_at(12).
     private static func readPollRow(_ statement: OpaquePointer) -> UsagePoll {
         let id = sqlite3_column_int64(statement, 0)
         let timestamp = sqlite3_column_int64(statement, 1)
@@ -440,6 +461,10 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             ? nil : sqlite3_column_double(statement, 9)
         let extraUsageDelta: Double? = sqlite3_column_type(statement, 10) == SQLITE_NULL
             ? nil : sqlite3_column_double(statement, 10)
+        let fableWeeklyUtil: Double? = sqlite3_column_type(statement, 11) == SQLITE_NULL
+            ? nil : sqlite3_column_double(statement, 11)
+        let fableWeeklyResetsAt: Int64? = sqlite3_column_type(statement, 12) == SQLITE_NULL
+            ? nil : sqlite3_column_int64(statement, 12)
 
         return UsagePoll(
             id: id,
@@ -452,7 +477,9 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             extraUsageMonthlyLimit: extraUsageMonthlyLimit,
             extraUsageUsedCredits: extraUsageUsedCredits,
             extraUsageUtilization: extraUsageUtilization,
-            extraUsageDelta: extraUsageDelta
+            extraUsageDelta: extraUsageDelta,
+            fableWeeklyUtil: fableWeeklyUtil,
+            fableWeeklyResetsAt: fableWeeklyResetsAt
         )
     }
 
@@ -905,6 +932,12 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             let deltaValues = bucketPolls.compactMap { $0.extraUsageDelta }
             let extraUsageDelta = deltaValues.isEmpty ? nil : deltaValues.reduce(0, +)
 
+            // Fable weekly: avg/peak/min, mirroring 5h/7d utilization
+            let fableValues = bucketPolls.compactMap { $0.fableWeeklyUtil }
+            let fableWeeklyAvg = fableValues.isEmpty ? nil : fableValues.reduce(0, +) / Double(fableValues.count)
+            let fableWeeklyPeak = fableValues.max()
+            let fableWeeklyMin = fableValues.min()
+
             // Count reset events in this bucket
             let resetCount = try countResetEvents(from: bucketStart, to: bucketEnd, connection: connection)
 
@@ -924,6 +957,9 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 extraUsageUsedCredits: extraUsageUsedCredits,
                 extraUsageUtilization: extraUsageUtilization,
                 extraUsageDelta: extraUsageDelta,
+                fableWeeklyAvg: fableWeeklyAvg,
+                fableWeeklyPeak: fableWeeklyPeak,
+                fableWeeklyMin: fableWeeklyMin,
                 connection: connection
             )
         }
@@ -939,7 +975,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         let sql = """
             SELECT id, timestamp, five_hour_util, five_hour_resets_at, seven_day_util, seven_day_resets_at,
                    extra_usage_enabled, extra_usage_monthly_limit, extra_usage_used_credits, extra_usage_utilization,
-                   extra_usage_delta
+                   extra_usage_delta, fable_weekly_util, fable_weekly_resets_at
             FROM usage_polls
             WHERE timestamp >= ? AND timestamp < ?
             ORDER BY timestamp ASC
@@ -1035,6 +1071,9 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         extraUsageUsedCredits: Double? = nil,
         extraUsageUtilization: Double? = nil,
         extraUsageDelta: Double? = nil,
+        fableWeeklyAvg: Double? = nil,
+        fableWeeklyPeak: Double? = nil,
+        fableWeeklyMin: Double? = nil,
         connection: OpaquePointer
     ) throws {
         let sql = """
@@ -1044,8 +1083,9 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 seven_day_avg, seven_day_peak, seven_day_min,
                 reset_count, waste_credits,
                 extra_usage_used_credits, extra_usage_utilization,
-                extra_usage_delta
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                extra_usage_delta,
+                fable_weekly_avg, fable_weekly_peak, fable_weekly_min
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
 
         var statement: OpaquePointer?
@@ -1098,6 +1138,15 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
 
         if let delta = extraUsageDelta { sqlite3_bind_double(statement, 14, delta) }
         else { sqlite3_bind_null(statement, 14) }
+
+        if let avg = fableWeeklyAvg { sqlite3_bind_double(statement, 15, avg) }
+        else { sqlite3_bind_null(statement, 15) }
+
+        if let peak = fableWeeklyPeak { sqlite3_bind_double(statement, 16, peak) }
+        else { sqlite3_bind_null(statement, 16) }
+
+        if let min = fableWeeklyMin { sqlite3_bind_double(statement, 17, min) }
+        else { sqlite3_bind_null(statement, 17) }
 
         let stepResult = sqlite3_step(statement)
         guard stepResult == SQLITE_DONE else {
@@ -1193,6 +1242,14 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             let deltaValues = bucketRollups.compactMap { $0.extraUsageDelta }
             let extraUsageDelta = deltaValues.isEmpty ? nil : deltaValues.reduce(0, +)
 
+            // Fable weekly: avg of avgs, max of peaks, min of mins
+            let fableAvgs = bucketRollups.compactMap { $0.fableWeeklyAvg }
+            let fablePeaks = bucketRollups.compactMap { $0.fableWeeklyPeak }
+            let fableMins = bucketRollups.compactMap { $0.fableWeeklyMin }
+            let fableWeeklyAvg = fableAvgs.isEmpty ? nil : fableAvgs.reduce(0, +) / Double(fableAvgs.count)
+            let fableWeeklyPeak = fablePeaks.max()
+            let fableWeeklyMin = fableMins.min()
+
             try insertRollup(
                 periodStart: bucketStart,
                 periodEnd: bucketEnd,
@@ -1208,6 +1265,9 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 extraUsageUsedCredits: extraUsageUsedCredits,
                 extraUsageUtilization: extraUsageUtilization,
                 extraUsageDelta: extraUsageDelta,
+                fableWeeklyAvg: fableWeeklyAvg,
+                fableWeeklyPeak: fableWeeklyPeak,
+                fableWeeklyMin: fableWeeklyMin,
                 connection: connection
             )
         }
@@ -1289,6 +1349,14 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             let deltaValues = bucketRollups.compactMap { $0.extraUsageDelta }
             let extraUsageDelta = deltaValues.isEmpty ? nil : deltaValues.reduce(0, +)
 
+            // Fable weekly: avg of avgs, max of peaks, min of mins
+            let fableAvgs = bucketRollups.compactMap { $0.fableWeeklyAvg }
+            let fablePeaks = bucketRollups.compactMap { $0.fableWeeklyPeak }
+            let fableMins = bucketRollups.compactMap { $0.fableWeeklyMin }
+            let fableWeeklyAvg = fableAvgs.isEmpty ? nil : fableAvgs.reduce(0, +) / Double(fableAvgs.count)
+            let fableWeeklyPeak = fablePeaks.max()
+            let fableWeeklyMin = fableMins.min()
+
             try insertRollup(
                 periodStart: bucketStart,
                 periodEnd: bucketEnd,
@@ -1304,6 +1372,9 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 extraUsageUsedCredits: extraUsageUsedCredits,
                 extraUsageUtilization: extraUsageUtilization,
                 extraUsageDelta: extraUsageDelta,
+                fableWeeklyAvg: fableWeeklyAvg,
+                fableWeeklyPeak: fableWeeklyPeak,
+                fableWeeklyMin: fableWeeklyMin,
                 connection: connection
             )
         }
@@ -1327,7 +1398,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                    seven_day_avg, seven_day_peak, seven_day_min,
                    reset_count, waste_credits,
                    extra_usage_used_credits, extra_usage_utilization,
-                   extra_usage_delta
+                   extra_usage_delta,
+                   fable_weekly_avg, fable_weekly_peak, fable_weekly_min
             FROM usage_rollups
             WHERE resolution = ? AND period_start >= ? AND period_start < ?
             ORDER BY period_start ASC
@@ -1380,6 +1452,12 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 ? nil : sqlite3_column_double(statement, 13)
             let extraUsageDelta: Double? = sqlite3_column_type(statement, 14) == SQLITE_NULL
                 ? nil : sqlite3_column_double(statement, 14)
+            let fableWeeklyAvg: Double? = sqlite3_column_type(statement, 15) == SQLITE_NULL
+                ? nil : sqlite3_column_double(statement, 15)
+            let fableWeeklyPeak: Double? = sqlite3_column_type(statement, 16) == SQLITE_NULL
+                ? nil : sqlite3_column_double(statement, 16)
+            let fableWeeklyMin: Double? = sqlite3_column_type(statement, 17) == SQLITE_NULL
+                ? nil : sqlite3_column_double(statement, 17)
 
             rollups.append(UsageRollup(
                 id: id,
@@ -1396,7 +1474,10 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 unusedCredits: unusedCredits,
                 extraUsageUsedCredits: extraUsageUsedCredits,
                 extraUsageUtilization: extraUsageUtilization,
-                extraUsageDelta: extraUsageDelta
+                extraUsageDelta: extraUsageDelta,
+                fableWeeklyAvg: fableWeeklyAvg,
+                fableWeeklyPeak: fableWeeklyPeak,
+                fableWeeklyMin: fableWeeklyMin
             ))
         }
 
@@ -1491,7 +1572,10 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             unusedCredits: nil,
             extraUsageUsedCredits: poll.extraUsageUsedCredits,
             extraUsageUtilization: poll.extraUsageUtilization,
-            extraUsageDelta: poll.extraUsageDelta
+            extraUsageDelta: poll.extraUsageDelta,
+            fableWeeklyAvg: poll.fableWeeklyUtil,
+            fableWeeklyPeak: poll.fableWeeklyUtil,
+            fableWeeklyMin: poll.fableWeeklyUtil
         )
     }
 
@@ -1532,7 +1616,10 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                     unusedCredits: rollup.unusedCredits,
                     extraUsageUsedCredits: rollup.extraUsageUsedCredits,
                     extraUsageUtilization: rollup.extraUsageUtilization,
-                    extraUsageDelta: rollup.extraUsageDelta
+                    extraUsageDelta: rollup.extraUsageDelta,
+                    fableWeeklyAvg: rollup.fableWeeklyAvg,
+                    fableWeeklyPeak: rollup.fableWeeklyPeak,
+                    fableWeeklyMin: rollup.fableWeeklyMin
                 )
             }
             return rollup

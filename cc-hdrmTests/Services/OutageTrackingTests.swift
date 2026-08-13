@@ -38,7 +38,7 @@ struct DatabaseManagerOutageTests {
 
         try manager.ensureSchema()
 
-        #expect(try manager.getSchemaVersion() == 7)
+        #expect(try manager.getSchemaVersion() == 8)
     }
 
     @Test("Migration v5->v6 creates api_outages table and index")
@@ -131,7 +131,7 @@ struct DatabaseManagerOutageTests {
         sqlite3_finalize(stmt)
 
         // Verify version bumped to current
-        #expect(try manager2.getSchemaVersion() == 7)
+        #expect(try manager2.getSchemaVersion() == 8)
     }
 
     @Test("api_outages table has correct columns")

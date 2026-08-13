@@ -8,6 +8,9 @@ import SwiftUI
 struct BarChartView: View {
     let fiveHourVisible: Bool
     let sevenDayVisible: Bool
+    let fableVisible: Bool
+    /// Display label for the model-scoped (Fable) series — from the live API display name.
+    let fableLabel: String
     let timeRange: TimeRange
 
     /// Pre-computed bar points — built in init, never recomputed on hover.
@@ -20,6 +23,8 @@ struct BarChartView: View {
 
     /// 7-day series color — reuses StepAreaChartView constant.
     static let sevenDayColor = StepAreaChartView.sevenDayColor
+    /// Model-scoped (Fable) series color — reuses StepAreaChartView constant.
+    static let fableColor = StepAreaChartView.fableColor
 
     // MARK: - Data Types
 
@@ -49,14 +54,30 @@ struct BarChartView: View {
         var extraUsageUtilization: Double? = nil
         /// Extra usage delta: SUM of credits consumed in this period (nil if unavailable)
         var extraUsageDelta: Double? = nil
+        /// Fable weekly peak utilization for this period (nil if unavailable)
+        var fablePeak: Double? = nil
+        /// Fable weekly average utilization for this period (nil if unavailable)
+        var fableAvg: Double? = nil
+        /// Fable weekly minimum utilization for this period (nil if unavailable)
+        var fableMin: Double? = nil
     }
 
     // MARK: - Init
 
-    init(rollups: [UsageRollup], timeRange: TimeRange, fiveHourVisible: Bool, sevenDayVisible: Bool, outagePeriods: [OutagePeriod] = []) {
+    init(
+        rollups: [UsageRollup],
+        timeRange: TimeRange,
+        fiveHourVisible: Bool,
+        sevenDayVisible: Bool,
+        fableVisible: Bool = false,
+        fableLabel: String = "Model",
+        outagePeriods: [OutagePeriod] = []
+    ) {
         self.timeRange = timeRange
         self.fiveHourVisible = fiveHourVisible
         self.sevenDayVisible = sevenDayVisible
+        self.fableVisible = fableVisible
+        self.fableLabel = fableLabel
         let points = Self.makeBarPoints(from: rollups, timeRange: timeRange)
         self.barPoints = points
         self.gapRanges = Self.findGapRanges(in: points, timeRange: timeRange)
@@ -78,7 +99,9 @@ struct BarChartView: View {
             outageRanges: outageRanges,
             timeRange: timeRange,
             fiveHourVisible: fiveHourVisible,
-            sevenDayVisible: sevenDayVisible
+            sevenDayVisible: sevenDayVisible,
+            fableVisible: fableVisible,
+            fableLabel: fableLabel
         )
         .accessibilityLabel("\(timeRange.displayLabel) bar usage chart")
     }
@@ -153,6 +176,11 @@ struct BarChartView: View {
             let deltaValues = rollups.compactMap(\.extraUsageDelta)
             let extraUsageDelta: Double? = deltaValues.isEmpty ? nil : deltaValues.reduce(0, +)
 
+            // Fable weekly: avg/peak/min, mirroring 5h/7d aggregation
+            let fablePeaks = rollups.compactMap(\.fableWeeklyPeak)
+            let fableAvgs = rollups.compactMap(\.fableWeeklyAvg)
+            let fableMins = rollups.compactMap(\.fableWeeklyMin)
+
             return BarPoint(
                 id: Int(periodStart.timeIntervalSince1970),
                 periodStart: periodStart,
@@ -167,9 +195,37 @@ struct BarChartView: View {
                 resetCount: totalResets,
                 extraUsageSpend: extraUsageSpend,
                 extraUsageUtilization: extraUsageUtil,
-                extraUsageDelta: extraUsageDelta
+                extraUsageDelta: extraUsageDelta,
+                fablePeak: fablePeaks.isEmpty ? nil : fablePeaks.max(),
+                fableAvg: fableAvgs.isEmpty ? nil : fableAvgs.reduce(0, +) / Double(fableAvgs.count),
+                fableMin: fableMins.isEmpty ? nil : fableMins.min()
             )
         }
+    }
+
+    // MARK: - Slot Layout
+
+    /// Computes a bar's start/end offsets (seconds from the period start) for the series
+    /// at `index` of `count` visible series. The period is split into equal slots in
+    /// display order: outermost edges keep 5% padding, adjacent slots are separated by a
+    /// 2% gap on each side. With one or two visible series this reproduces the pre-Fable
+    /// layout exactly. Static for testability (same pattern as `AnalyticsView.hasFableData`).
+    static func slotBounds(index: Int, count: Int, duration: TimeInterval) -> (start: TimeInterval, end: TimeInterval) {
+        let outerPadding = duration * 0.05
+        let innerGap = duration * 0.02
+
+        guard count > 1, index >= 0, index < count else {
+            return (outerPadding, duration - outerPadding)
+        }
+
+        let slotDuration = duration / Double(count)
+        let slotStart = slotDuration * Double(index)
+        let slotEnd = slotDuration * Double(index + 1)
+
+        let leadingInset = index == 0 ? outerPadding : innerGap
+        let trailingInset = index == count - 1 ? outerPadding : innerGap
+
+        return (slotStart + leadingInset, slotEnd - trailingInset)
     }
 
     // MARK: - Gap Detection
@@ -239,6 +295,8 @@ private struct BarChartWithHoverOverlay: View {
     let timeRange: TimeRange
     let fiveHourVisible: Bool
     let sevenDayVisible: Bool
+    let fableVisible: Bool
+    let fableLabel: String
 
     @State private var hoveredIndex: Int?
     /// The resolved cursor date from ChartProxy — used for gap range detection.
@@ -251,7 +309,8 @@ private struct BarChartWithHoverOverlay: View {
             outageRanges: outageRanges,
             timeRange: timeRange,
             fiveHourVisible: fiveHourVisible,
-            sevenDayVisible: sevenDayVisible
+            sevenDayVisible: sevenDayVisible,
+            fableVisible: fableVisible
         )
         .chartOverlay { proxy in
             GeometryReader { geometry in
@@ -283,6 +342,8 @@ private struct BarChartWithHoverOverlay: View {
                         timeRange: timeRange,
                         fiveHourVisible: fiveHourVisible,
                         sevenDayVisible: sevenDayVisible,
+                        fableVisible: fableVisible,
+                        fableLabel: fableLabel,
                         proxy: proxy,
                         size: geometry.size
                     )
@@ -336,42 +397,36 @@ private struct StaticBarChartContent: View {
     let timeRange: TimeRange
     let fiveHourVisible: Bool
     let sevenDayVisible: Bool
-
-    /// Whether both series are visible (determines grouped vs single bar mode).
-    private var bothVisible: Bool {
-        fiveHourVisible && sevenDayVisible
-    }
+    let fableVisible: Bool
 
     private enum Series {
-        case fiveHour, sevenDay
+        case fiveHour, sevenDay, fable
+    }
+
+    /// Visible series in fixed display order (5h, 7d, Fable).
+    private var visibleSeries: [Series] {
+        var result: [Series] = []
+        if fiveHourVisible { result.append(.fiveHour) }
+        if sevenDayVisible { result.append(.sevenDay) }
+        if fableVisible { result.append(.fable) }
+        return result
     }
 
     /// Computes the x-axis start/end dates for a bar, handling grouped vs single mode.
-    ///
-    /// - Single series: bar spans 90% of the period (5% padding on each side).
-    /// - Both series: period split in half with a 4% gap between the two halves.
+    /// Delegates the slot arithmetic to `BarChartView.slotBounds` (unit-tested).
     private func barBounds(for point: BarChartView.BarPoint, series: Series) -> (start: Date, end: Date) {
         let duration = point.periodEnd.timeIntervalSince(point.periodStart)
-        let outerPadding = duration * 0.05
-
-        if bothVisible {
-            let halfDuration = duration * 0.5
-            let innerGap = duration * 0.02
-            switch series {
-            case .fiveHour:
-                let start = point.periodStart.addingTimeInterval(outerPadding)
-                let end = point.periodStart.addingTimeInterval(halfDuration - innerGap)
-                return (start, end)
-            case .sevenDay:
-                let start = point.periodStart.addingTimeInterval(halfDuration + innerGap)
-                let end = point.periodEnd.addingTimeInterval(-outerPadding)
-                return (start, end)
-            }
+        let seriesList = visibleSeries
+        let bounds: (start: TimeInterval, end: TimeInterval)
+        if let index = seriesList.firstIndex(of: series) {
+            bounds = BarChartView.slotBounds(index: index, count: seriesList.count, duration: duration)
         } else {
-            let start = point.periodStart.addingTimeInterval(outerPadding)
-            let end = point.periodEnd.addingTimeInterval(-outerPadding)
-            return (start, end)
+            bounds = BarChartView.slotBounds(index: 0, count: 1, duration: duration)
         }
+        return (
+            point.periodStart.addingTimeInterval(bounds.start),
+            point.periodStart.addingTimeInterval(bounds.end)
+        )
     }
 
     /// Computes the x-axis domain to cover the full selected time range,
@@ -458,6 +513,22 @@ private struct StaticBarChartContent: View {
                             yEnd: .value("Peak", peak)
                         )
                         .foregroundStyle(BarChartView.sevenDayColor)
+                    }
+                }
+            }
+
+            // Fable weekly series bars (indigo)
+            if fableVisible {
+                ForEach(barPoints) { point in
+                    if let peak = point.fablePeak {
+                        let bounds = barBounds(for: point, series: .fable)
+                        RectangleMark(
+                            xStart: .value("Start", bounds.start),
+                            xEnd: .value("End", bounds.end),
+                            yStart: .value("Bottom", 0),
+                            yEnd: .value("Peak", peak)
+                        )
+                        .foregroundStyle(BarChartView.fableColor)
                     }
                 }
             }
@@ -585,6 +656,8 @@ private struct BarHoverOverlayContent: View {
     let timeRange: TimeRange
     let fiveHourVisible: Bool
     let sevenDayVisible: Bool
+    let fableVisible: Bool
+    let fableLabel: String
     let proxy: ChartProxy
     let size: CGSize
 
@@ -697,6 +770,16 @@ private struct BarHoverOverlayContent: View {
                 }
             }
 
+            // Fable series stats
+            if fableVisible, let peak = point.fablePeak {
+                HStack(spacing: 3) {
+                    Circle().fill(BarChartView.fableColor).frame(width: 6, height: 6)
+                    Text(seriesText(label: fableLabel, peak: peak, avg: point.fableAvg))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             // Min value (lowest across visible series)
             let minValue = computeMinValue(for: point)
             if let minVal = minValue {
@@ -768,6 +851,9 @@ private struct BarHoverOverlayContent: View {
             mins.append(min)
         }
         if sevenDayVisible, let min = point.sevenDayMin {
+            mins.append(min)
+        }
+        if fableVisible, let min = point.fableMin {
             mins.append(min)
         }
         return mins.min()

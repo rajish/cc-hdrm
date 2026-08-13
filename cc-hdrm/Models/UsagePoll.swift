@@ -25,4 +25,8 @@ struct UsagePoll: Sendable, Equatable {
     /// Extra usage delta: credits consumed between this poll and the previous poll.
     /// Computed as max(0, current.usedCredits - previous.usedCredits). Nil for first poll or no data.
     var extraUsageDelta: Double? = nil
+    /// Model-scoped (Fable) weekly utilization percentage (0-100), nil if not reported
+    var fableWeeklyUtil: Double? = nil
+    /// Model-scoped (Fable) weekly reset time as Unix milliseconds, nil if not reported
+    var fableWeeklyResetsAt: Int64? = nil
 }

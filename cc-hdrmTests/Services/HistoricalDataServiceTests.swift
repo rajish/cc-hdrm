@@ -1695,6 +1695,283 @@ struct HistoricalDataServiceTests {
         #expect(rollups.count == 1)
         #expect(rollups[0].extraUsageDelta == 7.5, "Raw poll delta should pass through")
     }
+
+    // MARK: - Story 21.3: Fable Weekly Persistence Tests
+
+    private func fableLimitEntry(percent: Double?, resetsAt: String?) -> LimitEntry {
+        LimitEntry(
+            kind: "weekly_scoped",
+            group: nil,
+            percent: percent,
+            severity: nil,
+            resetsAt: resetsAt,
+            isActive: true,
+            scope: LimitScope(model: ScopedModel(id: "claude-fable-5", displayName: "Fable"), surface: nil)
+        )
+    }
+
+    @Test("persistPoll stores fable weekly data from weekly_scoped limit entry")
+    func persistPollStoresFableData() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+        try dbManager.ensureSchema()
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        let response = UsageResponse(
+            fiveHour: WindowUsage(utilization: 45.0, resetsAt: nil),
+            sevenDay: nil,
+            limits: [fableLimitEntry(percent: 63.0, resetsAt: "2026-08-12T22:00:00Z")],
+            extraUsage: nil
+        )
+        try await service.persistPoll(response)
+
+        let polls = try await service.getRecentPolls(hours: 1)
+        #expect(polls.count == 1)
+        #expect(polls[0].fableWeeklyUtil == 63.0)
+        // 2026-08-12T22:00:00Z == 1,786,572,000,000 Unix ms (known constant, not derived via production code)
+        #expect(polls[0].fableWeeklyResetsAt == 1_786_572_000_000, "resets_at should be stored in Unix milliseconds")
+    }
+
+    @Test("persistPoll stores NULL fable columns when no weekly_scoped entry")
+    func persistPollStoresNilFableWithoutScopedLimit() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+        try dbManager.ensureSchema()
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        // limits nil
+        let responseNoLimits = UsageResponse(
+            fiveHour: WindowUsage(utilization: 45.0, resetsAt: nil),
+            sevenDay: nil, limits: nil, extraUsage: nil
+        )
+        try await service.persistPoll(responseNoLimits)
+
+        // limits present but no weekly_scoped entry
+        let responseOtherKind = UsageResponse(
+            fiveHour: WindowUsage(utilization: 46.0, resetsAt: nil),
+            sevenDay: nil,
+            limits: [LimitEntry(kind: "session", group: nil, percent: 18.0, severity: nil, resetsAt: nil, isActive: nil, scope: nil)],
+            extraUsage: nil
+        )
+        try await service.persistPoll(responseOtherKind)
+
+        let polls = try await service.getRecentPolls(hours: 1)
+        #expect(polls.count == 2)
+        for poll in polls {
+            #expect(poll.fableWeeklyUtil == nil)
+            #expect(poll.fableWeeklyResetsAt == nil)
+        }
+    }
+
+    @Test("persistPoll stores fable util with NULL resets_at when entry has no resets_at")
+    func persistPollStoresFableUtilWithNilResetsAt() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+        try dbManager.ensureSchema()
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        let response = UsageResponse(
+            fiveHour: nil,
+            sevenDay: nil,
+            limits: [fableLimitEntry(percent: 42.0, resetsAt: nil)],
+            extraUsage: nil
+        )
+        try await service.persistPoll(response)
+
+        let polls = try await service.getRecentPolls(hours: 1)
+        #expect(polls.count == 1)
+        #expect(polls[0].fableWeeklyUtil == 42.0)
+        #expect(polls[0].fableWeeklyResetsAt == nil)
+    }
+
+    @Test("persistPoll uses the first weekly_scoped entry when multiple are reported")
+    func persistPollUsesFirstScopedEntry() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+        try dbManager.ensureSchema()
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        let response = UsageResponse(
+            fiveHour: nil,
+            sevenDay: nil,
+            limits: [
+                fableLimitEntry(percent: 63.0, resetsAt: nil),
+                fableLimitEntry(percent: 99.0, resetsAt: nil)
+            ],
+            extraUsage: nil
+        )
+        try await service.persistPoll(response)
+
+        let polls = try await service.getRecentPolls(hours: 1)
+        #expect(polls.count == 1)
+        #expect(polls[0].fableWeeklyUtil == 63.0, "First weekly_scoped entry wins")
+    }
+
+    @Test("getLastPoll round-trips fable weekly fields")
+    func getLastPollReturnsFableData() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+        try dbManager.ensureSchema()
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        let response = UsageResponse(
+            fiveHour: WindowUsage(utilization: 20.0, resetsAt: nil),
+            sevenDay: nil,
+            limits: [fableLimitEntry(percent: 77.5, resetsAt: "2026-08-14T10:00:00Z")],
+            extraUsage: nil
+        )
+        try await service.persistPoll(response)
+
+        let lastPoll = try await service.getLastPoll()
+        #expect(lastPoll?.fableWeeklyUtil == 77.5)
+        // 2026-08-14T10:00:00Z == 1,786,701,600,000 Unix ms (known constant, not derived via production code)
+        #expect(lastPoll?.fableWeeklyResetsAt == 1_786_701_600_000)
+    }
+
+    @Test("Rollup computes fable avg/peak/min; all-NULL bucket stays NULL")
+    func rollupAggregatesFableAvgPeakMin() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+        try dbManager.ensureSchema()
+        let service = HistoricalDataService(databaseManager: dbManager)
+        let connection = try dbManager.getConnection()
+
+        let baseTimestamp = Int64(Date().timeIntervalSince1970 * 1000) - (25 * 60 * 60 * 1000)
+        let fiveMinutesMs: Int64 = 5 * 60 * 1000
+        let bucketStart = (baseTimestamp / fiveMinutesMs) * fiveMinutesMs
+        let nullBucketStart = bucketStart + 2 * fiveMinutesMs
+
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        // Bucket 1: fable utils 40, 60, 50
+        sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util, fable_weekly_util) VALUES (\(bucketStart), 50.0, 40.0)", nil, nil, &errorMessage)
+        sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util, fable_weekly_util) VALUES (\(bucketStart + 30000), 55.0, 60.0)", nil, nil, &errorMessage)
+        sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util, fable_weekly_util) VALUES (\(bucketStart + 60000), 60.0, 50.0)", nil, nil, &errorMessage)
+        // Bucket 2: no fable data (NULL never becomes 0)
+        sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util) VALUES (\(nullBucketStart), 70.0)", nil, nil, &errorMessage)
+
+        try await service.ensureRollupsUpToDate()
+
+        let rollups = try await service.getRolledUpData(range: .week)
+        let fableRollup = rollups.first { $0.resolution == .fiveMin && $0.periodStart == bucketStart }
+        #expect(fableRollup != nil, "Expected 5-minute rollup for fable bucket")
+        #expect(fableRollup?.fableWeeklyAvg == 50.0, "Avg of 40/60/50 should be 50")
+        #expect(fableRollup?.fableWeeklyPeak == 60.0)
+        #expect(fableRollup?.fableWeeklyMin == 40.0)
+
+        let nullRollup = rollups.first { $0.resolution == .fiveMin && $0.periodStart == nullBucketStart }
+        #expect(nullRollup != nil, "Expected 5-minute rollup for NULL bucket")
+        #expect(nullRollup?.fableWeeklyAvg == nil, "All-NULL fable bucket must stay NULL, not 0")
+        #expect(nullRollup?.fableWeeklyPeak == nil)
+        #expect(nullRollup?.fableWeeklyMin == nil)
+    }
+
+    @Test("pollToRollup maps fable util into avg/peak/min for last-24h queries")
+    func fableUtilInDayRangeQueryResults() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+        try dbManager.ensureSchema()
+        let service = HistoricalDataService(databaseManager: dbManager)
+        let connection = try dbManager.getConnection()
+
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util, fable_weekly_util) VALUES (\(now - 60000), 50.0, 63.0)", nil, nil, &errorMessage)
+
+        let rollups = try await service.getRolledUpData(range: .day)
+        #expect(rollups.count == 1)
+        #expect(rollups[0].fableWeeklyAvg == 63.0)
+        #expect(rollups[0].fableWeeklyPeak == 63.0)
+        #expect(rollups[0].fableWeeklyMin == 63.0)
+    }
+
+    @Test("pollsToRollupsWithResets retains fable fields in reset buckets")
+    func fableFieldsSurviveResetBucketReconstruction() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+        try dbManager.ensureSchema()
+        let service = HistoricalDataService(databaseManager: dbManager)
+        let connection = try dbManager.getConnection()
+
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let pollTimestamp = now - 60000
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        sqlite3_exec(connection, "INSERT INTO usage_polls (timestamp, five_hour_util, fable_weekly_util) VALUES (\(pollTimestamp), 50.0, 63.0)", nil, nil, &errorMessage)
+        // Reset event inside the poll's pseudo-rollup period triggers the reconstruction path
+        sqlite3_exec(connection, "INSERT INTO reset_events (timestamp, five_hour_peak) VALUES (\(pollTimestamp + 1000), 80.0)", nil, nil, &errorMessage)
+
+        let rollups = try await service.getRolledUpData(range: .day)
+        #expect(rollups.count == 1)
+        #expect(rollups[0].resetCount == 1, "Reset event should be counted in the poll's period")
+        #expect(rollups[0].fableWeeklyAvg == 63.0, "Fable fields must survive reset-bucket reconstruction")
+        #expect(rollups[0].fableWeeklyPeak == 63.0)
+        #expect(rollups[0].fableWeeklyMin == 63.0)
+    }
+
+    @Test("5min->hourly and hourly->daily tiers aggregate fable avg/peak/min with NULL passthrough")
+    func fableAggregationAcrossHigherRollupTiers() async throws {
+        let (dbManager, path) = makeManager()
+        defer { cleanup(manager: dbManager, path: path) }
+        try dbManager.ensureSchema()
+        let service = HistoricalDataService(databaseManager: dbManager)
+        let connection = try dbManager.getConnection()
+
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let fiveMinMs: Int64 = 5 * 60 * 1000
+        let hourMs: Int64 = 3_600_000
+        let dayMs: Int64 = 86_400_000
+
+        // 5min rollups ~8 days old (inside the 7d-30d 5min->hourly window)
+        let hourBucketA = ((nowMs - 8 * dayMs) / hourMs) * hourMs
+        let hourBucketB = hourBucketA + hourMs
+        // Hourly rollups ~31-32 days old (inside the 30d+ hourly->daily window)
+        let dayBucketC = ((nowMs - 31 * dayMs) / dayMs) * dayMs
+        let dayBucketD = dayBucketC - dayMs
+
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        let insert = { (sql: String) in
+            let result = sqlite3_exec(connection, sql, nil, nil, &errorMessage)
+            #expect(result == SQLITE_OK)
+        }
+
+        // Bucket A: two 5min rollups with fable values -> hourly avg-of-avgs/max/min
+        insert("INSERT INTO usage_rollups (period_start, period_end, resolution, five_hour_avg, fable_weekly_avg, fable_weekly_peak, fable_weekly_min) VALUES (\(hourBucketA), \(hourBucketA + fiveMinMs), '5min', 30.0, 40.0, 45.0, 35.0)")
+        insert("INSERT INTO usage_rollups (period_start, period_end, resolution, five_hour_avg, fable_weekly_avg, fable_weekly_peak, fable_weekly_min) VALUES (\(hourBucketA + fiveMinMs), \(hourBucketA + 2 * fiveMinMs), '5min', 35.0, 60.0, 65.0, 55.0)")
+        // Bucket B: 5min rollup without fable data -> hourly fable stays NULL
+        insert("INSERT INTO usage_rollups (period_start, period_end, resolution, five_hour_avg) VALUES (\(hourBucketB), \(hourBucketB + fiveMinMs), '5min', 50.0)")
+        // Bucket C: two hourly rollups with fable values -> daily avg-of-avgs/max/min
+        insert("INSERT INTO usage_rollups (period_start, period_end, resolution, five_hour_avg, fable_weekly_avg, fable_weekly_peak, fable_weekly_min) VALUES (\(dayBucketC), \(dayBucketC + hourMs), 'hourly', 30.0, 20.0, 25.0, 15.0)")
+        insert("INSERT INTO usage_rollups (period_start, period_end, resolution, five_hour_avg, fable_weekly_avg, fable_weekly_peak, fable_weekly_min) VALUES (\(dayBucketC + hourMs), \(dayBucketC + 2 * hourMs), 'hourly', 35.0, 40.0, 45.0, 35.0)")
+        // Bucket D: hourly rollup without fable data -> daily fable stays NULL
+        insert("INSERT INTO usage_rollups (period_start, period_end, resolution, five_hour_avg) VALUES (\(dayBucketD), \(dayBucketD + hourMs), 'hourly', 60.0)")
+
+        try await service.ensureRollupsUpToDate()
+
+        let rollups = try await service.getRolledUpData(range: .all)
+
+        let hourlyA = rollups.first { $0.resolution == .hourly && $0.periodStart == hourBucketA }
+        #expect(hourlyA != nil, "Expected hourly rollup for fable bucket A")
+        #expect(hourlyA?.fableWeeklyAvg == 50.0, "Hourly avg-of-avgs of 40/60 should be 50")
+        #expect(hourlyA?.fableWeeklyPeak == 65.0, "Hourly max-of-peaks of 45/65 should be 65")
+        #expect(hourlyA?.fableWeeklyMin == 35.0, "Hourly min-of-mins of 35/55 should be 35")
+
+        let hourlyB = rollups.first { $0.resolution == .hourly && $0.periodStart == hourBucketB }
+        #expect(hourlyB != nil, "Expected hourly rollup for all-NULL bucket B")
+        #expect(hourlyB?.fableWeeklyAvg == nil, "All-NULL fable 5min bucket must stay NULL at hourly tier")
+        #expect(hourlyB?.fableWeeklyPeak == nil)
+        #expect(hourlyB?.fableWeeklyMin == nil)
+
+        let dailyC = rollups.first { $0.resolution == .daily && $0.periodStart == dayBucketC }
+        #expect(dailyC != nil, "Expected daily rollup for fable bucket C")
+        #expect(dailyC?.fableWeeklyAvg == 30.0, "Daily avg-of-avgs of 20/40 should be 30")
+        #expect(dailyC?.fableWeeklyPeak == 45.0, "Daily max-of-peaks of 25/45 should be 45")
+        #expect(dailyC?.fableWeeklyMin == 15.0, "Daily min-of-mins of 15/35 should be 15")
+
+        let dailyD = rollups.first { $0.resolution == .daily && $0.periodStart == dayBucketD }
+        #expect(dailyD != nil, "Expected daily rollup for all-NULL bucket D")
+        #expect(dailyD?.fableWeeklyAvg == nil, "All-NULL fable hourly bucket must stay NULL at daily tier")
+        #expect(dailyD?.fableWeeklyPeak == nil)
+        #expect(dailyD?.fableWeeklyMin == nil)
+    }
 }
 
 // MARK: - Mock DatabaseManager for Graceful Degradation Tests

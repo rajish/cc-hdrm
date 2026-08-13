@@ -272,11 +272,12 @@ struct AnalyticsViewSeriesToggleTests {
 
     // MARK: - 4.1 Both series visible by default for any TimeRange key
 
-    @Test("SeriesVisibility defaults both series to visible")
+    @Test("SeriesVisibility defaults all series to visible")
     func bothSeriesVisibleByDefault() {
         let visibility = AnalyticsView.SeriesVisibility()
         #expect(visibility.fiveHour == true)
         #expect(visibility.sevenDay == true)
+        #expect(visibility.fable == true)
     }
 
     @Test("Empty dictionary lookup defaults to both-visible for any range")
@@ -394,8 +395,129 @@ struct AnalyticsViewSeriesToggleTests {
         let a = AnalyticsView.SeriesVisibility(fiveHour: true, sevenDay: false)
         let b = AnalyticsView.SeriesVisibility(fiveHour: true, sevenDay: false)
         let c = AnalyticsView.SeriesVisibility(fiveHour: false, sevenDay: false)
+        let d = AnalyticsView.SeriesVisibility(fiveHour: true, sevenDay: false, fable: false)
         #expect(a == b)
         #expect(a != c)
+        #expect(a != d, "fable field participates in equality")
+    }
+
+    // MARK: - Story 21.3: Fable Toggle State
+
+    @Test("toggling fable off for .day persists after switching to .week and back")
+    func fableOffPersistsAcrossRangeSwitch() {
+        var dict: [TimeRange: AnalyticsView.SeriesVisibility] = [:]
+
+        dict[.day, default: AnalyticsView.SeriesVisibility()].fable = false
+
+        // Switch to .week — unaffected
+        let weekVis = dict[.week] ?? AnalyticsView.SeriesVisibility()
+        #expect(weekVis.fable == true)
+
+        // Switch back to .day — fable still off, other series untouched
+        let dayVis = dict[.day] ?? AnalyticsView.SeriesVisibility()
+        #expect(dayVis.fable == false, "fable should remain off for .day after range switch")
+        #expect(dayVis.fiveHour == true)
+        #expect(dayVis.sevenDay == true)
+    }
+
+    @Test("unvisited ranges default fable to visible")
+    func unvisitedRangesDefaultFableVisible() {
+        var dict: [TimeRange: AnalyticsView.SeriesVisibility] = [:]
+        dict[.day, default: AnalyticsView.SeriesVisibility()].fable = false
+
+        for range in [TimeRange.week, .month, .all] {
+            let vis = dict[range] ?? AnalyticsView.SeriesVisibility()
+            #expect(vis.fable == true, "fable should default true for unvisited \(range)")
+        }
+    }
+
+    // MARK: - Story 21.3: Fable Label Fallback
+
+    @Test("fableLabel falls back to Model for nil, empty, and blank display names")
+    func fableLabelFallback() {
+        #expect(AnalyticsView.fableLabel(from: "Fable") == "Fable")
+        #expect(AnalyticsView.fableLabel(from: nil) == "Model")
+        #expect(AnalyticsView.fableLabel(from: "") == "Model", "Empty display name must not render a blank chip label")
+        #expect(AnalyticsView.fableLabel(from: "   ") == "Model", "Blank display name must not render a blank chip label")
+        #expect(AnalyticsView.fableLabel(from: "  Fable  ") == "Fable", "Label is trimmed")
+    }
+
+    // MARK: - Story 21.3: Fable Data Presence (chip gating)
+
+    @Test("hasFableData is false for empty data and data without fable values")
+    func hasFableDataFalseWithoutFableValues() {
+        #expect(AnalyticsView.hasFableData(polls: [], rollups: []) == false)
+
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let polls = [
+            UsagePoll(id: 1, timestamp: nowMs, fiveHourUtil: 50.0, fiveHourResetsAt: nil,
+                      sevenDayUtil: 25.0, sevenDayResetsAt: nil)
+        ]
+        let rollups = [
+            UsageRollup(id: 1, periodStart: nowMs - 300_000, periodEnd: nowMs,
+                        resolution: .fiveMin,
+                        fiveHourAvg: 30.0, fiveHourPeak: 45.0, fiveHourMin: 20.0,
+                        sevenDayAvg: 15.0, sevenDayPeak: 25.0, sevenDayMin: 10.0,
+                        resetCount: 0, unusedCredits: nil)
+        ]
+        #expect(AnalyticsView.hasFableData(polls: polls, rollups: rollups) == false,
+                "All-NULL fable columns must not surface the chip")
+    }
+
+    @Test("Fable history appears in analytics data after one persisted poll cycle")
+    func fableHistoryAppearsAfterOnePollCycle() async throws {
+        // Integration path: real HistoricalDataService + DatabaseManager on a temp DB,
+        // persistPoll -> fetchData, mirroring the epic's success criterion.
+        let tempDir = FileManager.default.temporaryDirectory
+        let testPath = tempDir.appendingPathComponent("test_\(UUID().uuidString).db")
+        let dbManager = DatabaseManager(databasePath: testPath)
+        defer {
+            dbManager.closeConnection()
+            try? FileManager.default.removeItem(at: testPath)
+        }
+        try dbManager.ensureSchema()
+        let service = HistoricalDataService(databaseManager: dbManager)
+
+        let response = UsageResponse(
+            fiveHour: WindowUsage(utilization: 45.0, resetsAt: nil),
+            sevenDay: WindowUsage(utilization: 20.0, resetsAt: nil),
+            limits: [
+                LimitEntry(
+                    kind: "weekly_scoped",
+                    group: nil,
+                    percent: 63.0,
+                    severity: nil,
+                    resetsAt: "2026-08-12T22:00:00Z",
+                    isActive: true,
+                    scope: LimitScope(model: ScopedModel(id: "claude-fable-5", displayName: "Fable"), surface: nil)
+                )
+            ],
+            extraUsage: nil
+        )
+        try await service.persistPoll(response)
+
+        let result = try await AnalyticsView.fetchData(for: .day, using: service, existingAllTimeEvents: nil)
+
+        #expect(result.chartData.count == 1, "One persisted poll cycle should surface one chart data point")
+        #expect(result.chartData.first?.fableWeeklyUtil == 63.0, "Fable utilization must ride the analytics data path")
+        #expect(AnalyticsView.hasFableData(polls: result.chartData, rollups: result.rollupData) == true,
+                "The Fable chip gate must open after one poll cycle with a scoped limit")
+    }
+
+    @Test("hasFableData is true when any poll or rollup carries a fable value")
+    func hasFableDataTrueWithFableValues() {
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let fablePoll = UsagePoll(id: 1, timestamp: nowMs, fiveHourUtil: 50.0, fiveHourResetsAt: nil,
+                                  sevenDayUtil: nil, sevenDayResetsAt: nil, fableWeeklyUtil: 63.0)
+        #expect(AnalyticsView.hasFableData(polls: [fablePoll], rollups: []) == true)
+
+        let fableRollup = UsageRollup(id: 1, periodStart: nowMs - 300_000, periodEnd: nowMs,
+                                      resolution: .fiveMin,
+                                      fiveHourAvg: 30.0, fiveHourPeak: 45.0, fiveHourMin: 20.0,
+                                      sevenDayAvg: nil, sevenDayPeak: nil, sevenDayMin: nil,
+                                      resetCount: 0, unusedCredits: nil,
+                                      fableWeeklyAvg: 60.0, fableWeeklyPeak: 65.0, fableWeeklyMin: 55.0)
+        #expect(AnalyticsView.hasFableData(polls: [], rollups: [fableRollup]) == true)
     }
 
     // MARK: - Binding get/set closure verification (Code Review M1)

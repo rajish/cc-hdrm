@@ -3,7 +3,7 @@ import os
 import SQLite3
 
 /// Current database schema version. Increment when schema changes require migration.
-private let currentSchemaVersion: Int = 7
+private let currentSchemaVersion: Int = 8
 
 /// SQLITE_TRANSIENT tells SQLite to make its own copy of the string data.
 /// Required when binding strings from Swift's withCString which uses temporary buffers.
@@ -183,6 +183,16 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
             Self.logger.info("Migration v6->v7: created tpp_measurements table")
         }
 
+        if existingVersion < 8 {
+            let connection = try getConnection()
+            try executeSQL("ALTER TABLE usage_polls ADD COLUMN fable_weekly_util REAL", on: connection)
+            try executeSQL("ALTER TABLE usage_polls ADD COLUMN fable_weekly_resets_at INTEGER", on: connection)
+            try executeSQL("ALTER TABLE usage_rollups ADD COLUMN fable_weekly_avg REAL", on: connection)
+            try executeSQL("ALTER TABLE usage_rollups ADD COLUMN fable_weekly_peak REAL", on: connection)
+            try executeSQL("ALTER TABLE usage_rollups ADD COLUMN fable_weekly_min REAL", on: connection)
+            Self.logger.info("Migration v7->v8: added fable weekly columns to usage_polls and usage_rollups")
+        }
+
         Self.logger.info("Migrations complete: \(existingVersion) -> \(currentSchemaVersion)")
         try setSchemaVersion(currentSchemaVersion)
     }
@@ -270,7 +280,9 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
                 extra_usage_monthly_limit REAL,
                 extra_usage_used_credits REAL,
                 extra_usage_utilization REAL,
-                extra_usage_delta REAL
+                extra_usage_delta REAL,
+                fable_weekly_util REAL,
+                fable_weekly_resets_at INTEGER
             )
             """
         try executeSQL(createTable, on: connection)
@@ -298,7 +310,10 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
                 waste_credits REAL,
                 extra_usage_used_credits REAL,
                 extra_usage_utilization REAL,
-                extra_usage_delta REAL
+                extra_usage_delta REAL,
+                fable_weekly_avg REAL,
+                fable_weekly_peak REAL,
+                fable_weekly_min REAL
             )
             """
         try executeSQL(createTable, on: connection)

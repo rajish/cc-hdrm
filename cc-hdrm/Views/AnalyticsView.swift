@@ -25,6 +25,7 @@ struct AnalyticsView: View {
     internal struct SeriesVisibility: Equatable {
         var fiveHour: Bool = true
         var sevenDay: Bool = true
+        var fable: Bool = true
     }
 
     // Default to .week — shows recent trends without overwhelming detail.
@@ -44,6 +45,11 @@ struct AnalyticsView: View {
         seriesVisibility[selectedTimeRange]?.sevenDay ?? true
     }
 
+    /// Whether the model-scoped (Fable) series is toggled on for the currently selected time range.
+    private var fableVisible: Bool {
+        seriesVisibility[selectedTimeRange]?.fable ?? true
+    }
+
     /// Binding that reads/writes 5-hour visibility for the current time range.
     private var fiveHourBinding: Binding<Bool> {
         Binding(
@@ -58,6 +64,38 @@ struct AnalyticsView: View {
             get: { seriesVisibility[selectedTimeRange]?.sevenDay ?? true },
             set: { seriesVisibility[selectedTimeRange, default: SeriesVisibility()].sevenDay = $0 }
         )
+    }
+
+    /// Binding that reads/writes Fable series visibility for the current time range.
+    private var fableBinding: Binding<Bool> {
+        Binding(
+            get: { seriesVisibility[selectedTimeRange]?.fable ?? true },
+            set: { seriesVisibility[selectedTimeRange, default: SeriesVisibility()].fable = $0 }
+        )
+    }
+
+    /// Whether the loaded chart data contains at least one non-nil Fable value.
+    /// Gates both the toggle chip and the rendered series.
+    private var hasFableData: Bool {
+        Self.hasFableData(polls: chartData, rollups: rollupData)
+    }
+
+    /// Static for testability (same pattern as `fetchData`).
+    static func hasFableData(polls: [UsagePoll], rollups: [UsageRollup]) -> Bool {
+        polls.contains { $0.fableWeeklyUtil != nil }
+            || rollups.contains { $0.fableWeeklyAvg != nil || $0.fableWeeklyPeak != nil || $0.fableWeeklyMin != nil }
+    }
+
+    /// Label for the Fable series chip and tooltip rows — live API display name,
+    /// generic fallback when nil or blank (21.2 `ScopedLimitGaugeSection` precedent).
+    private var fableLabel: String {
+        Self.fableLabel(from: appState.scopedLimits.first?.displayName)
+    }
+
+    /// Static for testability (same pattern as `hasFableData`).
+    static func fableLabel(from displayName: String?) -> String {
+        let trimmed = displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? ScopedLimitGaugeSection.fallbackLabel : trimmed
     }
 
     @State private var chartData: [UsagePoll] = []
@@ -91,6 +129,8 @@ struct AnalyticsView: View {
                 timeRange: selectedTimeRange,
                 fiveHourVisible: fiveHourVisible,
                 sevenDayVisible: sevenDayVisible,
+                fableVisible: fableVisible && hasFableData,
+                fableLabel: fableLabel,
                 isLoading: isLoading,
                 hasAnyHistoricalData: hasAnyHistoricalData,
                 outagePeriods: outagePeriods
@@ -491,6 +531,19 @@ struct AnalyticsView: View {
                 isActive: sevenDayBinding,
                 accessibilityPrefix: "7-day series"
             )
+
+            if hasFableData {
+                Text("|")
+                    .font(.caption)
+                    .foregroundStyle(.quaternary)
+
+                seriesToggleButton(
+                    label: fableLabel,
+                    color: StepAreaChartView.fableColor,
+                    isActive: fableBinding,
+                    accessibilityPrefix: "\(fableLabel) series"
+                )
+            }
         }
     }
 
