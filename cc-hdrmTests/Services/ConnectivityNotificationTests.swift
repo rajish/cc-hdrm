@@ -66,7 +66,7 @@ private func successResponse() -> UsageResponse {
     UsageResponse(
         fiveHour: WindowUsage(utilization: 18.0, resetsAt: "2026-01-31T01:59:59.782798+00:00"),
         sevenDay: WindowUsage(utilization: 6.0, resetsAt: "2026-02-06T08:59:59+00:00"),
-        sevenDaySonnet: nil,
+        limits: nil,
         extraUsage: nil
     )
 }

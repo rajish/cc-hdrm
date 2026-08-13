@@ -21,6 +21,19 @@ struct WindowState: Sendable, Equatable {
     }
 }
 
+/// Represents a model-scoped usage limit (e.g. a per-model weekly cap) reported
+/// by the API's `limits` array. Labeled by the API's `scope.model.display_name`.
+struct ScopedLimitState: Sendable, Equatable {
+    let displayName: String?
+    let utilization: Double
+    let resetsAt: Date?
+
+    /// Headroom state is always derived from utilization, never stored separately.
+    var headroomState: HeadroomState {
+        HeadroomState(from: utilization)
+    }
+}
+
 /// A user-facing status message with title and detail text.
 struct StatusMessage: Sendable, Equatable {
     let title: String
@@ -57,6 +70,10 @@ final class AppState {
     private(set) var fiveHourSlope: SlopeLevel = .flat
     private(set) var sevenDaySlope: SlopeLevel = .flat
     private(set) var creditLimits: CreditLimits?
+
+    /// Model-scoped weekly caps from the API's `limits` array.
+    /// Empty when the API reports no scoped limits.
+    private(set) var scopedLimits: [ScopedLimitState] = []
 
     // MARK: - Extra Usage State (Story 17.1)
     private(set) var extraUsageEnabled: Bool = false
@@ -255,6 +272,11 @@ final class AppState {
         self.sevenDay = sevenDay
         self.lastUpdated = Date()
         self.lastPollTimestamp = self.lastUpdated
+    }
+
+    /// Updates the model-scoped limit states from API data.
+    func updateScopedLimits(_ limits: [ScopedLimitState]) {
+        self.scopedLimits = limits
     }
 
     /// Updates the connection status.

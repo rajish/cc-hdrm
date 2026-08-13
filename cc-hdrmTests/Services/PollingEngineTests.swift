@@ -311,7 +311,7 @@ private func successResponse() -> UsageResponse {
     UsageResponse(
         fiveHour: WindowUsage(utilization: 18.0, resetsAt: "2026-01-31T01:59:59.782798+00:00"),
         sevenDay: WindowUsage(utilization: 6.0, resetsAt: "2026-02-06T08:59:59+00:00"),
-        sevenDaySonnet: nil,
+        limits: nil,
         extraUsage: nil
     )
 }
@@ -342,6 +342,117 @@ struct PollingEngineTests {
         #expect(appState.fiveHour?.utilization == 18.0)
         #expect(appState.sevenDay?.utilization == 6.0)
         #expect(appState.statusMessage == nil)
+    }
+
+    @Test("poll with weekly_scoped limit populates scopedLimits; next poll without clears it")
+    @MainActor
+    func scopedLimitPopulatedThenCleared() async {
+        let scopedResponse = UsageResponse(
+            fiveHour: WindowUsage(utilization: 18.0, resetsAt: nil),
+            sevenDay: WindowUsage(utilization: 6.0, resetsAt: nil),
+            limits: [
+                LimitEntry(
+                    kind: "weekly_scoped",
+                    group: nil,
+                    percent: 63.0,
+                    severity: nil,
+                    resetsAt: "2026-08-12T22:00:00.059415+00:00",
+                    isActive: true,
+                    scope: LimitScope(model: ScopedModel(id: "claude-fable-5", displayName: "Fable"), surface: nil)
+                ),
+                LimitEntry(
+                    kind: "session",
+                    group: nil,
+                    percent: 18.0,
+                    severity: nil,
+                    resetsAt: nil,
+                    isActive: nil,
+                    scope: nil
+                ),
+                LimitEntry(
+                    kind: "weekly_scoped",
+                    group: nil,
+                    percent: nil,
+                    severity: nil,
+                    resetsAt: nil,
+                    isActive: nil,
+                    scope: nil
+                )
+            ],
+            extraUsage: nil
+        )
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(results: [.success(scopedResponse), .success(successResponse())])
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState
+        )
+
+        await engine.performPollCycle()
+
+        #expect(appState.scopedLimits.count == 1, "Only weekly_scoped entries with a percent are surfaced")
+        #expect(appState.scopedLimits.first?.displayName == "Fable")
+        #expect(appState.scopedLimits.first?.utilization == 63.0)
+        #expect(appState.scopedLimits.first?.resetsAt != nil, "Fractional-seconds timestamp should parse")
+        #expect(appState.scopedLimits.first?.resetsAt == Date.fromISO8601("2026-08-12T22:00:00.059415+00:00"))
+
+        await engine.performPollCycle()
+
+        #expect(appState.scopedLimits.isEmpty, "Poll without limits clears scopedLimits")
+    }
+
+    @Test("multiple weekly_scoped entries all surface in scopedLimits preserving API order")
+    @MainActor
+    func multipleScopedLimitsAllSurfaceInOrder() async {
+        let response = UsageResponse(
+            fiveHour: WindowUsage(utilization: 18.0, resetsAt: nil),
+            sevenDay: WindowUsage(utilization: 6.0, resetsAt: nil),
+            limits: [
+                LimitEntry(
+                    kind: "weekly_scoped",
+                    group: nil,
+                    percent: 63.0,
+                    severity: nil,
+                    resetsAt: nil,
+                    isActive: true,
+                    scope: LimitScope(model: ScopedModel(id: "claude-fable-5", displayName: "Fable"), surface: nil)
+                ),
+                LimitEntry(
+                    kind: "weekly_scoped",
+                    group: nil,
+                    percent: 21.0,
+                    severity: nil,
+                    resetsAt: nil,
+                    isActive: true,
+                    scope: LimitScope(model: ScopedModel(id: "claude-opus-4", displayName: "Opus"), surface: nil)
+                )
+            ],
+            extraUsage: nil
+        )
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(result: response)
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState
+        )
+
+        await engine.performPollCycle()
+
+        #expect(appState.scopedLimits.count == 2, "Every weekly_scoped entry with a percent must surface")
+        #expect(appState.scopedLimits[0].displayName == "Fable")
+        #expect(appState.scopedLimits[0].utilization == 63.0)
+        #expect(appState.scopedLimits[1].displayName == "Opus")
+        #expect(appState.scopedLimits[1].utilization == 21.0)
     }
 
     @Test("network error sets connectionStatus to .disconnected with appropriate statusMessage")
@@ -1901,7 +2012,7 @@ struct PollingEngineRestartTests {
         let mockAPI = PEMockAPIClient(result: UsageResponse(
             fiveHour: .init(utilization: 10.0, resetsAt: nil),
             sevenDay: nil,
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         ))
         let engine = PollingEngine(
@@ -1942,7 +2053,7 @@ struct PollingEngineRestartTests {
             apiClient: PEMockAPIClient(result: UsageResponse(
                 fiveHour: .init(utilization: 10.0, resetsAt: nil),
                 sevenDay: nil,
-                sevenDaySonnet: nil,
+                limits: nil,
                 extraUsage: nil
             )),
             appState: appState,

@@ -237,6 +237,15 @@ final class PollingEngine: PollingEngineProtocol {
                 )
             }
 
+            let scopedLimitStates: [ScopedLimitState] = (response.limits ?? []).compactMap { entry in
+                guard entry.kind == "weekly_scoped", let percent = entry.percent else { return nil }
+                return ScopedLimitState(
+                    displayName: entry.scope?.model?.displayName,
+                    utilization: percent,
+                    resetsAt: entry.resetsAt.flatMap { Date.fromISO8601($0) }
+                )
+            }
+
             // Resolve credit limits from tier string each cycle (tier could change on subscription upgrade)
             let resolvedLimits = RateLimitTier.resolve(
                 tierString: effectiveCredentials.rateLimitTier,
@@ -257,6 +266,7 @@ final class PollingEngine: PollingEngineProtocol {
             }
 
             appState.updateWindows(fiveHour: fiveHourState, sevenDay: sevenDayState)
+            appState.updateScopedLimits(scopedLimitStates)
             await notificationService?.evaluateThresholds(fiveHour: fiveHourState, sevenDay: sevenDayState)
 
             // Evaluate extra usage threshold alerts

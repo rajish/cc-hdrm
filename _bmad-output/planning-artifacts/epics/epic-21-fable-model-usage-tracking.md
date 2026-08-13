@@ -1,6 +1,6 @@
 # Epic 21: Fable Model Usage Tracking (Phase 6)
 
-**Origin:** Sprint change proposal 2026-08-12 (`_bmad-output/planning-artifacts/sprint-change-proposal-2026-08-12.md`)
+**Origin:** Sprint change proposal 2026-08-12 (`_bmad-output/planning-artifacts/sprint-change-proposal-2026-08-12-fable.md`)
 
 ## Goal
 

@@ -37,7 +37,7 @@ struct HistoricalDataServiceTests {
         let response = UsageResponse(
             fiveHour: WindowUsage(utilization: 45.5, resetsAt: "2026-02-03T15:00:00Z"),
             sevenDay: WindowUsage(utilization: 23.1, resetsAt: "2026-02-10T00:00:00Z"),
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
 
@@ -64,7 +64,7 @@ struct HistoricalDataServiceTests {
         let response = UsageResponse(
             fiveHour: WindowUsage(utilization: 50.0, resetsAt: "2026-02-03T15:00:00Z"),
             sevenDay: nil,
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
 
@@ -90,7 +90,7 @@ struct HistoricalDataServiceTests {
         let response = UsageResponse(
             fiveHour: WindowUsage(utilization: nil, resetsAt: "2026-02-03T15:00:00Z"),
             sevenDay: WindowUsage(utilization: 30.0, resetsAt: nil),
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
 
@@ -118,7 +118,7 @@ struct HistoricalDataServiceTests {
         let response = UsageResponse(
             fiveHour: WindowUsage(utilization: 10.0, resetsAt: nil),
             sevenDay: nil,
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
 
@@ -205,7 +205,7 @@ struct HistoricalDataServiceTests {
         let response = UsageResponse(
             fiveHour: WindowUsage(utilization: 50.0, resetsAt: "2026-02-03T15:00:00Z"),
             sevenDay: nil,
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
 
@@ -249,7 +249,7 @@ struct HistoricalDataServiceTests {
         let response = UsageResponse(
             fiveHour: WindowUsage(utilization: 50.0, resetsAt: "2026-02-03T15:00:00Z"),
             sevenDay: nil,
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
 
@@ -281,7 +281,7 @@ struct HistoricalDataServiceTests {
         let response = UsageResponse(
             fiveHour: WindowUsage(utilization: 50.0, resetsAt: "2026-02-03T15:00:00Z"),
             sevenDay: nil,
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response)
@@ -316,7 +316,7 @@ struct HistoricalDataServiceTests {
         let response1 = UsageResponse(
             fiveHour: WindowUsage(utilization: 50.0, resetsAt: "2026-02-03T10:00:00Z"),
             sevenDay: WindowUsage(utilization: 30.0, resetsAt: "2026-02-10T00:00:00Z"),
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response1, tier: "test_tier")
@@ -325,7 +325,7 @@ struct HistoricalDataServiceTests {
         let response2 = UsageResponse(
             fiveHour: WindowUsage(utilization: 10.0, resetsAt: "2026-02-03T15:00:00Z"),
             sevenDay: WindowUsage(utilization: 30.0, resetsAt: "2026-02-10T00:00:00Z"),
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response2, tier: "test_tier")
@@ -349,7 +349,7 @@ struct HistoricalDataServiceTests {
         let response1 = UsageResponse(
             fiveHour: WindowUsage(utilization: 80.0, resetsAt: nil),
             sevenDay: WindowUsage(utilization: 40.0, resetsAt: nil),
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response1, tier: nil)
@@ -358,7 +358,7 @@ struct HistoricalDataServiceTests {
         let response2 = UsageResponse(
             fiveHour: WindowUsage(utilization: 5.0, resetsAt: nil),
             sevenDay: WindowUsage(utilization: 40.0, resetsAt: nil),
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response2, tier: nil)
@@ -381,7 +381,7 @@ struct HistoricalDataServiceTests {
         let response1 = UsageResponse(
             fiveHour: WindowUsage(utilization: 50.0, resetsAt: "2026-02-03T10:00:00Z"),
             sevenDay: nil,
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response1, tier: nil)
@@ -390,7 +390,7 @@ struct HistoricalDataServiceTests {
         let response2 = UsageResponse(
             fiveHour: WindowUsage(utilization: 52.0, resetsAt: "2026-02-03T10:00:00Z"),
             sevenDay: nil,
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response2, tier: nil)
@@ -412,7 +412,7 @@ struct HistoricalDataServiceTests {
         let response1 = UsageResponse(
             fiveHour: WindowUsage(utilization: 60.0, resetsAt: nil),
             sevenDay: nil,
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response1, tier: nil)
@@ -421,7 +421,7 @@ struct HistoricalDataServiceTests {
         let response2 = UsageResponse(
             fiveHour: WindowUsage(utilization: 45.0, resetsAt: nil),
             sevenDay: nil,
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response2, tier: nil)
@@ -443,7 +443,7 @@ struct HistoricalDataServiceTests {
         let response1 = UsageResponse(
             fiveHour: WindowUsage(utilization: 80.0, resetsAt: "2026-02-03T10:00:00Z"),
             sevenDay: WindowUsage(utilization: 45.0, resetsAt: "2026-02-10T00:00:00Z"),
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response1, tier: "my_tier")
@@ -454,7 +454,7 @@ struct HistoricalDataServiceTests {
         let response2 = UsageResponse(
             fiveHour: WindowUsage(utilization: 5.0, resetsAt: "2026-02-03T15:00:00Z"),
             sevenDay: WindowUsage(utilization: 45.0, resetsAt: "2026-02-10T00:00:00Z"),
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response2, tier: "my_tier")
@@ -479,7 +479,7 @@ struct HistoricalDataServiceTests {
         let response1 = UsageResponse(
             fiveHour: WindowUsage(utilization: 75.0, resetsAt: "2026-02-03T10:00:00Z"),
             sevenDay: nil,
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response1, tier: nil)
@@ -490,7 +490,7 @@ struct HistoricalDataServiceTests {
         let response2 = UsageResponse(
             fiveHour: WindowUsage(utilization: 10.0, resetsAt: "2026-02-03T15:00:00Z"),
             sevenDay: nil,
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response2, tier: nil)
@@ -516,7 +516,7 @@ struct HistoricalDataServiceTests {
         let response1 = UsageResponse(
             fiveHour: WindowUsage(utilization: 10.0, resetsAt: nil),
             sevenDay: nil,
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response1, tier: nil)
@@ -524,7 +524,7 @@ struct HistoricalDataServiceTests {
         let response2 = UsageResponse(
             fiveHour: WindowUsage(utilization: 20.0, resetsAt: nil),
             sevenDay: nil,
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response2, tier: nil)
@@ -532,7 +532,7 @@ struct HistoricalDataServiceTests {
         let response3 = UsageResponse(
             fiveHour: WindowUsage(utilization: 30.0, resetsAt: nil),
             sevenDay: nil,
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response3, tier: nil)
@@ -590,7 +590,7 @@ struct HistoricalDataServiceTests {
         let response1 = UsageResponse(
             fiveHour: WindowUsage(utilization: 80.0, resetsAt: "2026-02-03T10:00:00Z"),
             sevenDay: nil,
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response1, tier: nil)
@@ -598,7 +598,7 @@ struct HistoricalDataServiceTests {
         let response2 = UsageResponse(
             fiveHour: WindowUsage(utilization: 5.0, resetsAt: "2026-02-03T15:00:00Z"),
             sevenDay: nil,
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response2, tier: nil)
@@ -636,7 +636,7 @@ struct HistoricalDataServiceTests {
         let response1 = UsageResponse(
             fiveHour: WindowUsage(utilization: 80.0, resetsAt: "2026-02-03T10:00:00Z"),
             sevenDay: WindowUsage(utilization: 40.0, resetsAt: "2026-02-10T00:00:00Z"),
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response1, tier: nil)
@@ -645,7 +645,7 @@ struct HistoricalDataServiceTests {
         let response2 = UsageResponse(
             fiveHour: WindowUsage(utilization: 5.0, resetsAt: "2026-02-03T15:00:00Z"),
             sevenDay: WindowUsage(utilization: 42.0, resetsAt: "2026-02-10T00:00:00Z"),
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response2, tier: nil)
@@ -671,7 +671,7 @@ struct HistoricalDataServiceTests {
             let response = UsageResponse(
                 fiveHour: WindowUsage(utilization: util, resetsAt: "2026-02-03T10:00:00Z"),
                 sevenDay: nil,
-                sevenDaySonnet: nil,
+                limits: nil,
                 extraUsage: nil
             )
             try await service.persistPoll(response, tier: nil)
@@ -682,7 +682,7 @@ struct HistoricalDataServiceTests {
         let resetResponse = UsageResponse(
             fiveHour: WindowUsage(utilization: 5.0, resetsAt: "2026-02-03T15:00:00Z"),
             sevenDay: nil,
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(resetResponse, tier: nil)
@@ -712,7 +712,7 @@ struct HistoricalDataServiceTests {
         let response1 = UsageResponse(
             fiveHour: WindowUsage(utilization: 72.0, resetsAt: "2026-02-03T10:00:00Z"),
             sevenDay: WindowUsage(utilization: 85.0, resetsAt: "2026-02-10T00:00:00Z"),
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response1, tier: "default_claude_pro")
@@ -723,7 +723,7 @@ struct HistoricalDataServiceTests {
         let response2 = UsageResponse(
             fiveHour: WindowUsage(utilization: 5.0, resetsAt: "2026-02-03T15:00:00Z"),
             sevenDay: WindowUsage(utilization: 85.0, resetsAt: "2026-02-10T00:00:00Z"),
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response2, tier: "default_claude_pro")
@@ -753,7 +753,7 @@ struct HistoricalDataServiceTests {
         let response1 = UsageResponse(
             fiveHour: WindowUsage(utilization: 72.0, resetsAt: "2026-02-03T10:00:00Z"),
             sevenDay: WindowUsage(utilization: 85.0, resetsAt: "2026-02-10T00:00:00Z"),
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response1, tier: "default_claude_pro")
@@ -763,7 +763,7 @@ struct HistoricalDataServiceTests {
         let response2 = UsageResponse(
             fiveHour: WindowUsage(utilization: 5.0, resetsAt: "2026-02-03T15:00:00Z"),
             sevenDay: WindowUsage(utilization: 85.0, resetsAt: "2026-02-10T00:00:00Z"),
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response2, tier: "default_claude_pro")
@@ -792,7 +792,7 @@ struct HistoricalDataServiceTests {
         let response1 = UsageResponse(
             fiveHour: WindowUsage(utilization: 72.0, resetsAt: "2026-02-03T10:00:00Z"),
             sevenDay: WindowUsage(utilization: 85.0, resetsAt: "2026-02-10T00:00:00Z"),
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response1, tier: "unknown_tier_xyz")
@@ -802,7 +802,7 @@ struct HistoricalDataServiceTests {
         let response2 = UsageResponse(
             fiveHour: WindowUsage(utilization: 5.0, resetsAt: "2026-02-03T15:00:00Z"),
             sevenDay: WindowUsage(utilization: 85.0, resetsAt: "2026-02-10T00:00:00Z"),
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response2, tier: "unknown_tier_xyz")
@@ -1245,7 +1245,7 @@ struct HistoricalDataServiceTests {
         let response = UsageResponse(
             fiveHour: WindowUsage(utilization: 45.0, resetsAt: "2026-02-03T15:00:00Z"),
             sevenDay: nil,
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: ExtraUsage(isEnabled: true, monthlyLimit: 500.0, usedCredits: 123.45, utilization: 0.247)
         )
 
@@ -1271,7 +1271,7 @@ struct HistoricalDataServiceTests {
         let response = UsageResponse(
             fiveHour: WindowUsage(utilization: 45.0, resetsAt: "2026-02-03T15:00:00Z"),
             sevenDay: nil,
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
 
@@ -1297,7 +1297,7 @@ struct HistoricalDataServiceTests {
         let response = UsageResponse(
             fiveHour: WindowUsage(utilization: 20.0, resetsAt: nil),
             sevenDay: nil,
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: ExtraUsage(isEnabled: false, monthlyLimit: 1000.0, usedCredits: 0.0, utilization: 0.0)
         )
 
@@ -1465,7 +1465,7 @@ struct HistoricalDataServiceTests {
         let response = UsageResponse(
             fiveHour: WindowUsage(utilization: 50.0, resetsAt: "2026-02-03T15:00:00Z"),
             sevenDay: WindowUsage(utilization: 30.0, resetsAt: "2026-02-10T00:00:00Z"),
-            sevenDaySonnet: nil,
+            limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response)
@@ -1587,14 +1587,14 @@ struct HistoricalDataServiceTests {
 
         let response1 = UsageResponse(
             fiveHour: WindowUsage(utilization: 50.0, resetsAt: nil),
-            sevenDay: nil, sevenDaySonnet: nil,
+            sevenDay: nil, limits: nil,
             extraUsage: ExtraUsage(isEnabled: true, monthlyLimit: 500.0, usedCredits: 10.0, utilization: 2.0)
         )
         try await service.persistPoll(response1)
 
         let response2 = UsageResponse(
             fiveHour: WindowUsage(utilization: 55.0, resetsAt: nil),
-            sevenDay: nil, sevenDaySonnet: nil,
+            sevenDay: nil, limits: nil,
             extraUsage: ExtraUsage(isEnabled: true, monthlyLimit: 500.0, usedCredits: 25.0, utilization: 5.0)
         )
         try await service.persistPoll(response2)
@@ -1614,14 +1614,14 @@ struct HistoricalDataServiceTests {
 
         let response1 = UsageResponse(
             fiveHour: WindowUsage(utilization: 80.0, resetsAt: nil),
-            sevenDay: nil, sevenDaySonnet: nil,
+            sevenDay: nil, limits: nil,
             extraUsage: ExtraUsage(isEnabled: true, monthlyLimit: 500.0, usedCredits: 50.0, utilization: 10.0)
         )
         try await service.persistPoll(response1)
 
         let response2 = UsageResponse(
             fiveHour: WindowUsage(utilization: 85.0, resetsAt: nil),
-            sevenDay: nil, sevenDaySonnet: nil,
+            sevenDay: nil, limits: nil,
             extraUsage: ExtraUsage(isEnabled: true, monthlyLimit: 500.0, usedCredits: 5.0, utilization: 1.0)
         )
         try await service.persistPoll(response2)
@@ -1640,7 +1640,7 @@ struct HistoricalDataServiceTests {
 
         let response = UsageResponse(
             fiveHour: WindowUsage(utilization: 50.0, resetsAt: nil),
-            sevenDay: nil, sevenDaySonnet: nil,
+            sevenDay: nil, limits: nil,
             extraUsage: nil
         )
         try await service.persistPoll(response)

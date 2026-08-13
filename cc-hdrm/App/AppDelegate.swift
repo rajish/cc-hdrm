@@ -381,6 +381,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appState.updateOAuthState(.unauthenticated)
         appState.updateConnectionStatus(.noCredentials)
         appState.updateWindows(fiveHour: nil, sevenDay: nil)
+        appState.updateScopedLimits([])
         appState.updateSparklineData([])
         appState.updateSubscriptionTier(nil)
         appState.updateCreditLimits(nil)

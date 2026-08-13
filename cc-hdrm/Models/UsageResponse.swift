@@ -5,13 +5,13 @@ import Foundation
 struct UsageResponse: Codable, Sendable, Equatable {
     let fiveHour: WindowUsage?
     let sevenDay: WindowUsage?
-    let sevenDaySonnet: WindowUsage?
+    let limits: [LimitEntry]?
     let extraUsage: ExtraUsage?
 
     enum CodingKeys: String, CodingKey {
         case fiveHour = "five_hour"
         case sevenDay = "seven_day"
-        case sevenDaySonnet = "seven_day_sonnet"
+        case limits
         case extraUsage = "extra_usage"
     }
 }
@@ -24,6 +24,45 @@ struct WindowUsage: Codable, Sendable, Equatable {
     enum CodingKeys: String, CodingKey {
         case utilization
         case resetsAt = "resets_at"
+    }
+}
+
+/// A single entry in the API's `limits` array — source of truth for model-scoped caps.
+/// `kind` is decoded as a plain String so unknown future kinds never fail decoding.
+struct LimitEntry: Codable, Sendable, Equatable {
+    let kind: String?
+    let group: String?
+    let percent: Double?
+    let severity: String?
+    let resetsAt: String?
+    let isActive: Bool?
+    let scope: LimitScope?
+
+    enum CodingKeys: String, CodingKey {
+        case kind
+        case group
+        case percent
+        case severity
+        case resetsAt = "resets_at"
+        case isActive = "is_active"
+        case scope
+    }
+}
+
+/// The scope of a limit entry — identifies which model or surface the cap applies to.
+struct LimitScope: Codable, Sendable, Equatable {
+    let model: ScopedModel?
+    let surface: String?
+}
+
+/// The model a scoped limit applies to. `displayName` is the user-facing label.
+struct ScopedModel: Codable, Sendable, Equatable {
+    let id: String?
+    let displayName: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case displayName = "display_name"
     }
 }
 

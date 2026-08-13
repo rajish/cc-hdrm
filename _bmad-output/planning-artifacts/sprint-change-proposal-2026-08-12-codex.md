@@ -168,7 +168,7 @@ OLD:
 NEW:
 
 ```markdown
-- NFR8: No credentials or usage data are transmitted to any endpoint other than `api.anthropic.com` (Claude usage), `platform.claude.com` (Claude token refresh), and `chatgpt.com` (Codex usage; plus the Codex token-refresh endpoint documented by the Phase 7 spike)
+- NFR8: No credentials or usage data are transmitted to any endpoint other than `api.anthropic.com` (Claude usage), `platform.claude.com` (Claude token refresh), and `chatgpt.com` (Codex usage). Codex token refresh may only target a fixed HTTPS origin and exact path added to this allowlist by PRD amendment once the Phase 7 spike establishes it; until that amendment lands, the app must not send Codex refresh requests and must surface the token-expired state instead
 - NFR14: Codex credentials are read from `auth.json` fresh each poll cycle, never written back, never persisted elsewhere, and never logged
 - NFR15: Claude and Codex polling lanes are failure-isolated — an error in one provider's pipeline must not affect the other's display, notifications, or persistence
 ```
