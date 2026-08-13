@@ -190,9 +190,9 @@ development_status:
   20-5-historical-tpp-backfill: done  # Code review passed 2026-03-27
 
   # Sprint Change Proposal 2026-08-12 (Fable) — new epic
-  epic-21: backlog  # Fable Model Usage Tracking (Phase 6) — Sprint change proposal 2026-08-12
-  21-1-scoped-limits-parsing-domain-model: backlog
-  21-2-popover-fable-utilization-display: backlog
+  epic-21: in-progress  # Fable Model Usage Tracking (Phase 6) — Sprint change proposal 2026-08-12
+  21-1-scoped-limits-parsing-domain-model: done  # bmad-build-auto 2026-08-12
+  21-2-popover-fable-utilization-display: done  # bmad-build-auto 2026-08-13
   21-3-fable-persistence-analytics-series: backlog
   21-4-fable-threshold-notifications: backlog
   21-5-benchmark-default-model-update: backlog

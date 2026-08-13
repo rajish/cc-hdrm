@@ -55,6 +55,17 @@ struct ScopedLimitGaugeSectionTests {
         #expect(section.combinedAccessibilityLabel(for: entry).hasPrefix("Model headroom: 60 percent"))
     }
 
+    @Test("Whitespace-only display name falls back to generic label")
+    @MainActor
+    func whitespaceDisplayNameFallbackLabel() {
+        let appState = AppState()
+        appState.updateScopedLimits([
+            ScopedLimitState(displayName: " \n ", utilization: 40.0, resetsAt: nil)
+        ])
+        let section = ScopedLimitGaugeSection(appState: appState)
+        #expect(section.label(for: appState.scopedLimits[0]) == ScopedLimitGaugeSection.fallbackLabel)
+    }
+
     @Test("Display name from API is used as the gauge label")
     @MainActor
     func displayNameUsedAsLabel() {

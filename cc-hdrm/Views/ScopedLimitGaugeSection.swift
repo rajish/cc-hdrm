@@ -17,13 +17,11 @@ struct ScopedLimitGaugeSection: View {
     }
 
     /// Display label for an entry: API display name, or the generic fallback
-    /// when the name is nil or empty.
+    /// when the name is nil or blank.
     /// Internal (not private) to allow @testable import verification.
     func label(for entry: ScopedLimitState) -> String {
-        guard let displayName = entry.displayName, !displayName.isEmpty else {
-            return Self.fallbackLabel
-        }
-        return displayName
+        let trimmed = entry.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? Self.fallbackLabel : trimmed
     }
 
     /// Combined VoiceOver announcement per entry:
