@@ -845,4 +845,390 @@ struct ThresholdStateMachineTests {
         // 15% >= 10% → re-arms
         #expect(service.fiveHourThresholdState == .aboveWarning)
     }
+
+    // MARK: - Story 21.4: Scoped Limit Threshold Notifications
+
+    /// Creates a ScopedLimitState with the given utilization (headroom = 100 - utilization).
+    private func scopedState(
+        utilization: Double,
+        displayName: String? = "Fable",
+        resetsAt: Date? = Date().addingTimeInterval(3600)
+    ) -> ScopedLimitState {
+        ScopedLimitState(displayName: displayName, utilization: utilization, resetsAt: resetsAt)
+    }
+
+    @Test("Initial scoped state is aboveWarning")
+    @MainActor
+    func scopedInitialState() {
+        let service = NotificationService()
+        #expect(service.scopedThresholdState == .aboveWarning)
+    }
+
+    @Test("Scoped headroom drops 25%→18% — warned20, silent notification labeled with display name")
+    @MainActor
+    func scopedWarningCrossing() async {
+        let spy = SpyNotificationCenter()
+        let service = NotificationService(notificationCenter: spy)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 75))
+        #expect(service.scopedThresholdState == .aboveWarning)
+        #expect(spy.addedRequests.isEmpty)
+
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 82))
+        #expect(service.scopedThresholdState == .warned20)
+        #expect(spy.addedRequests.count == 1)
+        #expect(spy.addedRequests[0].identifier == "headroom-warning-scoped")
+        #expect(spy.addedRequests[0].content.title == "cc-hdrm")
+        #expect(spy.addedRequests[0].content.body.contains("Claude Fable headroom at 18%"))
+        #expect(spy.addedRequests[0].content.body.contains("resets in"))
+        #expect(spy.addedRequests[0].content.body.contains("(at "))
+        #expect(spy.addedRequests[0].content.sound == nil)
+    }
+
+    @Test("Scoped headroom drops 18%→4% from warned20 — warned5, critical notification with sound")
+    @MainActor
+    func scopedCriticalCrossing() async {
+        let spy = SpyNotificationCenter()
+        let service = NotificationService(notificationCenter: spy)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 82))
+        #expect(service.scopedThresholdState == .warned20)
+        #expect(spy.addedRequests.count == 1)
+
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 96))
+        #expect(service.scopedThresholdState == .warned5)
+        #expect(spy.addedRequests.count == 2)
+        #expect(spy.addedRequests[1].identifier == "headroom-critical-scoped")
+        #expect(spy.addedRequests[1].content.body.contains("Claude Fable headroom at 4%"))
+        #expect(spy.addedRequests[1].content.sound == .default)
+    }
+
+    @Test("Scoped headroom drops 30%→3% directly — only critical fires")
+    @MainActor
+    func scopedDirectToCritical() async {
+        let spy = SpyNotificationCenter()
+        let service = NotificationService(notificationCenter: spy)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 70))
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 97))
+        #expect(service.scopedThresholdState == .warned5)
+        #expect(spy.addedRequests.count == 1)
+        #expect(spy.addedRequests[0].identifier == "headroom-critical-scoped")
+    }
+
+    @Test("Scoped headroom stays below critical — no repeat critical notification")
+    @MainActor
+    func scopedNoRepeatCritical() async {
+        let spy = SpyNotificationCenter()
+        let service = NotificationService(notificationCenter: spy)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 97))
+        #expect(spy.addedRequests.count == 1) // critical
+
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 98))
+        #expect(spy.addedRequests.count == 1) // no additional
+        #expect(service.scopedThresholdState == .warned5)
+    }
+
+    @Test("Scoped recovery from warned5 re-arms silently; later drop below warning fires warning again")
+    @MainActor
+    func scopedRecoveryFromWarned5() async {
+        let spy = SpyNotificationCenter()
+        let service = NotificationService(notificationCenter: spy)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 97))
+        #expect(service.scopedThresholdState == .warned5)
+        #expect(spy.addedRequests.count == 1) // critical
+
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 75))
+        #expect(service.scopedThresholdState == .aboveWarning)
+        #expect(spy.addedRequests.count == 1) // re-arm is silent
+
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 85))
+        #expect(service.scopedThresholdState == .warned20)
+        #expect(spy.addedRequests.count == 2)
+        #expect(spy.addedRequests[1].identifier == "headroom-warning-scoped")
+        #expect(spy.addedRequests[1].content.sound == nil)
+    }
+
+    @Test("Scoped headroom stays at 15% after warning — no repeat notification")
+    @MainActor
+    func scopedNoRepeatWarning() async {
+        let spy = SpyNotificationCenter()
+        let service = NotificationService(notificationCenter: spy)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 85))
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 85))
+        #expect(service.scopedThresholdState == .warned20)
+        #expect(spy.addedRequests.count == 1)
+    }
+
+    @Test("Scoped recovery 15%→22% re-arms silently; next drop below 20% fires again")
+    @MainActor
+    func scopedRecoveryRearms() async {
+        let spy = SpyNotificationCenter()
+        let service = NotificationService(notificationCenter: spy)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 85))
+        #expect(service.scopedThresholdState == .warned20)
+        #expect(spy.addedRequests.count == 1)
+
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 78))
+        #expect(service.scopedThresholdState == .aboveWarning)
+        #expect(spy.addedRequests.count == 1)
+
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 81))
+        #expect(service.scopedThresholdState == .warned20)
+        #expect(spy.addedRequests.count == 2)
+        #expect(spy.addedRequests[1].identifier == "headroom-warning-scoped")
+    }
+
+    @Test("5h crossing leaves scoped state untouched — only 5h notification fires")
+    @MainActor
+    func scopedIndependentOfFiveHour() async {
+        let spy = SpyNotificationCenter()
+        let service = NotificationService(notificationCenter: spy)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        await service.evaluateThresholds(
+            fiveHour: windowState(utilization: 85),
+            sevenDay: nil,
+            scoped: scopedState(utilization: 20) // headroom 80%
+        )
+        #expect(service.fiveHourThresholdState == .warned20)
+        #expect(service.scopedThresholdState == .aboveWarning)
+        #expect(spy.addedRequests.count == 1)
+        #expect(spy.addedRequests[0].identifier == "headroom-warning-5h")
+    }
+
+    @Test("Scoped crossing leaves 5h and 7d states untouched — only scoped notification fires")
+    @MainActor
+    func fiveHourIndependentOfScoped() async {
+        let spy = SpyNotificationCenter()
+        let service = NotificationService(notificationCenter: spy)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        await service.evaluateThresholds(
+            fiveHour: windowState(utilization: 50),
+            sevenDay: windowState(utilization: 50),
+            scoped: scopedState(utilization: 85) // headroom 15%
+        )
+        #expect(service.fiveHourThresholdState == .aboveWarning)
+        #expect(service.sevenDayThresholdState == .aboveWarning)
+        #expect(service.scopedThresholdState == .warned20)
+        #expect(spy.addedRequests.count == 1)
+        #expect(spy.addedRequests[0].identifier == "headroom-warning-scoped")
+    }
+
+    @Test("nil scoped — no evaluation, no state change")
+    @MainActor
+    func scopedNilNoChange() async {
+        let spy = SpyNotificationCenter()
+        let service = NotificationService(notificationCenter: spy)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: nil)
+        #expect(service.scopedThresholdState == .aboveWarning)
+        #expect(spy.addedRequests.isEmpty)
+    }
+
+    @Test("Scoped limit disappears then returns — state retained while nil, recovery re-arms on return")
+    @MainActor
+    func scopedDisappearsThenReturns() async {
+        let spy = SpyNotificationCenter()
+        let service = NotificationService(notificationCenter: spy)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 85))
+        #expect(service.scopedThresholdState == .warned20)
+
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: nil)
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: nil)
+        #expect(service.scopedThresholdState == .warned20)
+
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 50))
+        #expect(service.scopedThresholdState == .aboveWarning)
+        #expect(spy.addedRequests.count == 1)
+    }
+
+    @Test("Blank display name — body uses 'Model' fallback label")
+    @MainActor
+    func scopedBlankDisplayNameFallback() async {
+        let spy = SpyNotificationCenter()
+        let service = NotificationService(notificationCenter: spy)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        await service.evaluateThresholds(
+            fiveHour: nil,
+            sevenDay: nil,
+            scoped: scopedState(utilization: 85, displayName: "  ")
+        )
+        #expect(spy.addedRequests.count == 1)
+        #expect(spy.addedRequests[0].content.body.contains("Claude Model headroom at 15%"))
+    }
+
+    @Test("nil display name — body uses 'Model' fallback label")
+    @MainActor
+    func scopedNilDisplayNameFallback() async {
+        let spy = SpyNotificationCenter()
+        let service = NotificationService(notificationCenter: spy)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        await service.evaluateThresholds(
+            fiveHour: nil,
+            sevenDay: nil,
+            scoped: scopedState(utilization: 85, displayName: nil)
+        )
+        #expect(spy.addedRequests.count == 1)
+        #expect(spy.addedRequests[0].content.body.contains("Claude Model headroom at 15%"))
+    }
+
+    @Test("Scoped crossing with nil resetsAt — body has percentage only, no reset clause")
+    @MainActor
+    func scopedNilResetsAt() async {
+        let spy = SpyNotificationCenter()
+        let service = NotificationService(notificationCenter: spy)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        await service.evaluateThresholds(
+            fiveHour: nil,
+            sevenDay: nil,
+            scoped: scopedState(utilization: 96, resetsAt: nil)
+        )
+        #expect(spy.addedRequests.count == 1)
+        #expect(spy.addedRequests[0].content.body == "Claude Fable headroom at 4%")
+        #expect(!spy.addedRequests[0].content.body.contains("resets in"))
+    }
+
+    @Test("Threshold lowering re-arms scoped state when headroom >= new warning")
+    @MainActor
+    func scopedThresholdChangeRearms() async {
+        let spy = SpyNotificationCenter()
+        let prefs = MockPreferencesManager()
+        let service = NotificationService(notificationCenter: spy, preferencesManager: prefs)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        // Cross below default 20% warning — headroom 15%
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 85))
+        #expect(service.scopedThresholdState == .warned20)
+
+        // Lower thresholds to 10/3 — 15% >= 10% → re-arms
+        prefs.warningThreshold = 10
+        prefs.criticalThreshold = 3
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 85))
+        #expect(service.scopedThresholdState == .aboveWarning)
+    }
+
+    @Test("Threshold raise fires scoped warning when headroom drops below new warning value")
+    @MainActor
+    func scopedThresholdChangeFires() async {
+        let spy = SpyNotificationCenter()
+        let prefs = MockPreferencesManager()
+        prefs.warningThreshold = 10
+        prefs.criticalThreshold = 3
+        let service = NotificationService(notificationCenter: spy, preferencesManager: prefs)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        // Headroom 25% — above 10% warning
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 75))
+        #expect(service.scopedThresholdState == .aboveWarning)
+        #expect(spy.addedRequests.isEmpty)
+
+        // Raise warning to 30% — headroom 25% < 30% → fires
+        prefs.warningThreshold = 30
+        prefs.criticalThreshold = 10
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 75))
+        #expect(service.scopedThresholdState == .warned20)
+        #expect(spy.addedRequests.count == 1)
+        #expect(spy.addedRequests[0].identifier == "headroom-warning-scoped")
+    }
+
+    @Test("reevaluateThresholds() feeds first scoped limit from AppState")
+    @MainActor
+    func reevaluateThresholdsUsesScopedLimit() async {
+        let spy = SpyNotificationCenter()
+        let prefs = MockPreferencesManager()
+        prefs.warningThreshold = 10
+        prefs.criticalThreshold = 3
+        let service = NotificationService(notificationCenter: spy, preferencesManager: prefs)
+        spy.grantAuthorization = true
+        await service.requestAuthorization()
+
+        let appState = AppState()
+        appState.updateScopedLimits([
+            ScopedLimitState(displayName: "Fable", utilization: 75, resetsAt: Date().addingTimeInterval(3600))
+        ])
+        service.appState = appState
+
+        // Headroom 25% above 10% warning — nothing fires
+        await service.reevaluateThresholds()
+        #expect(service.scopedThresholdState == .aboveWarning)
+        #expect(spy.addedRequests.isEmpty)
+
+        // Raise warning to 30% — headroom 25% < 30% → fires on re-evaluation
+        prefs.warningThreshold = 30
+        prefs.criticalThreshold = 10
+        await service.reevaluateThresholds()
+        #expect(service.scopedThresholdState == .warned20)
+        #expect(spy.addedRequests.count == 1)
+        #expect(spy.addedRequests[0].identifier == "headroom-warning-scoped")
+        #expect(spy.addedRequests[0].content.body.contains("Claude Fable headroom at 25%"))
+    }
+
+    @Test("Unauthorized scoped crossing — state transitions, delivery skipped")
+    @MainActor
+    func scopedUnauthorizedStillTransitions() async {
+        let spy = SpyNotificationCenter()
+        let service = NotificationService(notificationCenter: spy)
+        // isAuthorized defaults to false
+
+        await service.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scopedState(utilization: 85))
+        #expect(service.scopedThresholdState == .warned20)
+        #expect(spy.addedRequests.isEmpty)
+    }
+
+    @Test("Scoped label derivation: trimmed display name, 'Model' fallback for nil and blank")
+    @MainActor
+    func scopedWindowLabelDerivation() {
+        #expect(NotificationService.scopedWindowLabel(from: "Fable") == "Fable")
+        #expect(NotificationService.scopedWindowLabel(from: "  Fable  ") == "Fable")
+        #expect(NotificationService.scopedWindowLabel(from: nil) == "Model")
+        #expect(NotificationService.scopedWindowLabel(from: "   ") == "Model")
+    }
+
+    @Test("MockNotificationService records scoped values and exposes scopedThresholdState")
+    @MainActor
+    func mockTracksScopedThresholds() async {
+        let mock = MockNotificationService()
+        #expect(mock.scopedThresholdState == .aboveWarning)
+
+        let scoped = ScopedLimitState(displayName: "Fable", utilization: 63, resetsAt: nil)
+        await mock.evaluateThresholds(fiveHour: nil, sevenDay: nil, scoped: scoped)
+        #expect(mock.evaluateThresholdsCalls.count == 1)
+        #expect(mock.evaluateThresholdsCalls[0].scoped?.displayName == "Fable")
+        #expect(mock.evaluateThresholdsCalls[0].scoped?.utilization == 63)
+    }
 }

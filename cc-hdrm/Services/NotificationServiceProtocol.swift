@@ -19,8 +19,9 @@ protocol NotificationServiceProtocol: Sendable {
     /// Whether the app is currently authorized to post notifications.
     var isAuthorized: Bool { get }
 
-    /// Evaluates headroom thresholds for both windows and fires notifications on crossings.
-    func evaluateThresholds(fiveHour: WindowState?, sevenDay: WindowState?) async
+    /// Evaluates headroom thresholds for both windows and the first model-scoped limit,
+    /// firing notifications on crossings.
+    func evaluateThresholds(fiveHour: WindowState?, sevenDay: WindowState?, scoped: ScopedLimitState?) async
 
     /// Forces immediate re-evaluation of thresholds using current AppState headroom values.
     /// Called when the user changes threshold preferences to provide instant feedback
@@ -31,6 +32,8 @@ protocol NotificationServiceProtocol: Sendable {
     var fiveHourThresholdState: ThresholdState { get }
     /// Current threshold state for 7-day window (read-only, for testing).
     var sevenDayThresholdState: ThresholdState { get }
+    /// Current threshold state for the first model-scoped limit (read-only, for testing).
+    var scopedThresholdState: ThresholdState { get }
 
     /// Evaluates API connectivity and fires outage/recovery notifications.
     /// Called by PollingEngine on each success or failure.

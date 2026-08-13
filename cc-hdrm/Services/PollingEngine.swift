@@ -268,7 +268,7 @@ final class PollingEngine: PollingEngineProtocol {
 
             appState.updateWindows(fiveHour: fiveHourState, sevenDay: sevenDayState)
             appState.updateScopedLimits(scopedLimitStates)
-            await notificationService?.evaluateThresholds(fiveHour: fiveHourState, sevenDay: sevenDayState)
+            await notificationService?.evaluateThresholds(fiveHour: fiveHourState, sevenDay: sevenDayState, scoped: scopedLimitStates.first)
 
             // Evaluate extra usage threshold alerts
             if let alertService = extraUsageAlertService {
