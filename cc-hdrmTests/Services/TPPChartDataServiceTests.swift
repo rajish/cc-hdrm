@@ -165,7 +165,9 @@ struct TPPChartDataServiceTests {
         let storage = MockChartTPPStorage()
         let service = TPPChartDataService(tppStorage: storage)
 
-        let baseDayMs = nowMs - oneDayMs
+        // Anchor at noon yesterday so all 5 hourly points stay in one calendar day
+        let yesterdayNoon = Calendar.current.startOfDay(for: Date().addingTimeInterval(-86_400)).addingTimeInterval(12 * 3_600)
+        let baseDayMs = Int64(yesterdayNoon.timeIntervalSince1970 * 1000)
         let measurements = (0..<5).map { i in
             makeMeasurement(
                 timestamp: baseDayMs + Int64(i) * oneHourMs,

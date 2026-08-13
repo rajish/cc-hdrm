@@ -188,3 +188,33 @@ development_status:
   20-3-tpp-data-model-passive-measurement-engine: done  # Code review passed 2026-03-27
   20-4-tpp-trend-visualization: done  # Code review passed 2026-03-27
   20-5-historical-tpp-backfill: done  # Code review passed 2026-03-27
+
+  # Sprint Change Proposal 2026-08-12 (Fable) — new epic
+  epic-21: backlog  # Fable Model Usage Tracking (Phase 6) — Sprint change proposal 2026-08-12
+  21-1-scoped-limits-parsing-domain-model: backlog
+  21-2-popover-fable-utilization-display: backlog
+  21-3-fable-persistence-analytics-series: backlog
+  21-4-fable-threshold-notifications: backlog
+  21-5-benchmark-default-model-update: backlog
+
+  # Sprint Change Proposal 2026-08-12 (Codex) — Phase 7
+  epic-22: backlog  # Codex Data Pipeline & API Spike — 22.1 is kill gate for Phase 7
+  22-1-codex-api-spike: backlog
+  22-2-codex-credentials-service: backlog
+  22-3-codex-api-client-defensive-parsing: backlog
+  22-4-codex-polling-lane-expiry-handling: backlog
+
+  epic-23: backlog  # Codex Menu Bar & Popover
+  23-1-second-status-item-headroom-display: backlog
+  23-2-codex-popover-panel: backlog
+  23-3-codex-error-status-states: backlog
+  23-4-codex-slope-indicators: backlog
+
+  epic-24: backlog  # Codex Notifications & Settings
+  24-1-codex-threshold-notifications: backlog
+  24-2-codex-settings-integration: backlog
+
+  epic-25: backlog  # Codex History & Analytics
+  25-1-provider-dimension-schema-migration: backlog
+  25-2-codex-poll-persistence-rollups: backlog
+  25-3-analytics-provider-integration: backlog
