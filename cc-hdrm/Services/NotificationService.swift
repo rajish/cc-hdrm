@@ -6,6 +6,7 @@ final class NotificationService: NotificationServiceProtocol {
     private(set) var isAuthorized: Bool = false
     private(set) var fiveHourThresholdState: ThresholdState = .aboveWarning
     private(set) var sevenDayThresholdState: ThresholdState = .aboveWarning
+    private(set) var scopedThresholdState: ThresholdState = .aboveWarning
     private let notificationCenter: any NotificationCenterProtocol
     private let preferencesManager: any PreferencesManagerProtocol
 
@@ -48,10 +49,10 @@ final class NotificationService: NotificationServiceProtocol {
             return
         }
         Self.logger.info("Re-evaluating thresholds after preference change")
-        await evaluateThresholds(fiveHour: appState.fiveHour, sevenDay: appState.sevenDay)
+        await evaluateThresholds(fiveHour: appState.fiveHour, sevenDay: appState.sevenDay, scoped: appState.scopedLimits.first)
     }
 
-    func evaluateThresholds(fiveHour: WindowState?, sevenDay: WindowState?) async {
+    func evaluateThresholds(fiveHour: WindowState?, sevenDay: WindowState?, scoped: ScopedLimitState? = nil) async {
         let currentWarning = preferencesManager.warningThreshold
         let currentCritical = preferencesManager.criticalThreshold
 
@@ -73,6 +74,13 @@ final class NotificationService: NotificationServiceProtocol {
                     sevenDayThresholdState = .aboveWarning
                 }
             }
+            if let scoped {
+                let headroom = 100.0 - scoped.utilization
+                if headroom >= currentWarning && (scopedThresholdState == .warned20 || scopedThresholdState == .warned5) {
+                    Self.logger.info("scoped re-arming: headroom \(headroom, format: .fixed(precision: 1))% >= new warning \(currentWarning)%")
+                    scopedThresholdState = .aboveWarning
+                }
+            }
 
             lastWarningThreshold = currentWarning
             lastCriticalThreshold = currentCritical
@@ -91,10 +99,10 @@ final class NotificationService: NotificationServiceProtocol {
                 fiveHourThresholdState = newState
             }
             if shouldFireWarning {
-                await sendNotification(window: "5h", headroom: Int(headroom.rounded()), resetsAt: fiveHour.resetsAt)
+                await sendNotification(window: "5h", bodyPrefix: "", headroom: Int(headroom.rounded()), resetsAt: fiveHour.resetsAt)
             }
             if shouldFireCritical {
-                await sendCriticalNotification(window: "5h", headroom: Int(headroom.rounded()), resetsAt: fiveHour.resetsAt)
+                await sendCriticalNotification(window: "5h", bodyPrefix: "", headroom: Int(headroom.rounded()), resetsAt: fiveHour.resetsAt)
             }
         }
 
@@ -111,12 +119,40 @@ final class NotificationService: NotificationServiceProtocol {
                 sevenDayThresholdState = newState
             }
             if shouldFireWarning {
-                await sendNotification(window: "7d", headroom: Int(headroom.rounded()), resetsAt: sevenDay.resetsAt)
+                await sendNotification(window: "7d", bodyPrefix: "7-day ", headroom: Int(headroom.rounded()), resetsAt: sevenDay.resetsAt)
             }
             if shouldFireCritical {
-                await sendCriticalNotification(window: "7d", headroom: Int(headroom.rounded()), resetsAt: sevenDay.resetsAt)
+                await sendCriticalNotification(window: "7d", bodyPrefix: "7-day ", headroom: Int(headroom.rounded()), resetsAt: sevenDay.resetsAt)
             }
         }
+
+        if let scoped {
+            let headroom = 100.0 - scoped.utilization
+            let (newState, shouldFireWarning, shouldFireCritical) = evaluateWindow(
+                currentState: scopedThresholdState,
+                headroom: headroom,
+                warningThreshold: currentWarning,
+                criticalThreshold: currentCritical
+            )
+            if newState != scopedThresholdState {
+                Self.logger.info("scoped threshold: \(self.scopedThresholdState.rawValue, privacy: .public) → \(newState.rawValue, privacy: .public) (headroom \(headroom, format: .fixed(precision: 1))%)")
+                scopedThresholdState = newState
+            }
+            let bodyPrefix = "\(Self.scopedWindowLabel(from: scoped.displayName)) "
+            if shouldFireWarning {
+                await sendNotification(window: "scoped", bodyPrefix: bodyPrefix, headroom: Int(headroom.rounded()), resetsAt: scoped.resetsAt)
+            }
+            if shouldFireCritical {
+                await sendCriticalNotification(window: "scoped", bodyPrefix: bodyPrefix, headroom: Int(headroom.rounded()), resetsAt: scoped.resetsAt)
+            }
+        }
+    }
+
+    /// Body label for the scoped window: trimmed API display name, generic fallback when nil or blank.
+    /// Same derivation as `ScopedLimitGaugeSection.label(for:)`.
+    static func scopedWindowLabel(from displayName: String?) -> String {
+        let trimmed = displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? ScopedLimitGaugeSection.fallbackLabel : trimmed
     }
 
     /// Evaluates a single window's threshold state transition.
@@ -156,11 +192,15 @@ final class NotificationService: NotificationServiceProtocol {
     // MARK: - Notification Delivery
 
     /// Shared delivery method for both warning and critical notifications.
+    /// - `window`: fixed identifier token (`"5h"`, `"7d"`, `"scoped"`) — never a display name.
+    /// - `bodyPrefix`: window label inserted into the body (`""`, `"7-day "`, or the scoped
+    ///   model label plus trailing space).
     /// - `sound`: `.default` for critical (5%), `nil` for warning (20%).
     /// - `identifierPrefix`: `"headroom-warning"` or `"headroom-critical"` — distinct
     ///   prefixes ensure critical doesn't replace warning in Notification Center.
     private func deliverNotification(
         window: String,
+        bodyPrefix: String,
         headroom: Int,
         resetsAt: Date?,
         sound: UNNotificationSound?,
@@ -174,8 +214,7 @@ final class NotificationService: NotificationServiceProtocol {
         let content = UNMutableNotificationContent()
         content.title = "cc-hdrm"
 
-        let windowPrefix = window == "7d" ? "7-day " : ""
-        var body = "Claude \(windowPrefix)headroom at \(headroom)%"
+        var body = "Claude \(bodyPrefix)headroom at \(headroom)%"
 
         if let resetsAt {
             body += " — resets in \(resetsAt.countdownString()) (\(resetsAt.absoluteTimeString()))"
@@ -195,9 +234,10 @@ final class NotificationService: NotificationServiceProtocol {
         }
     }
 
-    private func sendCriticalNotification(window: String, headroom: Int, resetsAt: Date?) async {
+    private func sendCriticalNotification(window: String, bodyPrefix: String, headroom: Int, resetsAt: Date?) async {
         await deliverNotification(
             window: window,
+            bodyPrefix: bodyPrefix,
             headroom: headroom,
             resetsAt: resetsAt,
             sound: .default,
@@ -205,11 +245,12 @@ final class NotificationService: NotificationServiceProtocol {
         )
     }
 
-    private func sendNotification(window: String, headroom: Int, resetsAt: Date?) async {
+    private func sendNotification(window: String, bodyPrefix: String, headroom: Int, resetsAt: Date?) async {
         // Intentional: reusing the same identifier per window replaces any
         // undismissed notification instead of stacking duplicates.
         await deliverNotification(
             window: window,
+            bodyPrefix: bodyPrefix,
             headroom: headroom,
             resetsAt: resetsAt,
             sound: nil,

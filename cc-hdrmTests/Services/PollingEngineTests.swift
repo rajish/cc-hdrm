@@ -455,6 +455,60 @@ struct PollingEngineTests {
         #expect(appState.scopedLimits[1].utilization == 21.0)
     }
 
+    @Test("poll cycle forwards first scoped limit to evaluateThresholds; nil when absent")
+    @MainActor
+    func scopedLimitForwardedToNotificationService() async {
+        let scopedResponse = UsageResponse(
+            fiveHour: WindowUsage(utilization: 18.0, resetsAt: nil),
+            sevenDay: WindowUsage(utilization: 6.0, resetsAt: nil),
+            limits: [
+                LimitEntry(
+                    kind: "weekly_scoped",
+                    group: nil,
+                    percent: 63.0,
+                    severity: nil,
+                    resetsAt: "2026-08-12T22:00:00.059415+00:00",
+                    isActive: true,
+                    scope: LimitScope(model: ScopedModel(id: "claude-fable-5", displayName: "Fable"), surface: nil)
+                ),
+                LimitEntry(
+                    kind: "weekly_scoped",
+                    group: nil,
+                    percent: 21.0,
+                    severity: nil,
+                    resetsAt: nil,
+                    isActive: true,
+                    scope: LimitScope(model: ScopedModel(id: "claude-opus-4", displayName: "Opus"), surface: nil)
+                )
+            ],
+            extraUsage: nil
+        )
+        let mockKeychain = PEMockKeychainService(credentials: validCredentials())
+        let mockRefresh = PEMockTokenRefreshService()
+        let mockAPI = PEMockAPIClient(results: [.success(scopedResponse), .success(successResponse())])
+        let appState = AppState()
+        let mockNotification = MockNotificationService()
+
+        let engine = PollingEngine(
+            keychainService: mockKeychain,
+            tokenRefreshService: mockRefresh,
+            apiClient: mockAPI,
+            appState: appState,
+            notificationService: mockNotification
+        )
+
+        await engine.performPollCycle()
+
+        #expect(mockNotification.evaluateThresholdsCalls.count == 1)
+        #expect(mockNotification.evaluateThresholdsCalls[0].scoped?.displayName == "Fable")
+        #expect(mockNotification.evaluateThresholdsCalls[0].scoped?.utilization == 63.0)
+
+        await engine.performPollCycle()
+
+        #expect(mockNotification.evaluateThresholdsCalls.count == 2)
+        #expect(mockNotification.evaluateThresholdsCalls[1].scoped == nil, "Poll without scoped limits forwards nil")
+    }
+
     @Test("network error sets connectionStatus to .disconnected with appropriate statusMessage")
     @MainActor
     func networkErrorSetsDisconnected() async {
