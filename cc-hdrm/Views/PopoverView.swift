@@ -14,8 +14,25 @@ struct PopoverView: View {
     var onSignIn: (() -> Void)?
     var onSignOut: (() -> Void)?
 
+    /// "cc-hdrm 1.5.0" — name and version from the bundle, shown in the top-left corner.
+    var appNameAndVersion: String {
+        let info = Bundle.main.infoDictionary
+        let name = info?["CFBundleName"] as? String ?? "cc-hdrm"
+        let version = info?["CFBundleShortVersionString"] as? String ?? ""
+        return version.isEmpty ? name : "\(name) \(version)"
+    }
+
     var body: some View {
         VStack(spacing: 0) {
+            HStack {
+                Text(appNameAndVersion)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                Spacer()
+            }
+            .padding(.horizontal)
+            .padding(.top, 2)
+
             switch appState.oauthState {
             case .unauthenticated:
                 unauthenticatedView
