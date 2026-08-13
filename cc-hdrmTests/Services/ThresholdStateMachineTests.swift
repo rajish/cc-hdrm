@@ -244,7 +244,7 @@ struct ThresholdStateMachineTests {
         #expect(content.body.contains("Claude"))
         #expect(content.body.contains("headroom at 18%"))
         #expect(content.body.contains("resets in"))
-        #expect(content.body.contains("at "))
+        #expect(content.body.contains("(at "))
         #expect(content.sound == nil)
     }
 
@@ -577,7 +577,7 @@ struct ThresholdStateMachineTests {
         #expect(content.body.contains("Claude"))
         #expect(content.body.contains("headroom at 4%"))
         #expect(content.body.contains("resets in"))
-        #expect(content.body.contains("at "))
+        #expect(content.body.contains("(at "))
         #expect(content.sound == .default)
     }
 
