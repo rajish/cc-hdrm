@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-08-13
+
+### Changed
+
+- feat: show app name and version in popover top-left corner (#111)
+- feat: Fable model usage tracking — scoped limits parsing and popover display (Stories 21.1, 21.2) (#109)
+- fix: repair time-of-day flaky daily-average test (#110)
+- chore: upgrade BMAD 6.2.2 -> 6.11.0 — new bmad-build workflow docs, ignore .agents/
+- fix: repair test target — compile errors, stale expectations, MainActor crashes
+
 ## [1.5.0] - 2026-08-12
 
 This release ships the Token Efficiency Ratio feature (Epic 20) and fixes the Homebrew quarantine issue.
@@ -278,7 +288,8 @@ This release ships the Token Efficiency Ratio feature (Epic 20) and fixes the Ho
 - Launch at login via SMAppService
 - Xcode project with XcodeGen configuration
 
-[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/rajish/cc-hdrm/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/rajish/cc-hdrm/compare/v1.4.9...v1.5.0
 [1.4.9]: https://github.com/rajish/cc-hdrm/compare/v1.4.8...v1.4.9
 [1.4.8]: https://github.com/rajish/cc-hdrm/compare/v1.4.7...v1.4.8
