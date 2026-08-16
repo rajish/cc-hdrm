@@ -118,7 +118,7 @@ Rejected findings (noise or out of scope on the story's own authority): gate `cl
 **Commands:**
 - `xcodegen generate` — expected: project regenerated with the new test file.
 - `xcodebuild -project cc-hdrm.xcodeproj -scheme cc-hdrm -destination 'platform=macOS' CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGN_ENTITLEMENTS= build` — expected: BUILD SUCCEEDED
-- `xcodebuild -project cc-hdrm.xcodeproj -scheme cc-hdrm -destination 'platform=macOS' CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGN_ENTITLEMENTS= test` — expected: all tests pass (known flake: `TPPChartDataServiceTests/dailyAverage()` within 4h of local midnight — pre-existing, unrelated)
+- `xcodebuild -project cc-hdrm.xcodeproj -scheme cc-hdrm -destination 'platform=macOS' CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGN_ENTITLEMENTS= test` — expected: all tests pass except the pre-existing date-dependent `SubscriptionPatternDetectorTests/chronicUnderpoweringDetected` failure (fails mid-month; unrelated to this story)
 
 ## Auto Run Result
 
