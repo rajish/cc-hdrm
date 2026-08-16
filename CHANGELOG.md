@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-08-16
+
+### Changed
+
+- docs: README — Fable model usage tracking (release 1.6.0) (#116)
+- test: make chronicUnderpowering fixture date-independent (#115)
+- feat: Fable model usage tracking — benchmark default model update (Story 21.5) (#114)
+- feat: Fable model usage tracking — scoped threshold notifications (Story 21.4) (#113)
+- feat: Fable model usage tracking — persistence and analytics series (Story 21.3) (#112)
+
 ## [1.5.1] - 2026-08-13
 
 ### Changed
@@ -288,7 +298,8 @@ This release ships the Token Efficiency Ratio feature (Epic 20) and fixes the Ho
 - Launch at login via SMAppService
 - Xcode project with XcodeGen configuration
 
-[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.5.1...HEAD
+[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/rajish/cc-hdrm/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/rajish/cc-hdrm/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/rajish/cc-hdrm/compare/v1.4.9...v1.5.0
 [1.4.9]: https://github.com/rajish/cc-hdrm/compare/v1.4.8...v1.4.9
