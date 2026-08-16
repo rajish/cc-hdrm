@@ -27,19 +27,20 @@ Claude Pro and Max subscribers have no passive way to see how much capacity they
 
 - **Ring gauges** — 5-hour and 7-day headroom with animated fill and slope indicators
 - **Reset countdowns** — relative ("resets in 2h 13m") and absolute ("at 4:52 PM")
+- **Model-scoped caps** — separate gauge for per-model weekly limits (such as Claude Fable 5's weekly cap), labeled from the API with its own reset countdown; hidden when your plan reports none
 - **Extra usage tracking** — dollar-based spend vs. limit with color-coded progress bar
 - **24-hour sparkline** — step-area chart of recent usage; click to open analytics
 
 ### Analytics
 
-- **Historical charts** — 24h, 7d, 30d, and All views with step-area and bar chart visualizations
+- **Historical charts** — 24h, 7d, 30d, and All views with step-area and bar chart visualizations, plus a toggleable series for model-scoped caps
 - **Subscription value breakdown** — used vs. unused dollars prorated from your monthly plan
 - **Pattern detection** — identifies overpaying, underpowering, usage decay, and suggests tier changes
 - **Self-benchmarking** — cycle-over-cycle comparison across billing periods
 
 ### Notifications
 
-- **Threshold alerts** — configurable warnings at customizable headroom levels for both 5h and 7d windows
+- **Threshold alerts** — configurable warnings at customizable headroom levels for the 5h, 7d, and model-scoped windows
 - **Extra usage alerts** — notifications at 50%, 75%, 90% of extra usage credit
 - **Smart re-arming** — thresholds reset when headroom recovers
 
@@ -101,7 +102,7 @@ sequenceDiagram
         A->>K: Read OAuth credentials
         K-->>A: Access token + refresh token
         A->>API: GET /api/oauth/usage
-        API-->>A: Quota data (5h, 7d)
+        API-->>A: Quota data (5h, 7d, model-scoped limits)
         A->>A: Compute headroom, slope, update display
         A->>DB: Persist poll snapshot
     end
