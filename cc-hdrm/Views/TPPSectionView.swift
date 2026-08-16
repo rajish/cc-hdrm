@@ -245,7 +245,7 @@ struct TPPSectionView: View {
                 model: selectedModel
             )
 
-            // Default to the most-used model if none selected
+            // Default to the most recently measured model if none selected
             if selectedModel == nil, let firstModel = chartData.availableModels.first {
                 selectedModel = firstModel
             }

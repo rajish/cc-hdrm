@@ -105,14 +105,21 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
             from: 0, to: nowMs, source: nil, model: nil, confidence: nil
         )
 
-        // Count occurrences per model
+        // Most recently measured model first, so the picker (and its default) tracks
+        // what the user is using now rather than what has the most history
+        var latestTimestamp: [String: Int64] = [:]
         var modelCounts: [String: Int] = [:]
         for m in allMeasurements {
+            latestTimestamp[m.model] = max(latestTimestamp[m.model] ?? 0, m.timestamp)
             modelCounts[m.model, default: 0] += 1
         }
 
-        // Sort by count descending
-        return modelCounts.sorted { $0.value > $1.value }.map(\.key)
+        return latestTimestamp.keys.sorted { a, b in
+            if latestTimestamp[a]! != latestTimestamp[b]! {
+                return latestTimestamp[a]! > latestTimestamp[b]!
+            }
+            return modelCounts[a]! > modelCounts[b]!
+        }
     }
 
     // MARK: - Chart Point Conversion
