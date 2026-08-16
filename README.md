@@ -4,6 +4,8 @@ Like iStat Menus for your Claude subscription. A macOS menu bar app that shows y
 
 <p align="center">
   <img src="docs/images/demo.gif" alt="cc-hdrm popover showing ring gauges and extra usage bar, and analytics window with 24h, 7d, 30d, and All time range charts" width="640">
+  <br>
+  <sub>Demo recorded before model-scoped caps — the popover now also shows a gauge for per-model weekly limits such as Claude Fable 5.</sub>
 </p>
 
 ```sh
