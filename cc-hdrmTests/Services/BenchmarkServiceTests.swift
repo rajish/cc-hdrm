@@ -27,11 +27,15 @@ private final class MockBenchmarkPollingEngine: PollingEngineProtocol {
     var stopCallCount = 0
     var restartPollingCallCount = 0
     var performForcedPollCallCount = 0
+    var onForcedPoll: (@MainActor () -> Void)?
 
     func start() async { startCallCount += 1 }
     func stop() { stopCallCount += 1 }
     func restartPolling() { restartPollingCallCount += 1 }
-    func performForcedPoll() async { performForcedPollCallCount += 1 }
+    func performForcedPoll() async {
+        performForcedPollCallCount += 1
+        onForcedPoll?()
+    }
 }
 
 private final class MockTPPStorageService: TPPStorageServiceProtocol, @unchecked Sendable {
@@ -231,6 +235,239 @@ struct BenchmarkServiceTests {
 
         // Verify progress was reported
         #expect(progressUpdates.values.contains(.completed))
+    }
+
+    @Test("runBenchmark forwards claude-fable-5 model ID unchanged in the request body")
+    func runBenchmarkForwardsFableModel() async throws {
+        let appState = AppState()
+        appState.updateOAuthState(.authenticated)
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 50.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 10.0, resetsAt: nil)
+        )
+
+        let responseJSON = """
+        {
+            "id": "msg_test",
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "text", "text": "test output"}],
+            "model": "claude-fable-5",
+            "usage": {
+                "input_tokens": 15,
+                "output_tokens": 500,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0
+            }
+        }
+        """
+        let responseData = responseJSON.data(using: .utf8)!
+        let httpResponse = HTTPURLResponse(
+            url: URL(string: "https://api.anthropic.com/v1/messages")!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        final class RequestCapture: @unchecked Sendable {
+            private let lock = NSLock()
+            private var storage: [URLRequest] = []
+            func append(_ request: URLRequest) {
+                lock.lock()
+                defer { lock.unlock() }
+                storage.append(request)
+            }
+            var requests: [URLRequest] {
+                lock.lock()
+                defer { lock.unlock() }
+                return storage
+            }
+        }
+        let capture = RequestCapture()
+
+        let service = BenchmarkService(
+            appState: appState,
+            keychainService: MockBenchmarkKeychainService(),
+            pollingEngine: MockBenchmarkPollingEngine(),
+            tppStorageService: MockTPPStorageService(),
+            historicalDataService: MockHistoricalDataService(),
+            dataLoader: { request in
+                capture.append(request)
+                return (responseData, httpResponse)
+            }
+        )
+
+        let progressUpdates = ProgressCollector()
+        let results = try await service.runBenchmark(
+            models: ["claude-fable-5"],
+            variants: [.outputHeavy],
+            onProgress: { progress in
+                progressUpdates.append(progress)
+            }
+        )
+
+        let firstRequest = try #require(capture.requests.first)
+        #expect(firstRequest.url == URL(string: "https://api.anthropic.com/v1/messages"))
+        #expect(firstRequest.httpMethod == "POST")
+        #expect(firstRequest.value(forHTTPHeaderField: "anthropic-version") == "2023-06-01")
+        #expect(firstRequest.value(forHTTPHeaderField: "Content-Type") == "application/json")
+        #expect(firstRequest.value(forHTTPHeaderField: "Authorization")?.hasPrefix("Bearer ") == true)
+
+        let bodyData = try #require(firstRequest.httpBody)
+        let body = try #require(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        #expect(body["model"] as? String == "claude-fable-5")
+        #expect(body["max_tokens"] as? Int == 2048)
+        #expect((body["messages"] as? [[String: Any]])?.count == 1)
+
+        for request in capture.requests {
+            let data = try #require(request.httpBody)
+            let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            #expect(json["model"] as? String == "claude-fable-5")
+        }
+
+        #expect(progressUpdates.values.contains(
+            .sendingRequest(model: "claude-fable-5", variant: BenchmarkVariant.outputHeavy.displayName)
+        ))
+        #expect(results.count == 1)
+        #expect(results[0].model == "claude-fable-5")
+        #expect(results[0].variant == .outputHeavy)
+        #expect(progressUpdates.values.contains(.completed))
+    }
+
+    @Test("runBenchmark marks rejected model inconclusive without affecting other models")
+    func runBenchmarkRejectedModelIsolated() async throws {
+        let appState = AppState()
+        appState.updateOAuthState(.authenticated)
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 50.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 10.0, resetsAt: nil)
+        )
+
+        let okJSON = """
+        {
+            "id": "msg_test",
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "text", "text": "test output"}],
+            "model": "claude-sonnet-4-6",
+            "usage": {"input_tokens": 15, "output_tokens": 500}
+        }
+        """
+        let okData = okJSON.data(using: .utf8)!
+        let okResponse = HTTPURLResponse(
+            url: URL(string: "https://api.anthropic.com/v1/messages")!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+        let rejectedData = #"{"type":"error","error":{"type":"not_found_error","message":"model not found"}}"#.data(using: .utf8)!
+        let rejectedResponse = HTTPURLResponse(
+            url: URL(string: "https://api.anthropic.com/v1/messages")!,
+            statusCode: 404,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        let service = BenchmarkService(
+            appState: appState,
+            keychainService: MockBenchmarkKeychainService(),
+            pollingEngine: MockBenchmarkPollingEngine(),
+            tppStorageService: MockTPPStorageService(),
+            historicalDataService: MockHistoricalDataService(),
+            dataLoader: { request in
+                let body = try JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: Any]
+                if body?["model"] as? String == "claude-fable-5" {
+                    return (rejectedData, rejectedResponse)
+                }
+                return (okData, okResponse)
+            }
+        )
+
+        let results = try await service.runBenchmark(
+            models: ["claude-sonnet-4-6", "claude-fable-5"],
+            variants: [.outputHeavy],
+            onProgress: { _ in }
+        )
+
+        #expect(results.count == 2)
+        #expect(results[0].model == "claude-sonnet-4-6")
+        #expect(results[0].retryCount >= 1)
+        #expect(results[1].model == "claude-fable-5")
+        #expect(results[1].inconclusive == true)
+        #expect(results[1].measurement == nil)
+        #expect(results[1].retryCount == 0)
+    }
+
+    @Test("runBenchmark produces a conclusive claude-fable-5 measurement end to end")
+    func runBenchmarkProducesFableMeasurement() async throws {
+        let appState = AppState()
+        appState.updateOAuthState(.authenticated)
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 50.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 10.0, resetsAt: nil)
+        )
+
+        let responseJSON = """
+        {
+            "id": "msg_test",
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "text", "text": "test output"}],
+            "model": "claude-fable-5",
+            "usage": {
+                "input_tokens": 20,
+                "output_tokens": 600,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0
+            }
+        }
+        """
+        let responseData = responseJSON.data(using: .utf8)!
+        let httpResponse = HTTPURLResponse(
+            url: URL(string: "https://api.anthropic.com/v1/messages")!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        let pollingEngine = MockBenchmarkPollingEngine()
+        pollingEngine.onForcedPoll = {
+            appState.updateWindows(
+                fiveHour: WindowState(utilization: 52.0, resetsAt: nil),
+                sevenDay: WindowState(utilization: 10.5, resetsAt: nil)
+            )
+        }
+        let tppStorage = MockTPPStorageService()
+
+        let service = BenchmarkService(
+            appState: appState,
+            keychainService: MockBenchmarkKeychainService(),
+            pollingEngine: pollingEngine,
+            tppStorageService: tppStorage,
+            historicalDataService: MockHistoricalDataService(),
+            dataLoader: { _ in (responseData, httpResponse) }
+        )
+
+        let results = try await service.runBenchmark(
+            models: ["claude-fable-5"],
+            variants: [.outputHeavy],
+            onProgress: { _ in }
+        )
+
+        #expect(results.count == 1)
+        let result = try #require(results.first)
+        #expect(result.model == "claude-fable-5")
+        #expect(result.inconclusive == false)
+        #expect(result.retryCount == 0)
+        #expect(result.measurement != nil)
+        #expect(result.measurement?.model == "claude-fable-5")
+        #expect(result.measurement?.tppFiveHour != nil)
+        #expect(pollingEngine.performForcedPollCallCount == 1)
+        #expect(tppStorage.storedMeasurements.count == 1)
+        #expect(tppStorage.storedMeasurements.first?.model == "claude-fable-5")
     }
 
     @Test("cancel stops the benchmark")

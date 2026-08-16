@@ -195,7 +195,7 @@ development_status:
   21-2-popover-fable-utilization-display: done  # bmad-build-auto 2026-08-13
   21-3-fable-persistence-analytics-series: done  # bmad-build-auto 2026-08-13
   21-4-fable-threshold-notifications: done  # bmad-build-auto 2026-08-13
-  21-5-benchmark-default-model-update: backlog
+  21-5-benchmark-default-model-update: done  # bmad-build-auto 2026-08-16
 
   # Sprint Change Proposal 2026-08-12 (Codex) — Phase 7
   epic-22: backlog  # Codex Data Pipeline & API Spike — 22.1 is kill gate for Phase 7
