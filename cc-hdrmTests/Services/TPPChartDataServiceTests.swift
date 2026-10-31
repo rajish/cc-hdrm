@@ -260,24 +260,36 @@ struct TPPChartDataServiceTests {
 
     // MARK: - Model Discovery
 
-    @Test("Model discovery: mixed models sorted by frequency descending")
+    @Test("Model discovery: models sorted by most recent measurement, newest first")
     func modelDiscovery() async throws {
         let storage = MockChartTPPStorage()
-        // Add 5 sonnet, 3 opus, 1 haiku
-        for i in 0..<5 {
-            storage.measurements.append(makeMeasurement(timestamp: nowMs - Int64(i) * oneHourMs, model: "claude-sonnet-4-6"))
+        // Opus has the most history but nothing recent; fable is newest with a single measurement
+        for i in 0..<20 {
+            storage.measurements.append(makeMeasurement(timestamp: nowMs - Int64(i + 48) * oneHourMs, model: "claude-opus-4-6"))
         }
+        for i in 0..<5 {
+            storage.measurements.append(makeMeasurement(timestamp: nowMs - Int64(i + 2) * oneHourMs, model: "claude-sonnet-4-6"))
+        }
+        storage.measurements.append(makeMeasurement(timestamp: nowMs, model: "claude-fable-5"))
+
+        let service = TPPChartDataService(tppStorage: storage)
+        let models = try await service.availableModels()
+
+        #expect(models == ["claude-fable-5", "claude-sonnet-4-6", "claude-opus-4-6"])
+    }
+
+    @Test("Model discovery: equal recency falls back to measurement count")
+    func modelDiscoveryTieBreak() async throws {
+        let storage = MockChartTPPStorage()
         for i in 0..<3 {
-            storage.measurements.append(makeMeasurement(timestamp: nowMs - Int64(i) * oneHourMs, model: "claude-opus-4-6"))
+            storage.measurements.append(makeMeasurement(timestamp: nowMs - Int64(i) * oneHourMs, model: "claude-sonnet-4-6"))
         }
         storage.measurements.append(makeMeasurement(timestamp: nowMs, model: "claude-haiku-4-5"))
 
         let service = TPPChartDataService(tppStorage: storage)
         let models = try await service.availableModels()
 
-        #expect(models.count == 3)
-        #expect(models.first == "claude-sonnet-4-6")
-        #expect(models.last == "claude-haiku-4-5")
+        #expect(models == ["claude-sonnet-4-6", "claude-haiku-4-5"])
     }
 
     // MARK: - Weighting Discovery

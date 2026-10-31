@@ -1,7 +1,7 @@
 # Epic 26: Weekly-First Monitoring
 
 **Origin:** Sprint change proposal 2026-10-31 (`_bmad-output/planning-artifacts/sprint-change-proposal-2026-10-31.md`)
-**Release:** `[minor]` — one release for the whole epic (1.5.1 → 1.6.0)
+**Release:** `[minor]` — one release for the whole epic (1.6.0 → 1.7.0)
 
 ## Goal
 
@@ -124,7 +124,7 @@ allowance". Hard spend cap; up-front estimate of weekly allowance used,
 confirmed by the user before the run.
 **Gate:** if one run would exceed a set share of the weekly allowance,
 stop and ask the maintainer whether to retire the benchmark instead.
-Unblocks 21.5.
+Keep the Story 21.5 Fable default model working.
 
 ### Story 26.9: Notifications, Tier Credits and Settings Cleanup + Release
 
@@ -142,7 +142,7 @@ Update `README.md` (lines 21, 28, 31, 42, 104) and re-record
 
 26.1 first (fixes the live menu bar). 26.2 → 26.3 (popover uses pace).
 26.4–26.8 in order. 26.9 last: 26.5 and 26.6 must stop using 5h credits
-first, and it carries the release keyword. Story 21.5 waits for 26.8.
+first, and it carries the release keyword.
 Codex epics 22–25 are re-validated before they start: shared components
 are weekly-only after this epic.
 
@@ -155,4 +155,4 @@ are weekly-only after this epic.
 - Headroom breakdown, value $, tier advice and TPP produce non-zero results
   from weekly data.
 - No `DELETE` or `DROP` on historical tables.
-- All tests pass; release 1.6.0 published from the `[minor]` PR.
+- All tests pass; release 1.7.0 published from the `[minor]` PR.
