@@ -14,6 +14,8 @@ author: Boss
 **Author:** Boss
 **Date:** 2026-01-31
 
+> **Revised 2026-10-31:** Claude's 5-hour limit was retired; the weekly window is primary. See `sprint-change-proposal-2026-10-31.md` (Epic 26).
+
 ---
 
 ## Executive Summary
@@ -41,7 +43,7 @@ cc-hdrm is a "fuel gauge for your Claude subscription" — a macOS menu bar util
 ### Key Design Challenges
 
 1. **Context-adaptive display** — The menu bar indicator must show the *right* information at the *right* time. Percentage when there's capacity, countdown when exhausted. This is a state machine, not a static display.
-2. **Dual-window awareness** — Both 5-hour and 7-day limits can independently cause cutoffs. The menu bar has very little space, but both limits need warning coverage — not just the 5-hour window.
+2. **Weekly and model-cap awareness** — The weekly allowance is the only plan-wide limit, and the Fable weekly cap can cause a cutoff on its own. The menu bar has very little space, but both need warning coverage.
 3. **Notification persistence** — macOS notifications disappear after a timeout. If Alex is AFK when an 80% warning fires, he comes back with no trace of it. The app needs a secondary signal (menu bar state change, badge, or repeated notification) so warnings are never silently lost.
 4. **Notification intrusiveness balance** — Alerts overlap browser tabs, buttons, and active UI. Every notification must earn its interruption — too many and Alex disables them, too few and he gets blindsided.
 
@@ -49,7 +51,7 @@ cc-hdrm is a "fuel gauge for your Claude subscription" — a macOS menu bar util
 
 1. **State-driven menu bar icon** — Rather than a static percentage, an icon that morphs based on state (normal → warning → critical → exhausted → recovering) could convey meaning in peripheral vision without requiring reading a number at all.
 2. **"Missed warning" recovery** — If a notification was delivered while Alex was away, the menu bar could show a subtle badge or pulsing state to indicate "something changed while you were gone." This solves the AFK notification gap elegantly.
-3. **7-day limit surfacing** — Since the menu bar primarily shows 5-hour data, the 7-day limit could surface *only when it's the more urgent constraint* — automatically promoting itself when the weekly window is tighter than the session window.
+3. **Pace surfacing** — The weekly percentage moves slowly, so the useful signal is pace: is Alex spending faster than the week allows? The menu bar surfaces this *only when run-out is projected before the weekly reset*.
 
 ## Core User Experience
 
@@ -59,7 +61,7 @@ The core experience of cc-hdrm is **the glance** — a sub-1-second peripheral s
 
 The secondary experience is **the notification** — a self-contained, actionable alert that delivers all the information Alex needs (percentage, threshold, reset countdown) without requiring him to click, expand, or navigate anywhere. If he's AFK, the notification trail and menu bar state changes ensure nothing is silently lost.
 
-The tertiary experience is **the expand** — a rare but important deep-dive into the full picture. When Alex clicks, the panel presents information in strict priority order: 5-hour bar and countdown first, 7-day bar and countdown second.
+The tertiary experience is **the expand** — a rare but important deep-dive into the full picture. When Alex clicks, the panel presents information in strict priority order: weekly gauge, countdown and pace line first, Fable weekly cap second.
 
 ### Platform Strategy
 
@@ -73,7 +75,7 @@ The tertiary experience is **the expand** — a rare but important deep-dive int
 
 1. **Zero-config onboarding** — Launch the app, it finds Keychain credentials, usage appears in the menu bar. No login, no setup wizard, no config file. If it takes more than 5 seconds from launch to data, something is wrong.
 2. **Context-adaptive display** — Menu bar automatically shows percentage when capacity exists, countdown when exhausted. Alex never switches modes or toggles anything.
-3. **Self-contained notifications** — Every notification carries the full context: "Claude usage at 83% — 5h window resets in 47 min." Alex can act on the notification alone without expanding the panel.
+3. **Self-contained notifications** — Every notification carries the full context: "Claude headroom at 17% — weekly allowance resets Thu 09:00." Alex can act on the notification alone without expanding the panel.
 4. **Auto-resume** — After disconnection, token refresh, or window reset, the app silently returns to normal. No "reconnecting..." dialogs, no manual retry buttons.
 
 ### Critical Success Moments
@@ -134,7 +136,7 @@ The tertiary experience is **the expand** — a rare but important deep-dive int
 
 - **Confidence** → Clear, unambiguous color coding with no overlapping meanings. Disconnected state uses a completely different visual language (grey, dash) from usage states (green/yellow/orange/red).
 - **Trust** → Never show stale data without indicating staleness. Popover includes a subtle "updated Xs ago" timestamp. If data is more than 60s old, the menu bar reflects this.
-- **Calm** → Notification copy is factual and actionable: "Claude usage at 83% — 5h window resets in 47 min." No exclamation marks, no "Warning!", no red emoji. Just information.
+- **Calm** → Notification copy is factual and actionable: "Claude headroom at 17% — weekly allowance resets Thu 09:00." No exclamation marks, no "Warning!", no red emoji. Just information.
 - **Neutrality at green** → Menu bar presence at low usage should be as visually quiet as possible. Muted green or even monochrome. The number is small. It should not compete for attention with anything else in the menu bar.
 - **Annoyance on failure** → Disconnected state is clearly a *tool problem*, not a *usage problem*. Show "—" or a grey icon, not "?" which could imply unknown usage.
 
@@ -298,7 +300,7 @@ Alex's mental model is depletion-based: he has a tank of capacity, and it drains
 - macOS notifications for threshold alerts (system-standard)
 
 **Novel but self-evident:**
-- **Context-adaptive display** — percentage ↔ countdown switch based on headroom state. This is novel (most menu bar apps show a static data type) but self-evident because "83%" and "↻ 12m" are visually and semantically distinct. No education required.
+- **Context-adaptive display** — percentage ↔ countdown switch based on headroom state. This is novel (most menu bar apps show a static data type) but self-evident because "83%" and "↻ 3d 4h" are visually and semantically distinct. No education required.
 - **Headroom framing** — Most usage displays show consumption ("42% used"). cc-hdrm inverts this to show remaining capacity ("42% headroom"). This aligns with the fuel gauge mental model and requires no teaching — it's how Alex already thinks.
 
 **No novel patterns requiring education.** Every interaction uses either a standard macOS pattern or a self-evident adaptation of one.
@@ -313,25 +315,25 @@ Alex's mental model is depletion-based: he has a tank of capacity, and it drains
 
 **2. Interaction — The Expand (rare)**
 - Trigger: Alex clicks the menu bar item (conscious, intentional)
-- What he sees: popover with 5h headroom bar + countdown, 7d headroom bar + countdown, subscription tier
-- Information hierarchy: 5h bar → 5h countdown → 7d bar → 7d countdown → tier
+- What he sees: popover with weekly headroom gauge + countdown + pace line, Fable weekly cap section, subscription tier
+- Information hierarchy: weekly gauge → weekly countdown → pace line → Fable cap → tier
 - Duration: 2-5 seconds
 - Outcome: Alex has full context and closes the popover
 
 **3. Feedback — The Notification**
 - Trigger: headroom crosses a threshold (20%, 5%)
-- What Alex sees: macOS notification with full context — "Claude headroom at 17% — 5h window resets in 47 min"
+- What Alex sees: macOS notification with full context — "Claude headroom at 17% — weekly allowance resets in 2d 1h (Thu 09:00)"
 - Escalation: configurable from color-shift-only up to persistent notification (MVP: fixed thresholds)
 - Outcome: Alex makes an informed decision about priorities
 
 **4. State Transition — The Exhaustion**
 - Trigger: headroom reaches 0%
-- What changes: menu bar switches from percentage to countdown ("↻ 12m")
+- What changes: menu bar switches from percentage to the weekly reset countdown ("↻ 3d 4h"), or to the extra-usage $ amount when extra usage is enabled
 - Color: red (or distinct exhausted state)
 - Outcome: Alex knows exactly when capacity returns, waits or works on non-Claude tasks
 
 **5. Recovery — The Reset**
-- Trigger: usage window resets, headroom returns to high value
+- Trigger: weekly window resets, headroom returns to high value
 - What changes: countdown disappears, percentage returns, color shifts to green
 - No fanfare: just quiet return to normalcy
 - Outcome: Alex sees green, resumes work
@@ -389,8 +391,8 @@ Alex's mental model is depletion-based: he has a tank of capacity, and it drains
 - Compact vertical stacking — sections separated by hairline dividers, not space
 
 **Popover structure (top to bottom):**
-1. Two circular gauges side by side: 5h headroom (left), 7d headroom (right)
-2. Each gauge shows: percentage in center, "resets in Xh Ym" below
+1. Weekly headroom gauge (large, primary): percentage in center, "resets in Xd Yh" and pace line below
+2. Fable weekly cap section (small ring) below the weekly gauge
 3. Subscription tier label (small, bottom)
 4. "Updated Xs ago" timestamp (smallest, bottom)
 5. Quit option
@@ -401,22 +403,22 @@ Alex's mental model is depletion-based: he has a tank of capacity, and it drains
 - Ring track = system tertiary (subtle unfilled portion)
 - Percentage number centered inside the ring, bold, headroom-colored
 - Countdown label below each gauge, secondary text color
-- Label above or inside: "5h" / "7d" to identify which window
+- Label above: "7d" for the weekly gauge, model name for the Fable cap
 
 **Menu bar footprint:**
 - Target width: comparable to clock or single iStat module
-- Format: GaugeIcon (semicircular gauge) + percentage or countdown (e.g., "67%" or "↻ 12m")
-- GaugeIcon serves as the primary visual anchor with color reflecting headroom state
-- GaugeIcon corner indicator for 7d awareness:
-  - **Colored dot** when 7d is in caution/warning/critical but NOT promoted — dot uses 7d HeadroomState color
-  - **"7d" label** when 7d IS promoted (remaining 7d budget can't sustain one more 5h cycle) — makes source switch unambiguous
-  - **Empty** when 7d is normal (>40% headroom) or disconnected — quiet when everything is fine
+- Format: GaugeIcon (semicircular gauge) + weekly headroom percentage or weekly reset countdown (e.g., "67%" or "↻ 3d 4h"); the actionable arrow is appended only when run-out is projected before the weekly reset (e.g., "22% ↗")
+- GaugeIcon serves as the primary visual anchor with color reflecting weekly headroom state
+- GaugeIcon corner indicator for the Fable weekly cap:
+  - **Colored dot** when the Fable cap is in caution/warning/critical — dot uses the Fable cap's HeadroomState color
+  - **Empty** when the Fable cap is normal (>40% headroom), absent, or disconnected — quiet when everything is fine
+  - The "7d" promoted label is retired (2026-10-31) — the menu bar always shows weekly
 - Disconnected state: "—" in grey
 
 ### Accessibility Considerations
 
 - **Color is never the only signal** — headroom is always communicated via number + color + font weight. A colorblind user sees the number and feels the weight change.
-- **VoiceOver labels** on all custom views: gauges announce "5-hour headroom: 83%, resets in 2 hours 13 minutes"
+- **VoiceOver labels** on all custom views: gauges announce "Weekly headroom: 83%, resets in 2 days 1 hour"
 - **Contrast ratios** — all headroom colors tested against both light and dark mode menu bar and popover backgrounds, WCAG AA minimum
 - **Dynamic Type** — popover text respects system text size preferences via SwiftUI defaults
 - **Reduced Motion** — if gauge animations are added (fill/deplete transitions), respect `accessibilityReduceMotion` preference
@@ -438,10 +440,10 @@ Additionally, menu bar state comparisons across all headroom levels and notifica
 
 ### Chosen Direction
 
-**Direction 6: Stacked Vertical** with information enhancement.
+**Direction 6: Stacked Vertical** with information enhancement. Revised 2026-10-31: the 5h gauge is removed and the weekly gauge takes the primary slot.
 
-- 5h gauge is larger and positioned first (primary)
-- 7d gauge is smaller and positioned below (secondary)
+- Weekly (7d) gauge is larger and positioned first (primary)
+- Fable weekly cap section is smaller and positioned below (secondary)
 - Narrower popover footprint, taller layout
 - Information hierarchy reinforced through gauge size differentiation
 
@@ -449,44 +451,45 @@ Additionally, menu bar state comparisons across all headroom levels and notifica
 
 Each gauge shows three pieces of time information:
 - Headroom percentage inside the ring
-- Relative countdown below: "resets in 47m"
-- Absolute time below that: "at 4:52 PM"
+- Relative countdown below: "resets in 2d 1h"
+- Absolute time below that: "at Thu 9:00 AM"
 
 This gives Alex both the quick-glance relative time for in-the-moment decisions and the absolute time for planning ("I'll come back after lunch").
 
 ### Design Rationale
 
-1. **Vertical stack reinforces hierarchy** — The 5h window is the most frequently relevant constraint. Making it larger and placing it first means Alex's eye lands on the most important data immediately.
+1. **Vertical stack reinforces hierarchy** — The weekly window is the only plan-wide limit. Making it larger and placing it first means Alex's eye lands on the most important data immediately.
 2. **Narrower popover** — A vertically stacked layout results in a narrower popover that feels more like a native macOS dropdown than a dashboard panel. Less horizontal disruption.
-3. **7d as secondary** — The weekly limit matters but is checked less often. Smaller gauge size communicates "this is here if you need it" without competing for attention with the 5h data.
-4. **Absolute + relative time** — Relative time ("47m") supports split-second decisions. Absolute time ("4:52 PM") supports planning. Together they eliminate all mental math.
+3. **Fable cap as secondary** — The Fable weekly cap matters only for Fable usage. Smaller gauge size communicates "this is here if you need it" without competing with the weekly data.
+4. **Absolute + relative time** — Relative time ("2d 1h") supports split-second decisions. Absolute time ("Thu 9:00 AM") supports planning. Together they eliminate all mental math.
 
 ### Implementation Approach
 
 **Popover structure (top to bottom):**
 
-1. **5h headroom gauge** (large ring, ~96px)
-   - Percentage centered in ring, bold, headroom-colored
-   - "5h" label above
-   - "resets in 47m" below (secondary text)
-   - "at 4:52 PM" below that (tertiary text)
-2. **Hairline divider**
-3. **7d headroom gauge** (small ring, ~56px)
+1. **Weekly headroom gauge** (large ring, ~96px)
    - Percentage centered in ring, bold, headroom-colored
    - "7d" label above
    - "resets in 2d 1h" below (secondary text)
-   - "at Mon 7:05 PM" below that (tertiary text)
+   - "at Thu 9:00 AM" below that (tertiary text)
+   - Pace line below that: "On pace" or "Ahead of pace — runs out ~Thu 14:00"
+2. **Hairline divider**
+3. **Fable weekly cap section** (small ring, ~56px)
+   - Percentage centered in ring, bold, headroom-colored
+   - Model label above
+   - Countdown and absolute reset time below
 4. **Hairline divider**
 5. **Footer row:** subscription tier (left), "updated Xs ago" (center), Quit (right)
 
 **Menu bar display:**
-- Shows Claude sparkle icon + 5h headroom percentage by default (e.g., "✳ 83%")
-- Switches to countdown when exhausted ("✳ ↻ 12m")
-- When 7d is the tighter constraint and in warning/critical, menu bar reflects 7d instead
+- Shows weekly headroom percentage and colour at all times (e.g., "83%")
+- Switches to the weekly reset countdown when exhausted ("↻ 3d 4h"), or to the extra-usage $ amount when extra usage is enabled
+- Appends the actionable arrow only when run-out is projected before the weekly reset
+- No 5h → 7d promotion; the Fable weekly cap shows as the gauge-icon corner dot
 - Color + weight escalate per headroom state
 
 **Notification content:**
-- "Claude headroom at 17% — 5h window resets in 47 min (at 4:52 PM)"
+- "Claude headroom at 17% — weekly allowance resets in 2d 1h (Thu 09:00)"
 - Includes absolute time in notifications too, for AFK scenarios
 
 ## User Journey Flows
@@ -520,7 +523,7 @@ flowchart TD
     S --> T[Begin background polling loop]
 ```
 
-**Success moment:** Alex sees a green percentage appear in his menu bar within 5 seconds of launch. No login screen, no config, no wizard. He clicks it — stacked vertical popover drops down with 5h gauge, 7d gauge, countdowns with absolute times. He exhales.
+**Success moment:** Alex sees a green percentage appear in his menu bar within 5 seconds of launch. No login screen, no config, no wizard. He clicks it — stacked vertical popover drops down with the weekly gauge, its countdown with absolute time, and the pace line. He exhales.
 
 **Key UX decisions:**
 - No credentials → grey "—" with clear instructions, not an error dialog
@@ -539,7 +542,7 @@ flowchart TD
     C --> D[Alex glances at menu bar\nRegisters yellow — notes it peripherally]
     D --> E[Poll cycle: headroom drops to 17%]
     E --> F[Menu bar: '17%' orange, semibold weight]
-    F --> G[macOS notification fires:\n'Claude headroom at 17% —\n5h window resets in 47 min at 4:52 PM']
+    F --> G[macOS notification fires:\n'Claude headroom at 17% —\nweekly allowance resets in 2d 1h at Thu 09:00']
     G --> H{Alex at computer?}
     H -->|Yes| I[Alex reads notification\nDecides to prioritize feature build\nPauses docs rewrite]
     H -->|No - AFK| J[Notification delivered to Notification Center\nMenu bar stays orange/semibold]
@@ -564,13 +567,13 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A[Menu bar: '4%' red, bold] --> B[macOS notification:\n'Claude headroom at 4% —\n5h window resets in 8 min at 3:13 PM']
+    A[Menu bar: '4%' red, bold] --> B[macOS notification:\n'Claude headroom at 4% —\nweekly allowance resets in 1d 3h at Thu 09:00']
     B --> C[Alex wraps up current prompt]
     C --> D[Poll cycle: headroom reaches 0%]
-    D --> E["Menu bar switches: '↻ 8m' red, bold\nContext-adaptive display activates"]
-    E --> F[Popover: 5h gauge empty\n'resets in 8m' / 'at 3:13 PM']
+    D --> E["Menu bar switches: '↻ 1d 3h' red, bold\n(extra-usage $ instead, if enabled)"]
+    E --> F[Popover: weekly gauge empty\n'resets in 1d 3h' / 'at Thu 9:00 AM']
     F --> G[Alex waits or works on non-Claude tasks]
-    G --> H[Poll cycle: usage window resets]
+    G --> H[Poll cycle: weekly window resets]
     H --> I[Headroom returns to high value]
     I --> J["Menu bar: '97%' green, regular weight\nSmooth transition, no fanfare"]
     J --> K[Alex resumes Claude work at full capacity]
@@ -578,35 +581,13 @@ flowchart TD
 
 **Key UX decisions:**
 - 4% = bold red + persistent notification with absolute reset time
-- 0% = menu bar switches from percentage to countdown ("↻ 8m") — self-evident transition
-- Countdown includes absolute time in popover ("at 3:13 PM") so Alex can plan
+- 0% = menu bar switches from percentage to the weekly reset countdown ("↻ 1d 3h") — self-evident transition
+- Countdown includes absolute time in popover ("at Thu 9:00 AM") so Alex can plan
 - Reset = quiet return to green. No "you're back!" celebration. Just normalcy.
 
 ### Journey 4: The Tighter Window — "7-day takes priority"
 
-**Trigger:** 5h window has plenty of headroom, but 7d weekly limit is running low.
-
-```mermaid
-flowchart TD
-    A["Menu bar shows 5h headroom: '72%' green"] --> B[Poll cycle: 7d headroom drops to 35%]
-    B --> C[Gauge icon shows colored dot\nin 7d caution color — yellow]
-    C --> D[Alex notices the dot, glances at popover]
-    D --> E["Sees 7d gauge: 35% yellow\n'6 full 5h quotas left'\nUnderstands 7d is getting tight\nbut 5h limit and slope still visible"]
-    E --> F[Poll cycle: 7d drops further\nremaining_7d_credits / 5h_limit < 1]
-    F --> G{Can 7d sustain one more\nfull 5h cycle?}
-    G -->|No: quotas < 1| H["Menu bar promotes 7d: '8%' red, bold\nGauge icon shows '7d' label\n5h info moves to popover only"]
-    H --> I[macOS notification:\n'Claude 7-day headroom at 8% —\nresets in 2d 1h at Mon 7:05 PM']
-    I --> J[Alex paces work over the weekend]
-    G -->|Yes: quotas >= 1| K["Menu bar keeps showing 5h\nDot warns about 7d state"]
-```
-
-**Key UX decisions:**
-- 7d awareness via colored dot on gauge icon — appears at caution/warning/critical without hiding 5h info
-- 7d promotes to menu bar only when remaining 7d budget can't sustain one more full 5h cycle (credit-math rule: `remaining_7d_credits / 5h_credit_limit < 1`)
-- When promoted, a "7d" label on the gauge icon makes the source switch unambiguous
-- Popover always shows both windows, plus "X full 5h quotas left" in the 7d section for transparency
-- 5h limit, slope indicator, and all 5h data remain visible until 7d is genuinely the binding constraint
-- 7d notifications use "7-day" in the text to distinguish from 5h alerts
+Retired 2026-10-31 — replaced by the always-weekly menu bar (Epic 26, story 26.1). There is no second plan-wide window to promote. The gauge-icon corner dot now shows the Fable weekly cap state, and the pace arrow covers early warning. See State Communication Pattern.
 
 ### Journey 5: Token Expiry — "The tool hiccup"
 
@@ -648,14 +629,17 @@ Failure states (disconnected, token expired, no credentials) all follow the same
 Every failure state includes automatic recovery polling. Alex never needs to manually retry, restart, or reconfigure. The app heals itself when the underlying condition resolves.
 
 **Tighter Constraint Pattern:**
-When 7d remaining budget can't sustain one more full 5h cycle (`remaining_7d_credits / 5h_credit_limit < 1`), the menu bar promotes 7d as the binding constraint. Otherwise, 5h stays primary with a colored dot on the gauge icon providing ambient 7d awareness at caution/warning/critical. The popover always shows both windows plus "X full 5h quotas left" in the 7d section. This ensures 5h info (the primary working context) is visible unless 7d is genuinely binding.
+Retired 2026-10-31 — replaced by the Weekly Pace Pattern below.
+
+**Weekly Pace Pattern:**
+The menu bar always shows weekly headroom. The actionable arrow appears only when run-out is projected before the weekly reset. The Fable weekly cap surfaces as a colored dot on the gauge icon at caution/warning/critical. The popover shows the weekly gauge with countdown and pace line, then the Fable section.
 
 ### Flow Optimization Principles
 
 1. **Zero-step recovery** — Every failure state auto-recovers. Alex never clicks "retry" or restarts the app.
 2. **Single source of truth** — Menu bar, popover, and notifications always show consistent data from the same poll cycle.
-3. **Promote by binding constraint** — The menu bar shows 7d only when it's genuinely the binding constraint (can't fit one more 5h cycle). Otherwise 5h stays primary with a dot for 7d awareness. The popover shows everything.
-4. **Factual notifications** — Every notification contains: what (headroom %), which window (5h/7d), when relative (resets in Xm), when absolute (at X:XX PM).
+3. **Weekly is constant** — The menu bar always shows the weekly window; it never switches source. The Fable cap gets a dot for ambient awareness. The popover shows everything.
+4. **Factual notifications** — Every notification contains: what (headroom %), which window (weekly allowance / Fable), when relative (resets in Xd Yh), when absolute (Thu 09:00).
 5. **AFK resilience** — Warnings are never silently lost. Persistent notifications + menu bar state change ensure Alex knows what happened while away.
 
 ## Component Strategy
@@ -680,17 +664,17 @@ When 7d remaining budget can't sustain one more full 5h cycle (`remaining_7d_cre
 
 **Purpose:** Visualize remaining headroom as a circular ring that depletes clockwise.
 
-**Usage:** Two instances in the popover — large (5h, primary) and small (7d, secondary).
+**Usage:** Large instance for the weekly window (primary) and small instance for the Fable weekly cap (secondary).
 
 **Anatomy:**
 - Ring track (full circle, system tertiary color)
 - Ring fill (partial arc, headroom color token, depletes clockwise from 12 o'clock)
 - Center text (percentage, bold, headroom-colored)
-- Top label ("5h" or "7d", caption size, secondary color)
+- Top label ("7d" or model name, caption size, secondary color)
 
 **Props/Inputs:**
 - `headroomPercentage: Double` (0.0–100.0)
-- `windowLabel: String` ("5h" or "7d")
+- `windowLabel: String` ("7d" or model name)
 - `ringSize: CGFloat` (96px for primary, 56px for secondary)
 - `strokeWidth: CGFloat` (7px for primary, 4px for secondary)
 
@@ -707,7 +691,7 @@ When 7d remaining budget can't sustain one more full 5h cycle (`remaining_7d_cre
 
 **Animation:** Smooth fill transition between poll updates using SwiftUI `.animation(.easeInOut(duration: 0.5))`. Respects `accessibilityReduceMotion` — snaps to new value if reduced motion is enabled.
 
-**Accessibility:** VoiceOver announces "5-hour headroom: 83 percent" on focus. State changes trigger accessibility notifications.
+**Accessibility:** VoiceOver announces "Weekly headroom: 83 percent" on focus. State changes trigger accessibility notifications.
 
 #### MenuBarTextRenderer
 
@@ -717,7 +701,7 @@ When 7d remaining budget can't sustain one more full 5h cycle (`remaining_7d_cre
 
 **Anatomy:**
 - Claude sparkle icon (✳) as prefix — monochrome, matches headroom color
-- Text string (e.g., "83%", "↻ 12m", or "—")
+- Text string (e.g., "83%", "↻ 3d 4h", or "—")
 - Color from headroom color token (applies to both icon and text)
 - Font weight escalates with urgency
 
@@ -733,14 +717,14 @@ When 7d remaining budget can't sustain one more full 5h cycle (`remaining_7d_cre
 | Caution (20-40%) | "✳ 35%"   | `.headroomCaution`   | Medium   |
 | Warning (5-20%)  | "✳ 17%"   | `.headroomWarning`   | Semibold |
 | Critical (< 5%)  | "✳ 4%"    | `.headroomCritical`  | Bold     |
-| Exhausted (0%)   | "✳ ↻ 12m" | `.headroomExhausted` | Bold     |
+| Exhausted (0%)   | "✳ ↻ 3d 4h" | `.headroomExhausted` | Bold     |
 | Disconnected     | "✳ —"     | `.disconnected`      | Regular  |
 
 **Sparkle icon:** The Claude asterisk/sparkle serves as a persistent brand anchor. It ensures Alex can instantly identify cc-hdrm among other menu bar items. The icon is monochrome and shifts color with the headroom state — green sparkle at normal, red sparkle at critical, grey sparkle when disconnected.
 
-**Context-adaptive logic:** Automatically switches between percentage and countdown based on exhaustion state. When 7d can't sustain one more full 5h cycle (`remaining_7d_credits / 5h_credit_limit < 1`), switches to show 7d headroom. GaugeIcon shows "7d" label in corner when promoted, colored dot in 7d state color when 7d is in caution/warning/critical but not promoted.
+**Context-adaptive logic:** Always uses the weekly window. Switches between percentage and the weekly reset countdown based on exhaustion state. When the weekly window is exhausted and extra usage is enabled, shows the extra-usage $ amount instead of the countdown. Appends the actionable arrow only when run-out is projected before the weekly reset (never when exhausted or disconnected). GaugeIcon shows a colored dot in the Fable cap's state color when the Fable weekly cap is in caution/warning/critical. No window promotion, no "7d" label.
 
-**Accessibility:** VoiceOver reads "Claude headroom: 83 percent, normal" or "Claude headroom exhausted, resets in 12 minutes."
+**Accessibility:** VoiceOver reads "Claude weekly headroom: 83 percent, normal" or "Claude weekly headroom exhausted, resets in 3 days 4 hours."
 
 #### CountdownLabel
 
@@ -833,29 +817,31 @@ All five MVP components are required for the first launch. No phasing within MVP
 
 Every headroom state is expressed consistently across all three communication channels. No channel ever contradicts another.
 
-**State → Channel mapping (5h displayed — default):**
+**State → Channel mapping (weekly window — always displayed):**
 
-| State            | Menu Bar Text | Menu Bar Color       | Menu Bar Weight | Gauge Corner          | Popover Gauge | Notification           |
-| ---------------- | ------------- | -------------------- | --------------- | --------------------- | ------------- | ---------------------- |
-| Normal (> 40%)   | "83%"         | `.headroomNormal`    | Regular         | (see 7d rules below)  | Green fill    | None                   |
-| Caution (20-40%) | "35%"         | `.headroomCaution`   | Medium          | (see 7d rules below)  | Yellow fill   | None                   |
-| Warning (5-20%)  | "17%"         | `.headroomWarning`   | Semibold        | (see 7d rules below)  | Orange fill   | Fires once             |
-| Critical (< 5%)  | "4%"          | `.headroomCritical`  | Bold            | (see 7d rules below)  | Red fill      | Fires once, persistent |
-| Exhausted (0%)   | "↻ 12m"       | `.headroomExhausted` | Bold            | (see 7d rules below)  | Empty ring    | None (already warned)  |
-| Disconnected     | "—"           | `.disconnected`      | Regular         | Empty                 | Empty grey    | Fires once             |
-| Token expired    | "—"           | `.disconnected`      | Regular         | Empty                 | Empty grey    | Fires once             |
+| State            | Menu Bar Text | Menu Bar Color       | Menu Bar Weight | Gauge Corner             | Popover Gauge | Notification           |
+| ---------------- | ------------- | -------------------- | --------------- | ------------------------ | ------------- | ---------------------- |
+| Normal (> 40%)   | "83%"         | `.headroomNormal`    | Regular         | (see Fable rules below)  | Green fill    | None                   |
+| Caution (20-40%) | "35%"         | `.headroomCaution`   | Medium          | (see Fable rules below)  | Yellow fill   | None                   |
+| Warning (5-20%)  | "17%"         | `.headroomWarning`   | Semibold        | (see Fable rules below)  | Orange fill   | Fires once             |
+| Critical (< 5%)  | "4%"          | `.headroomCritical`  | Bold            | (see Fable rules below)  | Red fill      | Fires once, persistent |
+| Exhausted (0%)   | "↻ 3d 4h"     | `.headroomExhausted` | Bold            | (see Fable rules below)  | Empty ring    | None (already warned)  |
+| Disconnected     | "—"           | `.disconnected`      | Regular         | Empty                    | Empty grey    | Fires once             |
+| Token expired    | "—"           | `.disconnected`      | Regular         | Empty                    | Empty grey    | Fires once             |
 
-**7d Gauge Corner indicator rules:**
+**Pace arrow:** In any non-exhausted, connected state, the actionable arrow is appended to the menu bar text (e.g., "17% ↗") only when run-out is projected before the weekly reset. **Extra usage:** when the weekly window is exhausted and extra usage is enabled, the menu bar shows the extra-usage $ amount instead of the countdown.
 
-| 7d State              | Promotion Status       | Gauge Corner           |
-| --------------------- | ---------------------- | ---------------------- |
-| Normal (> 40%)        | Not promoted           | Empty (quiet)          |
-| Caution (20-40%)      | Not promoted           | Yellow dot             |
-| Warning (5-20%)       | Not promoted           | Orange dot             |
-| Critical (< 5%)       | Not promoted           | Red dot                |
-| Any (quotas < 1)      | Promoted               | "7d" label             |
+**Fable weekly cap corner indicator rules:**
 
-**7d promotion rule:** 7d takes over the menu bar display only when `remaining_7d_credits / 5h_credit_limit < 1` (can't fit one more full 5h cycle in the remaining 7d budget). This is a credit-math calculation requiring known tier credit limits. On unknown tiers without user override, falls back to percentage comparison (7d headroom < 5h headroom AND 7d in warning/critical).
+| Fable Cap State       | Gauge Corner           |
+| --------------------- | ---------------------- |
+| Normal (> 40%)        | Empty (quiet)          |
+| Caution (20-40%)      | Yellow dot             |
+| Warning (5-20%)       | Orange dot             |
+| Critical (< 5%)       | Red dot                |
+| Absent from response  | Empty                  |
+
+**7d promotion rule:** Retired 2026-10-31 — the menu bar always shows the weekly window. The menu bar number stays the overall weekly headroom even when the Fable cap is tighter; the dot carries the Fable signal.
 
 **Consistency rule:** If the menu bar shows orange, the popover gauge is orange, and if a notification was fired for that state, it said "orange-level" information. All three channels always reflect the same poll cycle data.
 
@@ -878,9 +864,9 @@ Every headroom state is expressed consistently across all three communication ch
 
 #### Transition Feedback
 
-- **Percentage → countdown (exhaustion):** Instant switch on next poll. No transition animation for the text content change — the shift from "4%" to "↻ 8m" should feel like a clear state change, not a gradual morph.
+- **Percentage → countdown (exhaustion):** Instant switch on next poll. No transition animation for the text content change — the shift from "4%" to "↻ 1d 3h" should feel like a clear state change, not a gradual morph.
 - **Countdown → percentage (recovery):** Instant switch. Green color returns immediately. Gauge animates fill from 0% to new value.
-- **5h → 7d promotion (tighter constraint):** Menu bar switches to 7d value on next poll when remaining 7d budget can't sustain one more 5h cycle. GaugeIcon corner shows "7d" label to make the source switch unambiguous. Popover always shows both, so context is one click away. Promotion is preceded by colored dot phase (caution/warning/critical) that provides early ambient warning before full promotion fires.
+- **5h → 7d promotion (tighter constraint):** Retired 2026-10-31 — replaced by the always-weekly menu bar. The Fable cap appears or disappears as the corner dot on the next poll; the pace arrow appears or disappears as the run-out projection crosses the weekly reset.
 
 ### Data Freshness Pattern
 
@@ -904,7 +890,7 @@ Every headroom state is expressed consistently across all three communication ch
 1. **Fire once per threshold crossing.** When headroom drops from above 20% to below 20%, one notification fires. No repeat at 19%, 18%, 17%, etc.
 2. **Reset notification state on recovery.** If headroom rises back above 20% (window reset or reduced usage) and then drops below 20% again, a new notification fires. The threshold is "re-armed."
 3. **Two default thresholds:** 20% headroom (warning) and 5% headroom (critical).
-4. **Both windows independently tracked.** 5h and 7d each have their own threshold state. A 5h warning doesn't suppress a 7d warning.
+4. **Weekly and Fable tracked independently.** The weekly window and the Fable weekly cap each have their own threshold state. A weekly warning doesn't suppress a Fable warning. The 5h threshold state was removed 2026-10-31.
 
 **Threshold state machine per window:**
 
@@ -921,18 +907,18 @@ Every notification follows the same template:
 
 ```
 cc-hdrm
-Claude [window] headroom at [X]% — resets in [relative] (at [absolute])
+Claude [window] headroom at [X]% — [window name] resets in [relative] ([absolute])
 ```
 
 Examples:
-- "Claude headroom at 17% — resets in 47 min (at 4:52 PM)"
-- "Claude 7-day headroom at 18% — resets in 2d 1h (at Mon 7:05 PM)"
+- "Claude headroom at 17% — weekly allowance resets in 2d 1h (Thu 09:00)"
+- "Claude Fable headroom at 18% — resets in 2d 1h (Thu 09:00)"
 - "Claude token expired — run any Claude Code command to refresh."
 
 **Content rules:**
 - Always factual, never emotional
 - Always include relative AND absolute reset time
-- Always specify which window (5h implied by default, "7-day" explicit)
+- Always name the window: "weekly allowance" for the plan-wide window, the model name for a scoped cap
 - Error notifications use the same "cc-hdrm" header but different message format
 
 #### Notification Persistence
@@ -943,7 +929,7 @@ Examples:
 
 #### Phase 2 Configurability
 
-Configurable per window (5h / 7d independently):
+Configurable per window (weekly / Fable independently):
 - Threshold levels (default: 20%, 5%)
 - Notification behavior per threshold: none / standard / persistent
 - Re-notification interval: once per crossing (default) / repeat every N minutes while below threshold
@@ -998,15 +984,15 @@ A user who cannot distinguish colors can still read "17%" in bold and understand
 #### Screen Reader Accessibility (VoiceOver)
 
 **Menu bar item:**
-- VoiceOver announcement: "cc-hdrm: Claude headroom 83 percent, normal"
+- VoiceOver announcement: "cc-hdrm: Claude weekly headroom 83 percent, normal"
 - State changes trigger `NSAccessibility.Notification.valueChanged`
-- Exhausted state: "cc-hdrm: Claude headroom exhausted, resets in 12 minutes"
+- Exhausted state: "cc-hdrm: Claude weekly headroom exhausted, resets in 3 days 4 hours"
 - Disconnected: "cc-hdrm: disconnected, unable to reach Claude API"
 
 **Popover:**
 - All custom views (`HeadroomRingGauge`, `CountdownLabel`, `StatusMessageView`) include accessibility labels
-- Gauge announces: "5-hour headroom: 83 percent, resets in 2 hours 13 minutes, at 4:52 PM"
-- VoiceOver navigation order follows visual hierarchy: 5h gauge → 5h countdown → 7d gauge → 7d countdown → tier → timestamp → gear menu
+- Gauge announces: "Weekly headroom: 83 percent, resets in 2 days 1 hour, at Thursday 9:00 AM"
+- VoiceOver navigation order follows visual hierarchy and starts with weekly: weekly gauge → weekly countdown → pace line → Fable gauge → Fable countdown → tier → timestamp → gear menu
 - Gear menu is focusable and activatable via VoiceOver
 
 **Notifications:**

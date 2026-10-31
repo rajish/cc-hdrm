@@ -14,15 +14,17 @@ author: Boss
 **Author:** Boss
 **Date:** 2026-02-03
 
+> **Revised 2026-10-31:** Claude's 5-hour limit was retired; the weekly window is primary. See `sprint-change-proposal-2026-10-31.md` (Epic 26).
+
 ---
 
 ## Executive Summary
 
 Phase 3 extends cc-hdrm from a real-time fuel gauge into a historical analytics platform. Three interconnected features give Alex visibility not just into *where he stands now*, but *how he got here* and *how fast he's moving*:
 
-1. **Historical Usage Tracking** — Persistent storage of poll data, 24h sparkline in popover, full analytics window
-2. **Underutilised Headroom Analysis** — Three-band breakdown showing used capacity, 7d-constrained capacity, and true waste
-3. **Usage Slope Indicator** — Discrete burn rate arrows in menu bar and popover
+1. **Historical Usage Tracking** — Persistent storage of poll data, current-weekly-cycle sparkline in popover, full analytics window
+2. **Subscription Value & Headroom Analysis** — Two-band breakdown showing used and unused weekly capacity per weekly cycle
+3. **Weekly Pace** (replaces the Usage Slope Indicator) — Pace versus the elapsed share of the week, with a run-out projection in the popover and an arrow in the menu bar
 
 These features preserve cc-hdrm's core identity as invisible infrastructure while adding depth for users who want to understand their usage patterns.
 
@@ -37,96 +39,78 @@ From the Phase 1 UX spec, these principles remain sacred:
 
 ### New Principle for Phase 3
 
-- **Honest data, no predictions** — Show truthful historical data and current burn rate. Never pretend to predict the future.
+- **Honest data, no predictions** — Show truthful historical data and current pace. Never pretend to predict the future. Revised 2026-10-31: the one exception is the weekly run-out projection — a straight-line average since the weekly reset, shown only when it falls before the reset.
 
 ---
 
-## Feature 1: Usage Slope Indicator
+## Feature 1: Weekly Pace (replaces Usage Slope Indicator)
 
 ### Problem
 
-Alex knows *where* he stands (78% utilization) but not *how fast* he's burning capacity. Is this a steady cruise or a steep climb toward the wall?
+Alex knows *where* he stands (58% weekly utilization) but not whether that is fast or slow for this point in the week. Will the allowance last until the weekly reset?
 
 ### Solution
 
-A discrete 4-level slope indicator showing burn rate, displayed contextually in the menu bar and always in the popover.
+Revised 2026-10-31: weekly pace replaces the 4-level slope indicator. Pace compares usage with the share of the week elapsed. The popover always shows a pace line. The menu bar shows an arrow only when run-out is projected before the weekly reset.
 
 ### Slope Levels
 
-| Level       | Arrow | Meaning                  | Typical Scenario                          |
-| ----------- | ----- | ------------------------ | ----------------------------------------- |
-| **Cooling** | ↘     | Utilization decreasing   | Rolling window moving past older usage    |
-| **Flat**    | →     | No meaningful change     | Idle, between sessions                    |
-| **Rising**  | ↗     | Moderate consumption     | One active session, normal pace           |
-| **Steep**   | ⬆     | Heavy consumption        | Multiple sessions or intense conversation |
+Retired 2026-10-31 — replaced by the two pace states below ("On pace" / "Ahead of pace").
 
 ### Calculation
 
-- Sample last 10-15 minutes of poll data
-- Compute average rate of change, **normalized to credit terms**:
-  - **5h window:** rate = Δ(5h_util%) / Δtime — unchanged, 5h is the reference scale
-  - **7d window:** rate = Δ(7d_util%) × (7d_credit_limit / 5h_credit_limit) / Δtime — normalization factor compensates for the ~12.6x larger 7d pool, making the same underlying token consumption produce the same slope reading regardless of which window is displayed
-- Map normalized rate to discrete levels:
+Uses only `seven_day.utilization` and `seven_day.resets_at`:
 
-| Rate (normalized % / min) | Level   |
-| ------------------------- | ------- |
-| < -0.5                    | Cooling |
-| -0.5 to 0.3               | Flat    |
-| 0.3 to 1.5                | Rising  |
-| > 1.5                     | Steep   |
+- `weekStart = resetsAt − 7 days`
+- `elapsed = clamp((now − weekStart) / 7 days, 0…1)`
+- `paceDelta = utilization − elapsed × 100` (positive = ahead of even spending)
+- Projected run-out: `rate = utilization / (now − weekStart)`; `runOut = now + (100 − utilization) / rate`
+- Run-out is shown only when `runOut < resetsAt` **and** at least ~4 hours of the week have passed
 
-**Credit normalization rationale:** Without normalization, the 7d window's percentage moves ~12.6x slower than 5h for the same token burn rate, causing 7d slope to read "flat" almost always. By expressing the rate as a fraction of the 5h credit limit, both windows use the same thresholds meaningfully. Example: a 0.08%/min raw 7d rate × 12.63 normalization factor = 1.01%/min normalized → "rising" (correct).
-
-**Fallback:** On unknown tiers without user-configured credit limits, slope falls back to raw percentage-based calculation (7d slope remains less sensitive but functional).
-
-Threshold values will require tuning with real usage data.
+**Known ceiling:** average-since-reset projection is pessimistic after a heavy first day. Upgrade path: blend with a recent-window rate.
 
 ### Menu Bar Display: Escalation-Only
 
-**Design decision:** The slope arrow appears in the menu bar **only** at Rising (↗) and Steep (⬆). At Flat and Cooling, it's hidden.
+**Design decision:** The existing actionable arrow appears in the menu bar **only** when run-out is projected before the weekly reset. Otherwise it's hidden.
 
-**Rationale:** This preserves the compact footprint principle from Phase 1. During the 80% of time when things are calm, the menu bar stays minimal. The arrow earns its pixels only when the burn rate is actionable information.
+**Rationale:** This preserves the compact footprint principle from Phase 1. During the 80% of time when things are calm, the menu bar stays minimal. The arrow earns its pixels only when pace is actionable information.
 
-| State                    | Menu Bar Display | Width     |
-| ------------------------ | ---------------- | --------- |
-| Normal, Flat/Cooling     | `✳ 83%`          | ~5 chars  |
-| Normal, Rising           | `✳ 78% ↗`        | ~7 chars  |
-| Normal, Steep            | `✳ 65% ⬆`        | ~7 chars  |
-| Warning, Rising          | `✳ 17% ↗`        | ~7 chars  |
-| Exhausted, any slope     | `✳ ↻ 12m`        | ~6 chars  |
-| Disconnected             | `✳ —`            | ~3 chars  |
+| State                                | Menu Bar Display | Width     |
+| ------------------------------------ | ---------------- | --------- |
+| Normal, no run-out before reset      | `✳ 83%`          | ~5 chars  |
+| Normal, run-out before reset         | `✳ 58% ↗`        | ~7 chars  |
+| Warning, run-out before reset        | `✳ 17% ↗`        | ~7 chars  |
+| Exhausted                            | `✳ ↻ 3d 4h`      | ~8 chars  |
+| Disconnected                         | `✳ —`            | ~3 chars  |
 
 ### Popover Display: Always Visible
 
-Both gauges in the popover always show their slope indicator, regardless of level. The 7d gauge section additionally shows how many full 5h quotas fit in the remaining 7d budget:
+The weekly gauge (large, primary) always shows a pace line below its countdown. The Fable section sits below the weekly gauge:
 
 ```
-┌──────────────────────┐
-│    ◯ 5h gauge        │
-│     78% ↗            │  ← slope always visible
-│  resets in 1h 12m    │
-│  at 5:17 PM          │
-├──────────────────────┤
-│    ◯ 7d gauge        │
-│     42% →            │  ← even flat is shown (credit-normalized)
-│  resets in 2d 1h     │
-│  at Mon 7:05 PM      │
-│  6 full 5h quotas left│  ← quotas remaining (always visible)
-└──────────────────────┘
+┌──────────────────────────────┐
+│    ◯ 7d gauge                │
+│     42%                      │
+│  resets in 2d 1h             │
+│  at Thu 9:00 AM              │
+│  Ahead of pace — runs out    │  ← pace line (always visible)
+│  ~Thu 14:00                  │
+├──────────────────────────────┤
+│    ◯ Fable gauge             │
+│  resets in 2d 1h             │
+└──────────────────────────────┘
 ```
 
-**Quotas remaining display:**
-- Calculated as `floor(remaining_7d_credits / 5h_credit_limit)`
-- Always visible in the 7d section when credit limits are known
-- Hidden entirely when credit limits are unavailable (unknown tier, no override)
-- When quotas < 1: displayed in 7d headroom color (warning/critical red) — this is the same threshold that triggers 7d promotion to the menu bar
-- Format: verbose "X full 5h quotas left" to avoid ambiguity
-- VoiceOver: announced as part of the 7d gauge reading
+**Pace line copy:**
+- "On pace" — no run-out projected before the weekly reset
+- "Ahead of pace — runs out ~Thu 14:00" — run-out projected before the weekly reset
+
+**Quotas remaining display:** Retired 2026-10-31 — "N full 5h quotas left" referred to a limit that no longer exists.
 
 ### Accessibility
 
-- VoiceOver announces slope as part of gauge reading: "5-hour headroom: 78 percent, rising"
-- Slope is never color-only — the arrow shape conveys meaning independently
+- VoiceOver announces pace as part of the weekly gauge reading: "Weekly headroom: 42 percent, ahead of pace, runs out around Thursday 14:00"
+- Pace is never color-only — the line text and the arrow shape convey meaning independently
 
 ---
 
@@ -138,14 +122,16 @@ cc-hdrm currently discards poll data after display. Alex has no visibility into 
 
 ### Solution
 
-Persist each poll snapshot to SQLite, display a 24h sparkline in the popover, and provide a full analytics window for deep exploration.
+Persist each poll snapshot to SQLite, display a current-weekly-cycle sparkline in the popover, and provide a full analytics window for deep exploration.
 
 ### Data Storage
 
-**Per-poll record:**
+**Per-poll record (revised 2026-10-31):**
 ```
-{ timestamp, 5h_utilization, 5h_resets_at, 7d_utilization, 7d_resets_at }
+{ timestamp, 7d_utilization, 7d_resets_at, scoped caps, extra usage }
 ```
+
+Historical 5h columns are retained and nullable. New polls store NULL there; nothing is deleted.
 
 **Tiered rollup strategy:**
 
@@ -178,35 +164,33 @@ This creates a sawtooth pattern:
     │     ▄▄▄▀▀          │▄▄▄▀
     │▄▄▄▀▀               │
   0%│────────────────────┴────────
-         5h window        reset
+       weekly cycle       reset
 ```
 
 ### Popover Sparkline
 
-A compact 24-hour sparkline appears below the gauges, showing the shape of recent 5h utilization.
+Revised 2026-10-31: a compact sparkline appears below the gauges, showing the current weekly cycle (since the last weekly reset) against an even-pace diagonal.
 
 ```
 ┌──────────────────┐
-│    ◯ 5h gauge    │
-│     78% ↗        │
-│  resets in 1h 12m│
-│  at 5:17 PM      │
-├──────────────────┤
 │    ◯ 7d gauge    │
-│     42% →        │
+│     42%          │
 │  resets in 2d 1h │
-│  at Mon 7:05 PM  │
+│  at Thu 9:00 AM  │
+│  On pace         │
 ├──────────────────┤
-│  24h ▁▂▃▅▇│▁▂▄▅  │  ← sparkline (5h only)
+│    ◯ Fable gauge │
+├──────────────────┤
+│  wk ▁▂▃▅▇  ╱     │  ← sparkline (weekly cycle + even-pace line)
 ├──────────────────┤
 │ Pro │ 12s ago │ ⚙ │
 └──────────────────┘
 ```
 
 **Sparkline design:**
-- Shows 5h utilization only (7d moves too slowly for a 24h sparkline to be meaningful)
+- Shows weekly utilization for the current weekly cycle, from the last weekly reset to now
+- Even-pace diagonal from 0% at the cycle start to 100% at the weekly reset — usage above the line is ahead of pace
 - Step-area style honoring the sawtooth shape
-- Reset boundaries visible as vertical drops to baseline
 - Gaps (cc-hdrm not running) rendered as breaks in the line — never interpolated
 - No axis labels — the shape is the story
 
@@ -246,7 +230,7 @@ The analytics window is cc-hdrm's first real window. This is a significant expan
 │  Usage Analytics                                    ✕   │
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
-│  [24h]  [7d]  [30d]  [All]          5h ● │ 7d ○        │
+│  [24h]  [7d]  [30d]  [All]     7d ● │ Fable ● │ 5h ○    │
 │                                                         │
 │  100%│          │                                       │
 │      │     ▄▄▄▄▄│                                       │
@@ -258,9 +242,9 @@ The analytics window is cc-hdrm's first real window. This is a significant expan
 ├─────────────────────────────────────────────────────────┤
 │  Headroom Breakdown (selected period)                   │
 │  ┌─────────────────────────────────────────────────┐    │
-│  │▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░                       │    │
+│  │▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓                        │    │
 │  └─────────────────────────────────────────────────┘    │
-│  ▓ Used: 52%   ░ 7d-constrained: 12%   □ Unused: 36%   │
+│  ▓ Used: 52%   □ Unused: 48%                            │
 │                                                         │
 │  Context-aware summary (adapts to time range)           │
 │                                                         │
@@ -281,37 +265,34 @@ No custom date picker for MVP — presets cover the primary user stories.
 
 ### Series Toggles
 
-`5h` and `7d` as toggleable overlays on the main chart.
+`7d`, `Fable` and `5h` as toggleable overlays on the main chart (revised 2026-10-31).
 
-- Both visible by default at 24h
-- At 7d+ views, 7d becomes more interesting (slower-moving patterns)
+- Default series: weekly (`7d`) and Fable
+- `5h` is historical only: off by default, and hidden when the selected range has no 5h data
 - Toggle state persists per time range
 
 ### Main Chart: Hybrid Visualization
 
 **24h view — Step Area Chart:**
 - Honors the sawtooth shape: steps only go UP within windows
-- Reset boundaries rendered as distinct vertical lines (dashed, subtle color)
+- Weekly reset boundaries rendered as distinct vertical lines (dashed, subtle color)
 - Gaps rendered as missing segments (no interpolation)
-- Slope intensity shown via background color bands:
-  - Steep periods: subtle warm tint behind the chart
-  - Flat periods: no tint
-  - This reinforces the slope without adding visual clutter
+- Slope background bands: retired 2026-10-31 — no per-point slope colouring
 
 **7d+ views — Bar Chart:**
 - Each bar represents one period (hour for 7d, day for 30d/All)
 - Bar height = **peak utilization** for that period (not average)
 - Rationale: "How close did I get to the wall?" is the question that matters
-- Reset events marked with subtle indicator below affected bars
+- Weekly reset events marked with subtle indicator below affected bars
 
 **Interaction:**
-- Hover tooltip: timestamp, exact utilization %, slope at that moment
+- Hover tooltip: timestamp, exact utilization %
 - For bars: period range, min/avg/peak for that period
 - Scroll to zoom, drag to pan (24h view)
 
 ### Legend & Information
 
-- Legend in top-right showing series colors (5h, 7d)
+- Legend in top-right showing series colors (7d, Fable; 5h only when shown)
 - Hover info provides detailed data points
 - Gap periods labeled on hover: "No data (cc-hdrm not running)"
 
@@ -323,76 +304,54 @@ No custom date picker for MVP — presets cover the primary user stories.
 
 ### The Math
 
-The 5h and 7d limits are both measured in **credits** (the internal unit reverse-engineered from API responses). This makes them directly comparable.
+Revised 2026-10-31: the analysis runs per weekly cycle. With a single plan-wide window there is no second limit to constrain the first, so no credit comparison is needed for the breakdown.
 
-**Credit limits by tier:**
+**Weekly credit limits by tier** (used for value $ and tier advice; the 5h credit column was dropped):
 
-| Tier    | Credits/5h  | Credits/7d   |
-| ------- | ----------- | ------------ |
-| Pro     | 550,000     | 5,000,000    |
-| Max 5×  | 3,300,000   | 41,666,700   |
-| Max 20× | 11,000,000  | 83,333,300   |
+| Tier    | Credits/7d   |
+| ------- | ------------ |
+| Pro     | 5,000,000    |
+| Max 5×  | 41,666,700   |
+| Max 20× | 83,333,300   |
 
-**Calculation at each 5h reset:**
+**Calculation at each weekly reset** (uses the stored `sevenDayUtil` peak for the cycle):
 
 ```
-5h_remaining_credits = (100% - 5h_peak%) × 5h_limit
-7d_remaining_credits = (100% - 7d_util%) × 7d_limit
-effective_headroom_credits = min(5h_remaining_credits, 7d_remaining_credits)
-
-true_waste_% = effective_headroom_credits / 5h_limit × 100%
-7d_constrained_% = (5h_remaining_% - true_waste_%)
-used_% = 5h_peak%
+used_% = 7d_peak%
+unused_% = 100% - 7d_peak%
 ```
 
-**Example (Max 5× user):**
+**Example:** the weekly window peaked at 72% before reset → Used 72%, Unused 28%.
 
-5h peaked at 60%, 7d was at 85%:
-- 5h remaining: 40% × 3,300,000 = 1,320,000 credits
-- 7d remaining: 15% × 41,666,700 = 6,250,005 credits
-- Effective headroom: 1,320,000 credits (5h was the constraint)
-- True waste: 40% (all unused 5h was genuinely available)
-- 7d-constrained: 0%
-
-5h peaked at 60%, 7d was at 97%:
-- 5h remaining: 1,320,000 credits
-- 7d remaining: 3% × 41,666,700 = 1,250,001 credits
-- Effective headroom: 1,250,001 credits (7d was the constraint)
-- True waste: 1,250,001 / 3,300,000 = 37.9%
-- 7d-constrained: 40% - 37.9% = 2.1%
+Older reset events computed from 5h data are still displayed for their period; they are not recomputed.
 
 ### Three-Band Visualization
 
-The headroom breakdown appears in the analytics window below the main chart.
+Revised 2026-10-31 to two bands; the "7d-constrained" band is retired. The headroom breakdown appears in the analytics window below the main chart.
 
 ```
 100% ┌────────────────────────────────────────┐
-     │              □ Unused                  │ ← genuinely available capacity
-     │         (both windows had room)        │
-     ├────────────────────────────────────────┤
-     │           ░ 7d-constrained             │ ← blocked by weekly limit
-     │   (would've hit weekly wall anyway)    │   (NOT unused by choice)
+     │              □ Unused                  │ ← unused weekly capacity
+     │      (left in the week at reset)       │
      ├────────────────────────────────────────┤
      │               ▓ Used                   │ ← actual consumption
-     │         (peak 5h utilization)          │
+     │        (peak weekly utilization)       │
   0% └────────────────────────────────────────┘
 ```
 
 **Visual encoding:**
 - **Used (▓)** — solid fill, headroom color based on peak level
-- **7d-constrained (░)** — hatched/stippled pattern, muted slate blue. Visually reads as "blocked by system" not "you messed up"
-- **Unused (□)** — light/empty, faint fill or outline only. Genuinely available capacity that went unused.
+- **Unused (□)** — light/empty, faint fill or outline only. Weekly capacity that went unused.
 
 **Emotional framing:**
 - Unused capacity → neutral tone, one of many valid conclusions (not inherently "waste")
-- 7d-constrained → "You were right to leave this — pushing harder would've blown your week"
 - High unused + low utilization → context-aware insight may suggest tier review
 
 ### Context-Aware Summary
 
 > **Replaced** fixed summary statistics per sprint change proposal (2026-02-10). Instead of always showing Avg peak / Total waste / 7d-constrained, the summary adapts to the selected time range and shows the single most relevant insight.
 
-Below the three-band bar, a context-aware summary selects the most relevant insight:
+Below the two-band bar, a context-aware summary selects the most relevant insight. Revised 2026-10-31: value $, cycle utilisation and insight copy are computed per weekly cycle.
 
 - **24h:** Simple capacity gauge — "Used $X of $Y today" or utilization percentage if no pricing
 - **7d:** Usage vs. personal average — "X% above/below your typical week"
@@ -405,8 +364,8 @@ Below the three-band bar, a context-aware summary selects the most relevant insi
 
 ### Display Context
 
-- **24h view:** May show only 1-2 resets. Breakdown shows aggregate for visible resets.
-- **7d+ views:** Breakdown aggregates all resets in the selected period. This is where patterns emerge: "I consistently leave 30% on the table on weekends."
+- **24h and 7d views:** Usually contain one weekly reset at most, often none. Breakdown shows the visible reset, or "No reset events in this period".
+- **30d+ views:** Breakdown aggregates all weekly resets in the selected period. This is where patterns emerge: "I consistently leave 30% of my week unused."
 
 ---
 
@@ -420,8 +379,8 @@ Below the three-band bar, a context-aware summary selects the most relevant insi
 1. Alex clicks the sparkline in the popover
 2. Analytics window opens, defaults to 24h view
 3. Alex clicks [7d] to see the weekly pattern
-4. The sawtooth pattern reveals: Monday steep climb, Tuesday-Wednesday moderate, Thursday hits the wall
-5. Headroom breakdown shows: minimal waste Mon-Wed (good), but Thursday's 7d-constrained band is large
+4. The weekly series reveals: Monday steep climb, Tuesday-Wednesday moderate, Thursday hits the wall
+5. Headroom breakdown shows almost no unused weekly capacity, cycle after cycle
 6. Insight: "I'm not wasting capacity — I'm running into my weekly limit by Thursday"
 7. Alex adjusts his weekly pacing strategy
 ```
@@ -430,19 +389,19 @@ Below the three-band bar, a context-aware summary selects the most relevant insi
 
 ### Journey 2: The Burn Rate Warning
 
-**Trigger:** Alex is heads-down coding. The menu bar shows `✳ 45% ⬆` — the steep arrow appeared.
+**Trigger:** Alex is heads-down coding. The menu bar shows `✳ 45% ↗` — the arrow appeared because run-out is now projected before the weekly reset.
 
 ```
-1. Alex notices the ⬆ in peripheral vision
-2. Glances at menu bar: 45% with steep burn rate
-3. Clicks to expand popover: sees both gauges with slopes
-   - 5h: 45% ⬆ (steep)
-   - 7d: 78% ↗ (rising)
-4. The sparkline shows a sharp recent climb
-5. Decision: "I'm burning fast and 7d is getting tight. Let me wrap up this task and pause."
+1. Alex notices the ↗ in peripheral vision
+2. Glances at menu bar: 45% weekly headroom, ahead of pace
+3. Clicks to expand popover: weekly gauge shows
+   - 45%, resets in 3d 2h
+   - "Ahead of pace — runs out ~Thu 14:00"
+4. The sparkline shows usage climbing above the even-pace diagonal
+5. Decision: "At this rate I run out before the reset. Let me wrap up this task and slow down."
 ```
 
-**Emotional outcome:** Informed pacing. The slope indicator gave early warning before color escalation.
+**Emotional outcome:** Informed pacing. The pace indicator gave early warning before color escalation.
 
 ### Journey 3: The Historical Audit
 
@@ -451,8 +410,8 @@ Below the three-band bar, a context-aware summary selects the most relevant insi
 ```
 1. Opens analytics window, selects [30d]
 2. Bar chart shows daily peaks across the month
-3. Pattern emerges: weekdays average 70% peak, weekends 20%
-4. Headroom breakdown: 35% true waste (mostly weekends)
+3. Pattern emerges: the weekly series climbs on weekdays and stays flat at weekends
+4. Headroom breakdown: 35% of weekly capacity unused across the month's cycles
 5. Insight: "I'm leaving a third of my capacity unused. I could do more weekend projects."
 ```
 
@@ -480,35 +439,25 @@ Below the three-band bar, a context-aware summary selects the most relevant insi
 
 #### SlopeIndicator
 
-**Purpose:** Display the discrete slope arrow with appropriate styling.
-
-**Props:**
-- `slope: SlopeLevel` (`.flat`, `.rising`, `.steep`)
-- `size: CGFloat` (matches adjacent text size)
-
-**Rendering:**
-- Flat: → (system secondary color)
-- Rising: ↗ (headroom color)
-- Steep: ⬆ (headroom color, slightly bolder)
-
-**Accessibility:** Announces slope level ("rising", "steep", etc.)
+Retired 2026-10-31 — replaced by the weekly pace line in the weekly gauge section and the menu bar actionable arrow (see Feature 1).
 
 #### Sparkline
 
-**Purpose:** Compact 24h usage visualization, acts as button to launch analytics.
+**Purpose:** Compact current-weekly-cycle usage visualization, acts as button to launch analytics.
 
 **Props:**
-- `data: [UsageDataPoint]` (last 24h of polls)
+- `data: [UsageDataPoint]` (polls since the last weekly reset)
 - `onTap: () -> Void`
 - `isAnalyticsOpen: Bool` (shows indicator dot when true)
 
 **Rendering:**
 - Step-area path honoring sawtooth shape
+- Even-pace diagonal from cycle start (0%) to weekly reset (100%)
 - Gaps as path breaks
 - Subtle hover/press state
 - Optional indicator dot when analytics window is open
 
-**Accessibility:** "24-hour usage chart. Double-tap to open analytics."
+**Accessibility:** "Weekly usage chart. Double-tap to open analytics."
 
 #### UsageChart
 
@@ -517,13 +466,12 @@ Below the three-band bar, a context-aware summary selects the most relevant insi
 **Props:**
 - `data: [UsageDataPoint]` or `[RolledUpDataPoint]`
 - `timeRange: TimeRange` (determines chart type)
-- `visibleSeries: Set<Series>` (5h, 7d toggles)
-- `slopeBands: Bool` (show background color bands)
+- `visibleSeries: Set<Series>` (7d, Fable toggles; 5h historical, off by default)
 
 **Rendering:**
-- 24h: Step-area chart with reset markers
+- 24h: Step-area chart with weekly reset markers
 - 7d+: Bar chart with peak values
-- Slope bands as subtle background shading
+- No slope bands (retired 2026-10-31)
 - Gap regions as hatched/grey
 - Hover tooltip with detailed info
 
@@ -531,19 +479,17 @@ Below the three-band bar, a context-aware summary selects the most relevant insi
 
 #### HeadroomBreakdownBar
 
-**Purpose:** Three-band stacked horizontal bar showing used/7d-constrained/waste.
+**Purpose:** Two-band stacked horizontal bar showing used / unused weekly capacity (revised 2026-10-31; 7d-constrained band retired).
 
 **Props:**
 - `used: Double` (percentage)
-- `sevenDayConstrained: Double` (percentage)
 - `unused: Double` (percentage)
 
 **Rendering:**
 - Used: solid fill, headroom color
-- 7d-constrained: hatched pattern, muted slate blue
 - Unused: light/empty fill
 
-**Accessibility:** "Headroom breakdown: 52% used, 12% constrained by weekly limit, 36% unused capacity."
+**Accessibility:** "Headroom breakdown: 52% used, 48% unused weekly capacity."
 
 #### AnalyticsWindow
 
@@ -561,27 +507,27 @@ Below the three-band bar, a context-aware summary selects the most relevant insi
 
 #### MenuBarTextRenderer (Phase 1 component)
 
-**Modification:** Add optional slope arrow suffix.
+**Modification:** Add optional pace arrow suffix (revised 2026-10-31).
 
 **New logic:**
-- If slope is Rising or Steep AND not exhausted/disconnected: append arrow
+- If run-out is projected before the weekly reset AND not exhausted/disconnected: append the actionable arrow
 - Otherwise: no arrow (same as Phase 1)
 
 #### HeadroomRingGauge (Phase 1 component)
 
-**Modification:** Add slope indicator below percentage.
+**Modification:** Add pace line below the countdown on the weekly gauge (revised 2026-10-31; replaces the slope indicator).
 
 **New layout:**
 ```
     ◯ (ring)
      78%
-      ↗     ← slope indicator added
 resets in...
+On pace     ← pace line added
 ```
 
 #### PopoverView (Phase 1 component)
 
-**Modification:** Add sparkline section between 7d gauge and footer.
+**Modification:** Add sparkline section between the Fable section and footer. Revised 2026-10-31: the 5h gauge section is removed; the weekly gauge is first.
 
 ---
 
@@ -589,14 +535,13 @@ resets in...
 
 ### Slope Communication Pattern
 
-Slope is communicated consistently across all locations:
+Revised 2026-10-31: slope is replaced by weekly pace, communicated consistently across all locations:
 
-| Location        | Flat/Cooling | Rising | Steep |
-| --------------- | ------------ | ------ | ----- |
-| Menu bar        | Hidden       | ↗      | ⬆     |
-| Popover 5h      | →/↘          | ↗      | ⬆     |
-| Popover 7d      | →/↘          | ↗      | ⬆     |
-| Analytics chart | No tint      | Tint   | Tint  |
+| Location        | No run-out before reset | Run-out before reset                  |
+| --------------- | ----------------------- | ------------------------------------- |
+| Menu bar        | Hidden                  | Actionable arrow (↗)                  |
+| Popover weekly  | "On pace"               | "Ahead of pace — runs out ~Thu 14:00" |
+| Analytics chart | No pace colouring       | No pace colouring                     |
 
 ### Gap Rendering Pattern
 
@@ -624,8 +569,10 @@ All timestamps follow the Phase 1 pattern (relative + absolute):
 ### New Accessibility Requirements
 
 #### Slope Indicator
-- Arrow shape conveys meaning (not color-only)
-- VoiceOver announces level name ("rising", "steep")
+Revised 2026-10-31 — now the pace indicator:
+- Pace line is text; the menu bar arrow shape conveys meaning (not color-only)
+- VoiceOver reads the pace line ("ahead of pace, runs out around Thursday 14:00")
+- VoiceOver reading order in the popover starts with the weekly gauge
 
 #### Sparkline
 - Accessible as button with label
@@ -635,7 +582,7 @@ All timestamps follow the Phase 1 pattern (relative + absolute):
 - Full keyboard navigation
 - Time range buttons focusable
 - Chart data available as accessible table
-- Headroom breakdown announces all three values
+- Headroom breakdown announces both values
 
 #### Charts
 - Not relying on color alone — bars have distinct patterns, lines have distinct styles
@@ -648,10 +595,8 @@ All Phase 3 visualizations maintain color independence:
 
 | Element            | Color Signal         | Non-Color Signal            |
 | ------------------ | -------------------- | --------------------------- |
-| Slope arrow        | Headroom color       | Arrow direction shape       |
-| Slope bands        | Warm tint            | Presence/absence of tint    |
+| Pace arrow         | Headroom color       | Arrow direction shape       |
 | Used band          | Headroom color       | Solid fill pattern          |
-| 7d-constrained     | Slate blue           | Hatched pattern             |
 | Unused capacity    | Light/transparent    | Empty/outline pattern       |
 | Gap regions        | Grey                 | Hatched pattern + label     |
 
@@ -661,23 +606,21 @@ All Phase 3 visualizations maintain color independence:
 
 ### Credit Limit Lookup
 
-cc-hdrm reads `rateLimitTier` from Keychain credentials. Map to credit limits:
+cc-hdrm reads `rateLimitTier` from Keychain credentials. Map to weekly credit limits (revised 2026-10-31 — the 5h credit value is dropped; a custom tier needs only the weekly value):
 
 ```swift
 enum RateLimitTier {
-    case pro           // 550K / 5h, 5M / 7d
-    case max5x         // 3.3M / 5h, 41.67M / 7d
-    case max20x        // 11M / 5h, 83.33M / 7d
+    case pro           // 5M / 7d
+    case max5x         // 41.67M / 7d
+    case max20x        // 83.33M / 7d
 }
 ```
 
-If tier is unknown or new, fall back to percentage-only display (no headroom breakdown math).
+If tier is unknown or new, fall back to percentage-only display (no credit-based value math).
 
 ### Slope Calculation Buffering
 
-Slope calculation requires 10-15 minutes of poll history. On fresh launch:
-- First ~10 minutes: slope displays as Flat (insufficient data)
-- After buffer fills: slope calculation activates
+Retired 2026-10-31 — replaced by weekly pace, which needs no poll buffer. It uses only the current `seven_day` utilization and `resets_at`. The run-out projection is withheld until ~4 hours of the week have passed.
 
 ### Analytics Window State
 
@@ -698,16 +641,17 @@ Phase 3 introduces SQLite storage. On first launch after upgrade:
 
 | Decision                          | Choice                                             |
 | --------------------------------- | -------------------------------------------------- |
-| Slope in menu bar                 | Escalation-only (Rising/Steep visible, Flat/Cooling hidden) |
-| Sparkline data                    | 5h only                                            |
+| Slope in menu bar                 | Replaced by pace: arrow only when run-out is projected before the weekly reset (revised 2026-10-31) |
+| Sparkline data                    | Current weekly cycle with even-pace diagonal (revised 2026-10-31) |
+| Default analytics series          | Weekly + Fable; 5h off, hidden when range has no 5h data (revised 2026-10-31) |
 | Sparkline interaction             | Clickable, launches/recalls analytics window       |
 | Analytics window type             | NSPanel (utility), no dock icon                    |
 | Analytics recall                  | Sparkline as toggle                                |
 | 24h chart type                    | Step-area (honors sawtooth shape)                  |
 | 7d+ chart type                    | Bar chart (peak per period)                        |
-| Slope on historical chart         | Background color bands (subtle tint)               |
+| Slope on historical chart         | Retired — no per-point slope colouring (2026-10-31) |
 | Headroom breakdown position       | Below chart, summary for selected period           |
-| Headroom math                     | Uses actual credit limits per tier                 |
+| Headroom math                     | Per weekly cycle, two bands: used / unused (revised 2026-10-31) |
 | Gap handling                      | Honest breaks, never interpolated                  |
 
 ---
@@ -716,10 +660,10 @@ Phase 3 introduces SQLite storage. On first launch after upgrade:
 
 1. **Historical API:** If Anthropic exposes a historical usage endpoint, cc-hdrm could backfill gaps. Research spike recommended.
 
-2. **Slope threshold tuning:** The % per minute thresholds for Rising/Steep need validation with real usage data. May need per-tier adjustment.
+2. **Slope threshold tuning:** Retired 2026-10-31 with the slope indicator. Pace follow-up instead: the average-since-reset projection is pessimistic after a heavy first day; upgrade path is to blend with a recent-window rate.
 
 3. **Export functionality:** Future phase could allow exporting historical data (CSV, JSON) for external analysis.
 
-4. **Notification for slope:** Should a sustained Steep slope trigger a notification? ("You're burning fast — 15 minutes at this rate will hit the wall.") Deferred to avoid prediction territory.
+4. **Notification for pace:** A "will run out before reset" notification is not included (2026-10-31). Add later if wanted.
 
 5. **README acknowledgement:** When Phase 3 ships, add acknowledgement to README for [@she_llac](https://twitter.com/she_llac)'s reverse-engineering of Claude's credit limits ([suspiciously precise floats](https://she-llac.com/claude-limits)). Use Option C: both a dedicated Acknowledgements section AND inline reference in "How It Works" explaining the credit math.

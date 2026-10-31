@@ -112,3 +112,13 @@
     - Story 18.1: Independent OAuth Authentication (done)
     - Story 18.2: OAuth Profile & Tier Resolution (done)
     - Story 18.3: First-Run Onboarding Popup (backlog) — Sprint Change Proposal 2026-03-02
+  - [Epic 26: Weekly-First Monitoring](./epic-26-weekly-first-monitoring.md)
+    - [Story 26.1: Weekly Allowance in the Menu Bar](./epic-26-weekly-first-monitoring.md#story-261-weekly-allowance-in-the-menu-bar)
+    - [Story 26.2: Weekly Pace (Replaces Slope)](./epic-26-weekly-first-monitoring.md#story-262-weekly-pace-replaces-slope)
+    - [Story 26.3: Weekly-First Popover](./epic-26-weekly-first-monitoring.md#story-263-weekly-first-popover)
+    - [Story 26.4: Analytics Charts Weekly-First](./epic-26-weekly-first-monitoring.md#story-264-analytics-charts-weekly-first)
+    - [Story 26.5: Value and Headroom Analysis per Weekly Cycle](./epic-26-weekly-first-monitoring.md#story-265-value-and-headroom-analysis-per-weekly-cycle)
+    - [Story 26.6: Tier Advice and Subscription Patterns on Weekly Data](./epic-26-weekly-first-monitoring.md#story-266-tier-advice-and-subscription-patterns-on-weekly-data)
+    - [Story 26.7: Tokens-per-Percent on Weekly Deltas](./epic-26-weekly-first-monitoring.md#story-267-tokens-per-percent-on-weekly-deltas)
+    - [Story 26.8: Benchmark on Weekly Deltas](./epic-26-weekly-first-monitoring.md#story-268-benchmark-on-weekly-deltas)
+    - [Story 26.9: Notifications, Tier Credits and Settings Cleanup + Release](./epic-26-weekly-first-monitoring.md#story-269-notifications-tier-credits-and-settings-cleanup--release)

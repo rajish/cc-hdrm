@@ -15,9 +15,13 @@ date: '2026-02-03'
 editHistory:
   - date: '2026-02-03'
     changes: 'Added Phase 3 architectural decisions: SQLite persistence, slope calculation, headroom analysis, analytics window'
+  - date: '2026-10-31'
+    changes: 'Weekly-first revision (Epic 26): 5-hour window retired; weekly pace replaces slope; headroom analysis, credit limits, popover and analytics rebased on weekly cycles'
 ---
 
 # Architecture Decision Document
+
+> **Revised 2026-10-31:** Claude's 5-hour limit was retired; the weekly (`seven_day`) window is the single plan-wide window. See `sprint-change-proposal-2026-10-31.md` (Epic 26).
 
 _This document builds collaboratively through step-by-step discovery. Sections are appended as we work through each architectural decision together._
 
@@ -54,7 +58,7 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 - **Error handling / graceful degradation** — every component must handle disconnected, token-expired, and no-credentials states consistently using the same grey "—" visual language.
 - **Accessibility** — VoiceOver labels, color independence (number + color + font weight), keyboard navigation, reduced motion support. Applies to all custom UI components.
 - **Data freshness** — staleness tracking affects menu bar display, popover timestamp, and StatusMessageView visibility. Must be centrally managed.
-- **Dual-window logic** — both 5h and 7d headroom tracked independently with independent threshold state machines. The "tighter constraint" promotion uses credit-math: 7d promotes to menu bar only when `remaining_7d_credits / 5h_credit_limit < 1` (can't fit one more full 5h cycle). GaugeIcon shows colored dot for ambient 7d awareness at caution/warning/critical, "7d" label when promoted. Requires `RateLimitTier` credit limits; falls back to percentage comparison on unknown tiers.
+- **Single weekly window + scoped caps** (revised 2026-10-31) — the weekly (`seven_day`) window is the only plan-wide window. It drives the menu bar text, colour, gauge icon and primary popover gauge. Model-scoped weekly caps (Fable: `limits[]` entries with `kind: "weekly_scoped"`) are tracked alongside it in `scopedLimits`, each with its own threshold state machine. GaugeIcon's corner dot shows the Fable cap state at caution/warning/critical; the menu bar number stays the overall weekly. No `DisplayedWindow`, no promotion rule, no `quotasRemaining`.
 
 ## Starter Template Evaluation
 
@@ -154,8 +158,9 @@ Native macOS desktop application (Swift/SwiftUI) — determined by PRD requireme
                │ observes
 ┌──────────────▼──────────────────────────────┐
 │              AppState (@Observable)           │
-│  fiveHour: WindowState                       │
 │  sevenDay: WindowState                       │
+│  scopedLimits: [ScopedLimitState]            │
+│  pace (weekly pace state)                    │
 │  connectionStatus: ConnectionStatus          │
 │  lastUpdated: Date?                          │
 │  subscriptionTier: String?                   │
@@ -185,7 +190,7 @@ Native macOS desktop application (Swift/SwiftUI) — determined by PRD requireme
 - `anthropic-beta: oauth-2025-04-20`
 - `User-Agent: claude-code/<version>`
 
-**Response parsing:** `Codable` structs with optional/defaulted fields. Unknown keys silently ignored. Missing windows degrade gracefully (hide that gauge in popover).
+**Response parsing:** `Codable` structs with optional/defaulted fields. Unknown keys silently ignored. Missing windows degrade gracefully (hide that gauge in popover). `seven_day` is the plan-wide window; `limits[]` entries with `kind: "weekly_scoped"` carry model-scoped weekly caps (Fable). `five_hour` is still decoded tolerantly (`null` since 2026-10-31) but no component uses it.
 
 **Token refresh endpoint:** `POST https://platform.claude.com/v1/oauth/token`
 
@@ -211,7 +216,7 @@ Native macOS desktop application (Swift/SwiftUI) — determined by PRD requireme
 
 **Framework:** `UserNotifications`
 **Thresholds (MVP):** 20% headroom (warning), 5% headroom (critical) — per UX spec
-**Behavior:** Fire once per threshold crossing, re-arm on recovery above threshold. Both 5h and 7d windows tracked independently.
+**Behavior:** Fire once per threshold crossing, re-arm on recovery above threshold. The weekly window and each model-scoped weekly cap (Fable) are tracked independently. Notification copy names the weekly window ("weekly allowance resets Thu 09:00").
 
 ### Testing Strategy
 
@@ -255,7 +260,7 @@ Native macOS desktop application (Swift/SwiftUI) — determined by PRD requireme
 **Swift Naming Conventions (Apple API Design Guidelines):**
 - Types: `UpperCamelCase` — `HeadroomState`, `KeychainService`, `AppState`
 - Functions/methods: `lowerCamelCase` — `fetchUsage()`, `refreshToken()`
-- Properties/variables: `lowerCamelCase` — `fiveHourUtilization`, `resetTime`
+- Properties/variables: `lowerCamelCase` — `sevenDayUtilization`, `resetTime`
 - Protocols: `UpperCamelCase` with capability suffix — `KeychainServiceProtocol`, `APIClientProtocol`
 - Enum cases: `lowerCamelCase` — `.normal`, `.warning`, `.critical`, `.exhausted`, `.disconnected`
 - Constants: `lowerCamelCase` — `let defaultPollInterval: TimeInterval = 30`
@@ -319,21 +324,21 @@ cc-hdrm/
 ### Format Patterns
 
 **API Response Mapping:**
-- API returns `snake_case` JSON (`five_hour`, `resets_at`) — use `Codable` with `CodingKeys` to map to Swift `lowerCamelCase` properties
+- API returns `snake_case` JSON (`seven_day`, `resets_at`) — use `Codable` with `CodingKeys` to map to Swift `lowerCamelCase` properties
 - All response fields are optional in the Swift model — missing fields result in `nil`, not crashes
 - Example:
 
 ```swift
 struct UsageResponse: Codable {
-    let fiveHour: WindowUsage?
-    let sevenDay: WindowUsage?
-    let sevenDaySonnet: WindowUsage?
+    let fiveHour: WindowUsage?     // decoded tolerantly, unused: null since the 5h limit was retired (2026-10-31)
+    let sevenDay: WindowUsage?     // the plan-wide weekly window
+    let limits: [LimitEntry]?      // model-scoped caps, e.g. Fable with kind "weekly_scoped"
     let extraUsage: ExtraUsage?
 
     enum CodingKeys: String, CodingKey {
         case fiveHour = "five_hour"
         case sevenDay = "seven_day"
-        case sevenDaySonnet = "seven_day_sonnet"
+        case limits
         case extraUsage = "extra_usage"
     }
 }
@@ -367,10 +372,10 @@ struct WindowUsage: Codable {
 
 ```swift
 // Good: method encapsulates update logic
-appState.updateUsage(fiveHour: response.fiveHour, sevenDay: response.sevenDay)
+appState.updateUsage(sevenDay: response.sevenDay)
 
 // Bad: direct property mutation from service
-appState.fiveHour = response.fiveHour
+appState.sevenDay = response.sevenDay
 ```
 
 - `HeadroomState` is computed from `utilization` value, never stored separately — avoids state/display mismatch
@@ -435,8 +440,8 @@ enum AppError: Error {
 - Color is never the only signal — number + color + font weight always triple-encode state
 
 **VoiceOver announcement format:**
-- Gauges: `"5-hour headroom: 83 percent, resets in 2 hours 13 minutes, at 4:52 PM"`
-- Menu bar: `"Claude headroom: 83 percent, normal"`
+- Gauges: `"Weekly headroom: 72 percent, resets in 3 days 4 hours, at Thu 9:00 AM"`
+- Menu bar: `"Claude weekly headroom: 72 percent, normal"`
 - Status: `"Disconnected, unable to reach Claude API"`
 
 ### Enforcement Guidelines
@@ -475,7 +480,7 @@ cc-hdrm/
 │   ├── Models/
 │   │   ├── HeadroomState.swift       # .normal/.caution/.warning/.critical/.exhausted/.disconnected
 │   │   ├── WindowState.swift         # Per-window: utilization, resetsAt, computed headroomState
-│   │   ├── UsageResponse.swift       # Codable API response (five_hour, seven_day, etc.)
+│   │   ├── UsageResponse.swift       # Codable API response (seven_day, limits, extra_usage; five_hour unused)
 │   │   ├── KeychainCredentials.swift # Codable Keychain JSON (claudeAiOauth object)
 │   │   └── AppError.swift            # Unified error enum
 │   ├── Services/
@@ -559,8 +564,10 @@ cc-hdrm/
 - FR6 (Menu bar percentage) → `Views/MenuBarTextRenderer.swift`
 - FR7 (Color-coded indicator) → `Views/MenuBarTextRenderer.swift` + `Extensions/Color+Headroom.swift`
 - FR8 (Click-to-expand) → `Views/PopoverView.swift`
-- FR9-FR10 (Usage bars) → `Views/HeadroomRingGauge.swift`
-- FR11-FR12 (Reset countdowns) → `Views/CountdownLabel.swift` + `Extensions/Date+Formatting.swift`
+- FR9 — Retired 2026-10-31 (5-hour limit removed)
+- FR10 (Weekly primary gauge) → `Views/HeadroomRingGauge.swift`
+- FR11 — Retired 2026-10-31
+- FR12 (Weekly reset countdown) → `Views/CountdownLabel.swift` + `Extensions/Date+Formatting.swift`
 - FR13 (Subscription tier) → `Views/PopoverView.swift`
 
 **FR Category: Background Monitoring (FR14-FR16)**
@@ -787,8 +794,8 @@ cc-hdrm/
 Phase 3 transforms cc-hdrm from a real-time fuel gauge into a historical analytics platform. Three interconnected features require significant architectural expansion:
 
 1. **Historical Usage Tracking** — SQLite persistence, rollup engine, analytics window
-2. **Underutilised Headroom Analysis** — Credit math, waste categorization, three-band visualization
-3. **Usage Slope Indicator** — Rate-of-change calculation, discrete 4-level display
+2. **Underutilised Headroom Analysis** — Used vs unused weekly capacity per weekly cycle, two-band visualization (revised 2026-10-31)
+3. **Usage Slope Indicator** — Retired 2026-10-31 — replaced by the weekly pace indicator (pace versus share of week elapsed, projected run-out)
 
 ### Data Layer Architecture
 
@@ -808,9 +815,9 @@ Phase 3 transforms cc-hdrm from a real-time fuel gauge into a historical analyti
 | ------------------- | ------- | -------------------------- |
 | id                  | INTEGER | PRIMARY KEY                |
 | timestamp           | INTEGER | Unix ms                    |
-| five_hour_util      | REAL    | Percentage 0-100           |
-| five_hour_resets_at | INTEGER | Unix ms, nullable          |
-| seven_day_util      | REAL    | Percentage 0-100           |
+| five_hour_util      | REAL    | Historical, nullable       |
+| five_hour_resets_at | INTEGER | Historical, nullable       |
+| seven_day_util      | REAL    | Percentage 0-100 (weekly)  |
 | seven_day_resets_at | INTEGER | Unix ms, nullable          |
 
 **Table: `usage_rollups`** — Aggregated data at decreasing resolution
@@ -821,27 +828,29 @@ Phase 3 transforms cc-hdrm from a real-time fuel gauge into a historical analyti
 | period_start    | INTEGER | Unix ms                            |
 | period_end      | INTEGER | Unix ms                            |
 | resolution      | TEXT    | '5min' \| 'hourly' \| 'daily'      |
-| five_hour_avg   | REAL    | Average utilization for period     |
-| five_hour_peak  | REAL    | Maximum utilization for period     |
-| five_hour_min   | REAL    | Minimum utilization for period     |
-| seven_day_avg   | REAL    |                                    |
-| seven_day_peak  | REAL    |                                    |
-| seven_day_min   | REAL    |                                    |
-| reset_count     | INTEGER | Number of 5h resets in period      |
-| waste_credits   | REAL    | Calculated true waste              |
+| five_hour_avg   | REAL    | Historical, nullable               |
+| five_hour_peak  | REAL    | Historical, nullable               |
+| five_hour_min   | REAL    | Historical, nullable               |
+| seven_day_avg   | REAL    | Average weekly utilization         |
+| seven_day_peak  | REAL    | Maximum weekly utilization         |
+| seven_day_min   | REAL    | Minimum weekly utilization         |
+| reset_count     | INTEGER | Number of weekly resets in period  |
+| waste_credits   | REAL    | Unused weekly capacity             |
 
-**Table: `reset_events`** — Captures each 5h window reset for headroom analysis
+**Table: `reset_events`** — Captures each weekly (`seven_day`) reset for headroom analysis
 
-| Column              | Type    | Notes                         |
-| ------------------- | ------- | ----------------------------- |
-| id                  | INTEGER | PRIMARY KEY                   |
-| timestamp           | INTEGER | Unix ms                       |
-| five_hour_peak      | REAL    | Peak utilization before reset |
-| seven_day_util      | REAL    | 7d utilization at reset time  |
-| tier                | TEXT    | Rate limit tier string        |
-| used_credits        | REAL    | Actual consumption            |
-| constrained_credits | REAL    | 7d-blocked capacity           |
-| waste_credits       | REAL    | True waste                    |
+| Column              | Type    | Notes                              |
+| ------------------- | ------- | ---------------------------------- |
+| id                  | INTEGER | PRIMARY KEY                        |
+| timestamp           | INTEGER | Unix ms                            |
+| five_hour_peak      | REAL    | Historical, NULL on weekly events  |
+| seven_day_util      | REAL    | Weekly peak before reset           |
+| tier                | TEXT    | Rate limit tier string             |
+| used_credits        | REAL    | Used weekly capacity               |
+| constrained_credits | REAL    | Historical (band retired)          |
+| waste_credits       | REAL    | Unused weekly capacity             |
+
+**Historical 5h data (2026-10-31):** `five_hour_*` columns stay in the schema as nullable historical data. No migration, no deletes. New polls store NULL. Reset events before 2026-10-31 were 5h resets and keep their stored values; they are not recomputed.
 
 **Indexes:**
 - `usage_polls(timestamp)` — for range queries
@@ -889,80 +898,66 @@ protocol HistoricalDataServiceProtocol {
 }
 ```
 
-**Reset Detection:** Primary: compare `resets_at` timestamps between consecutive polls. Fallback: detect large utilization drops (e.g., 80% → 2%) to catch edge cases where `resets_at` is missing.
+**Reset Detection:** Reset events come from weekly (`seven_day`) resets. Primary: compare `seven_day.resets_at` timestamps between consecutive polls. Fallback: detect large utilization drops (e.g., 80% → 2%) to catch edge cases where `resets_at` is missing.
 
 #### SlopeCalculationService
 
-**Responsibility:** Rate-of-change calculation, discrete level mapping.
+Retired 2026-10-31 — replaced by the weekly pace calculation below. `SlopeLevel`, `SlopeIndicator` and the poll ring buffer are removed with it.
 
-```swift
-protocol SlopeCalculationServiceProtocol {
-    func addPoll(_ poll: UsagePoll)
-    func calculateSlope(for window: UsageWindow) -> SlopeLevel
-    func bootstrapFromHistory(_ polls: [UsagePoll])
-}
+#### Weekly Pace Calculation
 
-enum SlopeLevel: String {
-    case flat     // → no meaningful change (includes negative rates from reset boundaries)
-    case rising   // ↗ moderate consumption
-    case steep    // ⬆ heavy consumption
-}
-```
+**Responsibility:** Compare weekly usage with an even spend across the week; project run-out.
 
-**Data Source:** In-memory ring buffer holding last 10-15 minutes of polls (~15-30 data points). On app launch, bootstrap buffer from SQLite via `HistoricalDataService.getRecentPolls(hours: 1)`.
+**Data Source:** `seven_day.utilization` and `seven_day.resets_at` only. No poll buffer, no history bootstrap, no tier credits.
 
 **Calculation:**
-1. Sample buffer for specified window (5h or 7d)
-2. Compute average rate of change:
-   - **5h:** raw percentage rate (% per minute) — unchanged
-   - **7d:** credit-normalized rate = `raw_7d_rate × (7d_credit_limit / 5h_credit_limit)` — compensates for the ~12.6x larger 7d pool so both windows produce meaningful slope readings at the same thresholds. Requires `RateLimitTier` credit limits; falls back to raw percentage on unknown tier.
-3. Map to discrete level:
 
-| Rate (normalized % / min) | Level   |
-| ------------------------- | ------- |
-| < 0.3                     | Flat    |
-| 0.3 to 1.5                | Rising  |
-| > 1.5                     | Steep   |
+```
+weekStart = resetsAt − 7 days
+elapsed   = clamp((now − weekStart) / 7 days, 0…1)
+paceDelta = utilization − elapsed × 100        // positive = ahead of even spending
 
-**Trigger:** Recalculate on every poll cycle. Slope calculation is trivial (average of ~15-30 numbers from in-memory buffer). Ensures menu bar slope arrow is always current.
+rate   = utilization / (now − weekStart)
+runOut = now + (100 − utilization) / rate
+```
 
-**Credit normalization dependency:** `SlopeCalculationService` needs access to the `RateLimitTier` normalization factor (`7d_limit / 5h_limit`). Inject via tier property or closure — avoid importing heavy services.
+Run-out is shown only when `runOut < resetsAt` and at least ~4 hours of the week have passed.
+
+**Output:**
+- Menu bar appends the existing actionable arrow only when run-out is projected before the weekly reset.
+- Popover pace line: "On pace" / "Ahead of pace — runs out ~Thu 14:00".
+
+**Trigger:** Recalculate on every poll cycle; the inputs are already in `AppState.sevenDay`.
+
+**Known ceiling:** The average-since-reset projection is pessimistic after a heavy first day. Upgrade path: blend with a recent-window rate.
 
 #### HeadroomAnalysisService
 
-**Responsibility:** Unused capacity categorization math, credit limit lookup.
+**Responsibility:** Used vs unused capacity per weekly cycle, credit limit lookup.
 
 ```swift
 protocol HeadroomAnalysisServiceProtocol {
-    func analyzeResetEvent(peak5h: Double, util7d: Double, tier: RateLimitTier) -> HeadroomBreakdown
+    func analyzeResetEvent(peak7d: Double, tier: RateLimitTier) -> HeadroomBreakdown
     func aggregateBreakdown(_ events: [ResetEvent]) -> PeriodSummary
-    func getCreditLimits(for tier: RateLimitTier) -> (fiveHour: Int, sevenDay: Int)?
+    func getCreditLimits(for tier: RateLimitTier) -> Int?   // weekly credits
 }
 
 struct HeadroomBreakdown {
     let usedPercent: Double
-    let constrainedPercent: Double  // 7d-blocked, NOT unused
-    let unusedPercent: Double       // genuinely unused capacity
+    let unusedPercent: Double       // genuinely unused weekly capacity
     let usedCredits: Int
-    let constrainedCredits: Int
     let unusedCredits: Int
 }
 ```
 
-**Waste Calculation (at each 5h reset):**
+**Waste Calculation (at each weekly reset):**
 
 ```
-5h_remaining_credits = (100% - 5h_peak%) × 5h_limit
-7d_remaining_credits = (100% - 7d_util%) × 7d_limit
-effective_headroom_credits = min(5h_remaining_credits, 7d_remaining_credits)
-
-If 5h_remaining ≤ 7d_remaining:
-    true_waste = 5h_remaining  (all unused 5h was genuinely available)
-    7d_constrained = 0
-Else:
-    true_waste = 7d_remaining  (7d was the binding constraint)
-    7d_constrained = 5h_remaining - 7d_remaining
+used_credits   = 7d_peak% × 7d_limit
+unused_credits = (100% - 7d_peak%) × 7d_limit
 ```
+
+The weekly peak comes from the stored `seven_day_util` on the reset event. The "7d-constrained" band is retired: with one plan-wide window there is no second constraint. Value $, cycle utilisation and insight copy use the same weekly cycles. Pre-2026-10-31 events (5h-based) still display for their period and are not recomputed.
 
 #### SubscriptionPatternDetector (Phase 4 / Epic 16)
 
@@ -983,7 +978,7 @@ enum PatternFinding {
 }
 ```
 
-**Data sources:** `HistoricalDataService` for ResetEvent history, extra usage poll data from `usage_polls` table (persisted by PR 43).
+**Data sources:** `HistoricalDataService` for ResetEvent history (weekly cycles), extra usage poll data from `usage_polls` table (persisted by PR 43). Usage-decay and forgotten-subscription rules read weekly (`seven_day`) utilisation.
 
 **Trigger:** Called after each reset event detection. Evaluates 6 pattern rules.
 
@@ -1007,7 +1002,7 @@ enum TierRecommendation {
 
 **Total cost calculation:** For each tier, computes `total = tier.monthlyPrice + estimated_extra_usage`. If usage fits within a tier's limits, extra usage = $0. Uses `RateLimitTier.monthlyPrice` for base costs.
 
-**Data sources:** ResetEvent history, extra usage data from `usage_polls`, `RateLimitTier` credit limits and monthly prices.
+**Data sources:** ResetEvent history, extra usage data from `usage_polls`, `RateLimitTier` weekly credit limits and monthly prices. Tier fit uses the weekly peak per cycle and the count of weekly exhaustions (plus extra usage).
 
 **Minimum data:** Returns nil with fewer than 2 weeks of usage data. Aligns to billing cycles when `billingCycleDay` is configured in `PreferencesManager`.
 
@@ -1039,14 +1034,6 @@ enum RateLimitTier: String, CaseIterable {
     case max5x = "default_claude_max_5x"
     case max20x = "default_claude_max_20x"
 
-    var fiveHourCredits: Int {
-        switch self {
-        case .pro: return 550_000
-        case .max5x: return 3_300_000
-        case .max20x: return 11_000_000
-        }
-    }
-
     var sevenDayCredits: Int {
         switch self {
         case .pro: return 5_000_000
@@ -1067,7 +1054,9 @@ enum RateLimitTier: String, CaseIterable {
 }
 ```
 
-**User Override:** Settings view includes optional fields for custom 5h/7d credit limits. If set, override the hardcoded values. Stored in `PreferencesManager`.
+**Weekly only (2026-10-31):** Credit limits are weekly. `fiveHourCredits` is removed from `RateLimitTier`.
+
+**User Override:** Settings view includes one optional field for a custom weekly credit limit. If set, it overrides the hardcoded value. Stored in `PreferencesManager`. There is no custom 5-hour credit setting; an old stored value is ignored, not migrated.
 
 **Unknown Tier Handling:** If `rateLimitTier` from Keychain doesn't match known values AND no user override:
 - Log warning for debugging
@@ -1140,57 +1129,56 @@ class AnalyticsWindowController {
 
 #### MenuBarTextRenderer (Phase 1 component)
 
-**Modification:** Add optional slope arrow suffix (escalation-only).
+**Modification (revised 2026-10-31):** Always renders the weekly (`seven_day`) window. Appends the actionable arrow only when weekly run-out is projected before reset.
 
 **New rendering logic:**
 ```swift
 func renderMenuBarText() -> String {
     guard connectionStatus != .disconnected else { return "✳ —" }
-    guard headroomState != .exhausted else { return "✳ ↻ \(countdown)" }
+    guard sevenDay.headroomState != .exhausted else { return "✳ ↻ \(weeklyCountdown)" }  // "↻ 3d 4h"
     
-    let base = "✳ \(percentage)%"
+    let base = "✳ \(weeklyHeadroomPercent)%"
     
-    // Phase 3: append slope only for Rising/Steep
-    switch fiveHourSlope {
-    case .rising: return "\(base) ↗"
-    case .steep:  return "\(base) ⬆"
-    case .flat: return base
-    }
+    return pace.runsOutBeforeReset ? "\(base) \(actionableArrow)" : base
 }
 ```
 
-**Width impact:** +2 characters when slope visible (~7 chars max vs ~5 chars Phase 1-2).
+When the weekly window is exhausted and extra usage is active, the extra-usage $ text shows. The gauge icon's corner dot shows the Fable weekly cap state at caution, warning or critical.
+
+**Width impact:** +2 characters when the run-out arrow is visible (~7 chars max vs ~5 chars Phase 1-2).
 
 #### HeadroomRingGauge (Phase 1 component)
 
-**Modification:** Add `SlopeIndicator` view below percentage.
+**Modification (revised 2026-10-31):** The weekly ring is the large primary gauge. A pace line sits below the percentage.
 
 **New layout:**
 ```
-    ◯ (ring)
-     78%
-      ↗         ← NEW: slope indicator (always visible in popover)
-resets in 1h 12m
-  at 5:17 PM
+       ◯ (ring)
+        72%
+      On pace          ← pace line ("Ahead of pace — runs out ~Thu 14:00")
+  resets in 3d 4h
+   at Thu 9:00 AM
 ```
 
-**Props addition:** `slopeLevel: SlopeLevel`
+**Props addition:** weekly pace status (on pace / ahead, projected run-out time)
 
 #### PopoverView (Phase 1 component)
 
-**Modification:** Add sparkline section between 7d gauge and footer.
+**Modification (revised 2026-10-31):** Weekly-first layout. Sparkline section between the Fable section and footer.
 
 **New structure:**
 ```
-┌──────────────────┐
-│  5h gauge + slope│
-│  7d gauge + slope│
-├──────────────────┤
-│  24h Sparkline   │  ← NEW: clickable, launches analytics
-├──────────────────┤
-│  Footer          │
-└──────────────────┘
+┌──────────────────────┐
+│  Weekly gauge + pace │  ← primary ring, countdown, pace line
+│  Fable weekly cap    │
+├──────────────────────┤
+│  Weekly Sparkline    │  ← clickable, launches analytics
+├──────────────────────┤
+│  Footer              │
+└──────────────────────┘
 ```
+
+VoiceOver reading order starts with the weekly gauge.
 
 **Sparkline data:** Cached in `AppState.sparklineData`, refreshed on each poll cycle. Popover opens instantly — no data fetch on open.
 
@@ -1198,42 +1186,11 @@ resets in 1h 12m
 
 #### SlopeIndicator
 
-**Purpose:** Display discrete slope arrow with appropriate styling.
-
-```swift
-struct SlopeIndicator: View {
-    let level: SlopeLevel
-    let size: CGFloat
-    
-    var body: some View {
-        Text(level.arrow)
-            .font(.system(size: size))
-            .foregroundColor(level.color)
-            .accessibilityLabel(level.accessibilityLabel)
-    }
-}
-
-extension SlopeLevel {
-    var arrow: String {
-        switch self {
-        case .flat: return "→"
-        case .rising: return "↗"
-        case .steep: return "⬆"
-        }
-    }
-    
-    var color: Color {
-        switch self {
-        case .flat: return .secondary
-        case .rising, .steep: return .headroomColor  // matches current headroom state
-        }
-    }
-}
-```
+Retired 2026-10-31 — replaced by the pace line in `HeadroomRingGauge` and the run-out arrow in `MenuBarTextRenderer`.
 
 #### Sparkline
 
-**Purpose:** Compact 24h usage visualization, acts as button to launch analytics.
+**Purpose:** Compact view of the current weekly cycle (since the last weekly reset) with an even-pace diagonal; acts as button to launch analytics.
 
 ```swift
 struct Sparkline: View {
@@ -1241,14 +1198,15 @@ struct Sparkline: View {
     let isAnalyticsOpen: Bool
     let onTap: () -> Void
     
-    // Renders step-area path honoring sawtooth shape
+    // Renders weekly utilization since the last weekly reset
+    // Even-pace diagonal from 0% at week start to 100% at reset
     // Gaps as path breaks (no interpolation)
     // Subtle hover/press state
     // Indicator dot when analytics window is open
 }
 ```
 
-**Accessibility:** "24-hour usage chart. Double-tap to open analytics."
+**Accessibility:** "Weekly usage chart since last reset. Double-tap to open analytics."
 
 #### AnalyticsView
 
@@ -1260,7 +1218,7 @@ struct Sparkline: View {
 │  Usage Analytics                                    ✕   │
 ├─────────────────────────────────────────────────────────┤
 │                                                         │
-│  [24h]  [7d]  [30d]  [All]          5h ● │ 7d ○        │
+│  [24h]  [7d]  [30d]  [All]      7d ● │ Fable ● │ 5h ○  │
 │                                                         │
 │  ┌─────────────────────────────────────────────────┐   │
 │  │              UsageChart                          │   │
@@ -1270,13 +1228,15 @@ struct Sparkline: View {
 ├─────────────────────────────────────────────────────────┤
 │  Headroom Breakdown (selected period)                   │
 │  ┌─────────────────────────────────────────────────┐    │
-│  │▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░                       │    │
+│  │▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓                  │    │
 │  └─────────────────────────────────────────────────┘    │
-│  ▓ Used: 52%   ░ 7d-constrained: 12%   □ Unused: 36%   │
+│  ▓ Used: 64%   □ Unused: 36%   (weekly capacity)        │
 │                                                         │
 │  Context-aware summary (adapts to time range)           │
 └─────────────────────────────────────────────────────────┘
 ```
+
+The 5h series toggle is off by default and hidden when the selected range has no 5h data (revised 2026-10-31).
 
 #### UsageChart
 
@@ -1285,33 +1245,30 @@ struct Sparkline: View {
 **Props:**
 - `data: [UsageDataPoint]` or `[UsageRollup]`
 - `timeRange: TimeRange` — determines chart type
-- `visibleSeries: Set<Series>` — 5h/7d toggles
-- `showSlopeBands: Bool` — background color bands for steep periods
+- `visibleSeries: Set<Series>` — default weekly + Fable; historical 5h series off by default, hidden when the range has no 5h data
 
 **Rendering by time range:**
-- **24h:** Step-area chart honoring sawtooth shape, reset markers as dashed vertical lines
+- **24h:** Step-area chart, weekly reset markers as dashed vertical lines
 - **7d+:** Bar chart with peak values per period
 
 **Gap handling:** Missing segments rendered as breaks, never interpolated. Hatched/grey region with "No data" hover label.
 
 #### HeadroomBreakdownBar
 
-**Purpose:** Three-band stacked horizontal bar.
+**Purpose:** Two-band stacked horizontal bar: used vs unused weekly capacity per weekly cycle (revised 2026-10-31).
 
 ```swift
 struct HeadroomBreakdownBar: View {
     let used: Double
-    let constrained: Double
     let waste: Double
     
     // Rendering:
     // Used: solid fill, headroom color
-    // 7d-constrained: hatched pattern, muted slate blue
-    // True waste: light/empty fill
+    // Unused: light/empty fill
 }
 ```
 
-**Accessibility:** "Headroom breakdown: 52% used, 12% constrained by weekly limit, 36% unused."
+**Accessibility:** "Headroom breakdown: 64% of weekly capacity used, 36% unused."
 
 #### TimeRangeSelector
 
@@ -1338,15 +1295,14 @@ enum TimeRange {
 class AppState {
     // Existing Phase 1-2 properties...
     
-    // Phase 3 additions:
-    var fiveHourSlope: SlopeLevel = .flat
-    var sevenDaySlope: SlopeLevel = .flat
-    var sparklineData: [UsagePoll] = []
+    // Phase 3 additions (revised 2026-10-31):
+    // weekly pace state, derived from sevenDay: paceDelta, projected run-out
+    var sparklineData: [UsagePoll] = []  // current weekly cycle
     var isAnalyticsWindowOpen: Bool = false
 }
 ```
 
-**Sparkline data refresh:** `PollingEngine` updates `AppState.sparklineData` on each poll by calling `HistoricalDataService.getRecentPolls(hours: 24)`. This keeps popover open instant.
+**Sparkline data refresh:** `PollingEngine` updates `AppState.sparklineData` on each poll with the polls since the last weekly reset, read from `HistoricalDataService`. This keeps popover open instant.
 
 ### Phase 3 Settings Additions
 
@@ -1356,14 +1312,13 @@ class AppState {
 // Historical data
 var dataRetentionDays: Int  // default: 365
 
-// Credit limit overrides (for unknown tiers or power users)
-var customFiveHourCredits: Int?   // nil = use hardcoded
+// Credit limit override (for unknown tiers or power users) — weekly only
 var customSevenDayCredits: Int?   // nil = use hardcoded
 ```
 
 **SettingsView additions:**
 - Data retention slider/picker (30 days to 5 years)
-- "Advanced" section for custom credit limits
+- "Advanced" section for a custom weekly credit limit
 - Database size display with "Clear History" button
 
 ### Phase 3 Project Structure
@@ -1372,7 +1327,7 @@ var customSevenDayCredits: Int?   // nil = use hardcoded
 cc-hdrm/
 ├── cc-hdrm/
 │   ├── Models/
-│   │   ├── SlopeLevel.swift                    # NEW
+│   │   ├── SlopeLevel.swift                    # RETIRED 2026-10-31 (weekly pace)
 │   │   ├── RateLimitTier.swift                 # NEW
 │   │   ├── UsagePoll.swift                     # NEW
 │   │   ├── UsageRollup.swift                   # NEW
@@ -1383,8 +1338,8 @@ cc-hdrm/
 │   ├── Services/
 │   │   ├── HistoricalDataServiceProtocol.swift # NEW
 │   │   ├── HistoricalDataService.swift         # NEW
-│   │   ├── SlopeCalculationServiceProtocol.swift # NEW
-│   │   ├── SlopeCalculationService.swift       # NEW
+│   │   ├── SlopeCalculationServiceProtocol.swift # RETIRED 2026-10-31
+│   │   ├── SlopeCalculationService.swift       # RETIRED 2026-10-31
 │   │   ├── HeadroomAnalysisServiceProtocol.swift # NEW
 │   │   ├── HeadroomAnalysisService.swift       # NEW
 │   │   └── DatabaseManager.swift               # NEW
@@ -1397,7 +1352,7 @@ cc-hdrm/
 │   │   ├── HeadroomRingGauge.swift             # MODIFIED
 │   │   ├── PopoverView.swift                   # MODIFIED
 │   │   ├── SettingsView.swift                  # MODIFIED
-│   │   ├── SlopeIndicator.swift                # NEW
+│   │   ├── SlopeIndicator.swift                # RETIRED 2026-10-31
 │   │   ├── Sparkline.swift                     # NEW
 │   │   ├── AnalyticsWindow.swift               # NEW
 │   │   ├── AnalyticsView.swift                 # NEW
@@ -1414,12 +1369,12 @@ cc-hdrm/
 │
 ├── cc-hdrmTests/
 │   ├── Models/
-│   │   ├── SlopeLevelTests.swift               # NEW
+│   │   ├── SlopeLevelTests.swift               # RETIRED 2026-10-31
 │   │   ├── RateLimitTierTests.swift            # NEW
 │   │   └── HeadroomBreakdownTests.swift        # NEW
 │   ├── Services/
 │   │   ├── HistoricalDataServiceTests.swift    # NEW
-│   │   ├── SlopeCalculationServiceTests.swift  # NEW
+│   │   ├── SlopeCalculationServiceTests.swift  # RETIRED 2026-10-31
 │   │   ├── HeadroomAnalysisServiceTests.swift  # NEW
 │   │   └── DatabaseManagerTests.swift          # NEW
 │   └── Views/
@@ -1439,13 +1394,13 @@ cc-hdrm/
                     │                    │                    │
                     ▼                    ▼                    ▼
         ┌───────────────────┐ ┌──────────────────┐ ┌──────────────────┐
-        │ HistoricalData    │ │ SlopeCalculation │ │    AppState      │
-        │ Service           │ │ Service          │ │   (existing)     │
+        │ HistoricalData    │ │ Weekly Pace      │ │    AppState      │
+        │ Service           │ │ Calculation      │ │   (existing)     │
         │                   │ │                  │ │                  │
-        │ • persistPoll()   │ │ • addToBuffer()  │ │ • updateUsage()  │
-        │ • detectReset()   │ │ • calculate()    │ │ • fiveHourSlope  │
-        │                   │ │     ↓            │ │ • sevenDaySlope  │
-        └────────┬──────────┘ │  SlopeLevel      │ │ • sparklineData  │
+        │ • persistPoll()   │ │ • seven_day util │ │ • updateUsage()  │
+        │ • detectReset()   │ │ • resets_at      │ │ • pace           │
+        │                   │ │     ↓            │ │ • scopedLimits   │
+        └────────┬──────────┘ │  pace, run-out   │ │ • sparklineData  │
                  │            └────────┬─────────┘ └────────┬─────────┘
                  │                     │                    │
                  ▼                     └────────┬───────────┘
@@ -1454,9 +1409,9 @@ cc-hdrm/
         │ ~/Library/App...  │         ┌──────────────────────┐
         │                   │         │       Views          │
         │ • usage_polls     │         │                      │
-        │ • usage_rollups   │         │ MenuBarTextRenderer  │◄── slope arrow
-        │ • reset_events    │         │ HeadroomRingGauge    │◄── slope indicator
-        └────────┬──────────┘         │ PopoverView          │◄── sparkline
+        │ • usage_rollups   │         │ MenuBarTextRenderer  │◄── run-out arrow
+        │ • reset_events    │         │ HeadroomRingGauge    │◄── pace line
+        └────────┬──────────┘         │ PopoverView          │◄── weekly sparkline
                  │                    │ Sparkline ──────────────► click
                  │                    └──────────────────────┘      │
                  │                                                  │
@@ -1489,17 +1444,17 @@ cc-hdrm/
 | ---- | ------------------------------------------ | -------------------------------------------------------------- |
 | FR33 | Persist poll snapshots to SQLite           | `HistoricalDataService.swift`, `DatabaseManager.swift`           |
 | FR34 | Roll up data at decreasing resolution      | `HistoricalDataService.swift`                                    |
-| FR35 | 24h sparkline in popover                   | `Sparkline.swift`, `PopoverView.swift`                           |
+| FR35 | Weekly-cycle sparkline with even-pace line | `Sparkline.swift`, `PopoverView.swift`                           |
 | FR36 | Full analytics window with zoomable charts | `AnalyticsWindow.swift`, `AnalyticsView.swift`, `UsageChart.swift` |
 | FR37 | Render gaps as visually distinct           | `Sparkline.swift`, `UsageChart.swift`                            |
 | FR38 | Configurable retention period              | `PreferencesManager.swift`, `SettingsView.swift`                 |
-| FR39 | Calculate effective headroom               | `HeadroomAnalysisService.swift`                                  |
-| FR40 | Detect resets, classify waste categories   | `HistoricalDataService.swift`, `HeadroomAnalysisService.swift`   |
-| FR41 | Three-band breakdown in analytics          | `HeadroomBreakdownBar.swift`, `AnalyticsView.swift`              |
-| FR42 | Compute usage rate of change               | `SlopeCalculationService.swift`                                  |
-| FR43 | Map rate to 4-level slope indicator        | `SlopeCalculationService.swift`, `SlopeLevel.swift`              |
-| FR44 | Slope indicator in menu bar                | `MenuBarTextRenderer.swift`                                      |
-| FR45 | Per-window slope in popover                | `HeadroomRingGauge.swift`, `SlopeIndicator.swift`                |
+| FR39 | Retired 2026-10-31 (weekly = effective)    | —                                                                |
+| FR40 | Detect weekly resets, classify used/unused | `HistoricalDataService.swift`, `HeadroomAnalysisService.swift`   |
+| FR41 | Two-band weekly breakdown in analytics     | `HeadroomBreakdownBar.swift`, `AnalyticsView.swift`              |
+| FR42 | Compute weekly pace                        | Weekly pace calculation, `AppState.swift`                        |
+| FR43 | Project run-out from average since reset   | Weekly pace calculation                                          |
+| FR44 | Run-out indicator in menu bar              | `MenuBarTextRenderer.swift`                                      |
+| FR45 | Pace status and run-out time in popover    | `HeadroomRingGauge.swift`, `PopoverView.swift`                   |
 
 ### Phase 3 Implementation Patterns
 
@@ -1518,14 +1473,7 @@ Gaps (periods when cc-hdrm wasn't running) are rendered consistently across all 
 
 #### Slope Communication Pattern
 
-Slope is communicated consistently across all locations:
-
-| Location        | Flat/Cooling | Rising | Steep |
-| --------------- | ------------ | ------ | ----- |
-| Menu bar        | Hidden       | ↗      | ⬆     |
-| Popover 5h      | →/↘          | ↗      | ⬆     |
-| Popover 7d      | →/↘          | ↗      | ⬆     |
-| Analytics chart | No tint      | Tint   | Tint  |
+Retired 2026-10-31 — replaced by weekly pace: menu bar arrow only when run-out is projected before the weekly reset, popover pace line, no chart tint.
 
 #### Accessibility Pattern
 
@@ -1533,10 +1481,8 @@ All Phase 3 components maintain color independence:
 
 | Element            | Color Signal      | Non-Color Signal         |
 | ------------------ | ----------------- | ------------------------ |
-| Slope arrow        | Headroom color    | Arrow direction shape    |
-| Slope bands        | Warm tint         | Presence/absence         |
+| Run-out arrow      | Headroom color    | Arrow shape + pace text  |
 | Used band          | Headroom color    | Solid fill pattern       |
-| 7d-constrained     | Slate blue        | Hatched pattern          |
 | Unused capacity    | Light/transparent | Empty/outline pattern    |
 | Gap regions        | Grey              | Hatched pattern + label  |
 
@@ -1735,14 +1681,14 @@ All with rationale. Technology versions specified. All critical choices made.
 **Resolved Design Questions (Phase 3):**
 - Database location: `~/Library/Application Support/cc-hdrm/`
 - Rollup trigger: On-demand when analytics opens
-- Slope data source: In-memory ring buffer, bootstrapped from SQLite
-- Reset detection: Primary (resets_at shift) + fallback (utilization drop)
+- Slope data source: Retired 2026-10-31 — weekly pace needs only `seven_day` utilization and `resets_at`
+- Reset detection: Primary (weekly `resets_at` shift) + fallback (utilization drop)
 - Analytics window: NSPanel, non-activating, independent from popover
-- Credit limits: Hardcoded + user override in settings
+- Credit limits: Hardcoded + user override in settings (weekly only since 2026-10-31)
 
 **Areas for Future Enhancement:**
 - Token refresh request format needs discovery during implementation
-- Slope threshold tuning (% per minute) needs validation with real usage data
+- Weekly pace projection: blend with a recent-window rate if average-since-reset proves too pessimistic
 - Historical API research — if Anthropic exposes endpoint, could backfill gaps
 
 ### Implementation Handoff
@@ -1771,8 +1717,8 @@ All with rationale. Technology versions specified. All critical choices made.
 **Phase 3 Implementation Priority:**
 1. DatabaseManager + SQLite schema — foundation for all Phase 3 features
 2. HistoricalDataService — persist polls, implement rollup logic
-3. SlopeLevel enum + SlopeCalculationService — enables menu bar/popover modifications
-4. Modify MenuBarTextRenderer + HeadroomRingGauge — add slope indicators
+3. SlopeLevel enum + SlopeCalculationService — retired 2026-10-31, replaced by weekly pace (Epic 26)
+4. Modify MenuBarTextRenderer + HeadroomRingGauge — slope indicators retired 2026-10-31, replaced by run-out arrow and pace line
 5. Sparkline component + PopoverView modification
 6. AnalyticsWindow + AnalyticsView — full analytics experience
 7. UsageChart — step-area and bar chart modes

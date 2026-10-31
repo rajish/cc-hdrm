@@ -1,7 +1,9 @@
 ---
 stepsCompleted: [step-01-init, step-02-discovery, step-03-success, step-04-journeys, step-05-domain, step-06-innovation, step-07-project-type, step-08-scoping, step-09-functional, step-10-nonfunctional, step-11-polish, step-e-01-discovery, step-e-02-review, step-e-03-edit]
-lastEdited: '2026-08-12'
+lastEdited: '2026-10-31'
 editHistory:
+  - date: '2026-10-31'
+    changes: 'Anthropic retired the Claude 5-hour limit (API returns five_hour: null). Weekly window made primary: revised FR6, FR10, FR17, FR18, FR33, FR35, FR40-FR45; retired FR9, FR11, FR39; slope replaced by weekly pace; headroom analysis reduced to used/unused per weekly cycle. Sprint change proposal 2026-10-31 (Epic 26)'
   - date: '2026-08-12'
     changes: 'Added Phase 7 Codex Usage Tracking (FR49-FR60), amended NFR8 endpoint allowlist with chatgpt.com, added NFR14-NFR15 (Codex credential handling, provider failure isolation) per sprint change proposal 2026-08-12 (Codex)'
   - date: '2026-02-10'
@@ -69,6 +71,8 @@ The usage API lives at `https://api.anthropic.com/api/oauth/usage` -- NOT `claud
   - `scopes` -- array of granted scopes
 
 ### API Response Format
+
+> **2026-10-31:** Anthropic retired the 5-hour limit. Since 08:03 UTC that day `five_hour` is `null`. The weekly (`seven_day`) window is the only plan-wide window. The sample below is from 2026-08 and still shows the retired `five_hour` / `session` entries.
 
 ```json
 {
@@ -158,8 +162,8 @@ OAuth tokens expire (observed `expiresAt` ~6h from issue). The Keychain includes
 
 ### Phase 1: MVP
 
-1. **Menu bar indicator** -- 5-hour usage percentage with color coding (green < 60%, yellow 60-80%, orange 80-95%, red > 95%)
-2. **Click-to-expand panel** -- 5h and 7d usage bars with reset countdowns, subscription tier display
+1. **Menu bar indicator** -- 5-hour usage percentage (weekly headroom since 2026-10-31) with color coding (green < 60%, yellow 60-80%, orange 80-95%, red > 95%)
+2. **Click-to-expand panel** -- 5h and 7d usage bars (weekly gauge only since 2026-10-31) with reset countdowns, subscription tier display
 3. **Automatic authentication** -- reads OAuth credentials from macOS Keychain, zero manual config
 4. **Background polling** -- every 30-60 seconds, entirely outside Claude conversations
 5. **Threshold notifications** -- macOS native notifications at 80% and 95% (hardcoded)
@@ -203,44 +207,42 @@ Daily summary includes: average utilization, peak utilization, minimum utilizati
 
 **Gap Handling:** Render missing periods as visually distinct (hatched/grey). Never interpolate. Infer reset boundaries from shifts in `resets_at` timestamp between polls.
 
-**Visualization:** Sparkline of last 24 hours in popover (below existing gauges) + full analytics view in a separate window (zoomable, multi-overlay, all retention periods).
+**Visualization:** Sparkline of the current weekly cycle with an even-pace line in popover, below the gauges (was: last 24 hours of 5h data; revised 2026-10-31) + full analytics view in a separate window (zoomable, multi-overlay, all retention periods).
 
-**Data per poll:** `{ timestamp, 5h_utilization, 5h_resets_at, 7d_utilization, 7d_resets_at }`
+**Data per poll:** `{ timestamp, 7d_utilization, 7d_resets_at, scoped weekly caps, extra usage }`. The `5h_utilization` / `5h_resets_at` columns are kept nullable as historical data (no new values since 2026-10-31).
 
 **Research dependency:** Investigate whether Anthropic exposes a historical usage API endpoint to backfill gaps from periods when cc-hdrm was not running.
 
 #### Subscription Value & Headroom Analysis
 
-The 5-hour and 7-day limits form a nested constraint system. Effective headroom = min(5h remaining capacity, 7d remaining capacity). A user at 10% of 5h but 92% of 7d has very little real headroom.
+> **Revised 2026-10-31.** The original model nested the 5-hour and 7-day limits (effective headroom = min of both; three bands: 5h unused, 7d-constrained, true unused). The 5-hour limit was retired, so that model no longer applies.
 
-**Three Unused Capacity Categories:**
+The weekly allowance is the single plan-wide limit. Each weekly reset closes one cycle.
 
-| Category           | Definition                                                    | User Insight                                                                  |
-| ------------------ | ------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| **5h unused**      | 5h window reset with unused capacity; 7d had room            | "You could have done more in that window"                                     |
-| **7d-constrained** | 5h had headroom but 7d was the binding constraint             | "You were pacing correctly — pushing harder would've hit the weekly wall"     |
-| **True unused**    | Both 5h and 7d had significant remaining capacity at 5h reset | "You genuinely left capacity unused"                                          |
+**Two capacity categories per weekly cycle:**
 
-7d-constrained is explicitly **not unused capacity** — the visualization must distinguish this to avoid misleading users.
+| Category   | Definition                                         | User Insight                          |
+| ---------- | -------------------------------------------------- | ------------------------------------- |
+| **Used**   | Peak weekly utilization before the reset           | "This is what you used this week"     |
+| **Unused** | 100% minus the peak, at the weekly reset           | "You left this capacity on the table" |
 
-**Visualization:** Three-band stacked chart in analytics view — used (solid), 7d-constrained (hatched/muted), true unused (empty/light). Calculation at render time since the relationship between limits depends on the time horizon analyzed.
+**Visualization:** Two-band stacked chart in analytics view -- used (solid), unused (empty/light). Cycles recorded under the old 5-hour model keep their original breakdown and are not recomputed.
 
-#### Usage Slope Indicator
+#### Weekly Pace Indicator
 
-Replaces the original "limit prediction" concept. Explicit time-to-exhaustion predictions have trust problems: usage is bursty, predictions whipsaw, and false precision trains users to ignore the feature. A discrete slope indicator communicates **how fast am I burning** without pretending to know the future.
+> **Revised 2026-10-31.** Replaces the Usage Slope Indicator. The 4-level slope (↘ → ↗ ⬆) was tuned to the 5-hour window. On weekly data, which moves in 1% steps, it flipped between flat and rising.
 
-**Slope Levels:**
+Pace answers **"at this rate, will my weekly allowance last until the reset?"**
 
-| Indicator   | Visual | Meaning                    | Typical Scenario                            |
-| ----------- | ------ | -------------------------- | ------------------------------------------- |
-| **Cooling** | ↘      | Utilization decreasing     | Rolling window moving past older high-usage |
-| **Flat**    | →      | No meaningful change       | Idle, between sessions                      |
-| **Rising**  | ↗      | Moderate consumption rate  | One active session, normal pace             |
-| **Steep**   | ⬆      | Heavy consumption rate     | Multiple sessions or intense conversation   |
+**Calculation:**
 
-**Calculation:** Sample last 10-15 minutes of poll data, compute average rate of change (% per minute), map to discrete levels. Threshold values require tuning with real usage data.
+- `weekStart = resets_at − 7 days`; `elapsed = clamp((now − weekStart) / 7 days, 0…1)`
+- `paceDelta = utilization − elapsed × 100` (positive = ahead of even spending)
+- Projected run-out: `rate = utilization / (now − weekStart)`; `runOut = now + (100 − utilization) / rate`. Shown only when `runOut < resets_at` and at least ~4 hours of the week have passed.
 
-**Display:** Inline next to utilization in menu bar (`78% ↗`), per-window in popover for both 5h and 7d gauges, overlaid on historical analytics.
+**Display:** Menu bar appends an arrow (`72% ↗`) only when run-out is projected before the weekly reset. Popover shows "On pace" or "Ahead of pace -- runs out ~Thu 14:00".
+
+**Known limit:** the average-since-reset rate is pessimistic after a heavy first day. Upgrade path: blend with a recent-window rate.
 
 ### Phase 4: Future
 
@@ -283,7 +285,7 @@ Extend cc-hdrm to monitor OpenAI Codex subscription limits alongside Claude, wit
 
 **Alex** has been using Claude Code for months. Last week he got cut off twice mid-refactor -- once during a critical production fix. He finds cc-hdrm on GitHub, clones the repo, runs the build.
 
-He launches the app. No login screen, no setup wizard, no config file. A small `42%` appears in his menu bar within seconds. He clicks it -- a panel drops down showing his 5-hour window at 42% with a reset in 2h 13m, and his 7-day at 28%.
+He launches the app. No login screen, no setup wizard, no config file. A small `72%` appears in his menu bar within seconds. He clicks it -- a panel drops down showing his weekly allowance at 28% used, "On pace", with a reset in 3d 4h.
 
 He exhales. For the first time, he knows exactly where he stands.
 
@@ -291,11 +293,11 @@ He exhales. For the first time, he knows exactly where he stands.
 
 ### Journey 2: Daily Flow -- "Informed pacing"
 
-It's 3pm. Alex has three Claude Code sessions open -- a feature build, a code review, and a docs rewrite. The indicator has turned **orange** -- 83%. He clicks to expand: 5-hour window resets in 47 minutes.
+It's Tuesday, 3pm. Alex has three Claude Code sessions open -- a feature build, a code review, and a docs rewrite. The menu bar reads `58% ↗`. He clicks to expand: "Ahead of pace -- runs out ~Thu 14:00", weekly reset Sat 09:00.
 
-A macOS notification: "Claude usage at 83% -- resets in 47 min."
+He decides: the docs rewrite can wait until after the reset. He focuses the week on the feature build and the code review.
 
-He decides: the docs rewrite can wait. He focuses the feature build on wrapping up cleanly. When the reset hits, he'll have full headroom for the code review.
+On Thursday the indicator turns **orange**. A macOS notification: "Weekly allowance at 17% headroom -- resets Sat 09:00." He is already pacing for it.
 
 No panic. No surprise. Just a calm, informed decision.
 
@@ -303,9 +305,9 @@ No panic. No surprise. Just a calm, informed decision.
 
 ### Journey 3: Edge Case -- "The wall"
 
-Alex is deep in a complex refactor. The menu bar is **red** -- 96%. A notification fires: "Claude usage at 95% -- resets in 8 min."
+Alex is deep in a complex refactor. It's Friday evening. The menu bar is **red** -- 4% headroom. A notification fires: "Weekly allowance at 5% headroom -- resets in 14h."
 
-He finishes his current prompt and waits. Eight minutes later, the indicator drops to **green** -- 0%. He picks up exactly where he left off with full capacity.
+He finishes his current prompt and stops for the night. Saturday morning the indicator returns to **green** -- 100% headroom. He picks up exactly where he left off with full capacity.
 
 Without cc-hdrm, he'd have kept going, gotten cut off mid-response, lost context, and had to restart the conversation.
 
@@ -320,7 +322,7 @@ Without cc-hdrm, he'd have kept going, gotten cut off mid-response, lost context
 | Menu bar percentage display | x         | x         | x         |
 | Color-coded indicator       |           | x         | x         |
 | Click-to-expand panel       | x         | x         |           |
-| 5h + 7d usage bars          | x         | x         |           |
+| Weekly usage gauge + pace   | x         | x         |           |
 | Reset countdown             | x         | x         | x         |
 | Background polling          |           | x         | x         |
 | Threshold notifications     |           | x         | x         |
@@ -375,12 +377,12 @@ Without cc-hdrm, he'd have kept going, gotten cut off mid-response, lost context
 
 ### Usage Display
 
-- FR6: User can see current 5-hour usage percentage in the menu bar at all times
+- FR6: User can see current weekly allowance headroom in the menu bar at all times (revised 2026-10-31)
 - FR7: User can see a color-coded indicator that reflects usage severity (green/yellow/orange/red)
 - FR8: User can click the menu bar icon to expand a detailed usage panel
-- FR9: User can see 5-hour usage bar with percentage in the expanded panel
-- FR10: User can see 7-day usage bar with percentage in the expanded panel
-- FR11: User can see time remaining until 5-hour window resets
+- ~~FR9: User can see 5-hour usage bar with percentage in the expanded panel~~ -- Retired 2026-10-31: Anthropic removed the 5-hour limit
+- FR10: User can see the weekly usage gauge as the primary gauge in the expanded panel (revised 2026-10-31)
+- ~~FR11: User can see time remaining until 5-hour window resets~~ -- Retired 2026-10-31
 - FR12: User can see time remaining until 7-day window resets
 - FR13: User can see their subscription tier in the expanded panel
 
@@ -392,8 +394,8 @@ Without cc-hdrm, he'd have kept going, gotten cut off mid-response, lost context
 
 ### Notifications
 
-- FR17: User can receive a macOS notification when 5-hour usage crosses 80%
-- FR18: User can receive a macOS notification when 5-hour usage crosses 95%
+- FR17: User can receive a macOS notification when weekly usage crosses the warning threshold (revised 2026-10-31)
+- FR18: User can receive a macOS notification when weekly usage crosses the critical threshold (revised 2026-10-31)
 - FR19: App can include the reset countdown time in notification messages
 
 ### Connection State
@@ -417,25 +419,25 @@ Without cc-hdrm, he'd have kept going, gotten cut off mid-response, lost context
 
 ### Historical Usage Tracking (Phase 3)
 
-- FR33: App persists each poll snapshot (timestamp, 5h utilization, 5h resets_at, 7d utilization, 7d resets_at) to a local SQLite database
+- FR33: App persists each poll snapshot (timestamp, 7d utilization, 7d resets_at, scoped weekly caps, extra usage) to a local SQLite database; historical 5h columns are retained as nullable (revised 2026-10-31)
 - FR34: App rolls up historical data at decreasing resolution as data ages, balancing storage efficiency with analytical granularity
-- FR35: User can view a compact 24-hour usage trend of 5h utilization in the popover below existing gauges
+- FR35: User can view the current weekly cycle's usage trend against an even-pace line in the popover (revised 2026-10-31)
 - FR36: User can open a full analytics view in a separate window with zoomable historical charts across all retention periods
 - FR37: App renders data gaps as a visually distinct state with no interpolation of missing data
 - FR38: User can configure data retention period in settings (default 1 year)
 
 ### Subscription Value & Headroom Analysis (Phase 3)
 
-- FR39: App calculates effective headroom as min(5h remaining capacity, 7d remaining capacity)
-- FR40: App detects 5h window resets and classifies unused capacity into three categories: 5h unused, 7d-constrained (not unused), and true unused capacity
-- FR41: User can view a breakdown of used capacity, 7d-constrained capacity, and true unused capacity in the analytics view
+- ~~FR39: App calculates effective headroom as min(5h remaining capacity, 7d remaining capacity)~~ -- Retired 2026-10-31: weekly headroom is the effective headroom
+- FR40: App detects weekly resets and classifies each cycle's capacity as used or unused (revised 2026-10-31)
+- FR41: User can view a breakdown of used and unused weekly capacity per cycle in the analytics view (revised 2026-10-31)
 
-### Usage Slope Indicator (Phase 3)
+### Weekly Pace Indicator (Phase 3, revised 2026-10-31)
 
-- FR42: App computes usage rate of change from recent poll history
-- FR43: App maps rate of change to a discrete 4-level slope indicator (Cooling ↘, Flat →, Rising ↗, Steep ⬆)
-- FR44: User can see the slope indicator inline next to the utilization percentage in the menu bar
-- FR45: User can see per-window slope indicators in the popover for both 5h and 7d gauges
+- FR42: App computes weekly pace: usage versus the share of the week elapsed (revised 2026-10-31)
+- FR43: App projects the run-out time from average usage since the weekly reset (revised 2026-10-31)
+- FR44: User can see an indicator in the menu bar when run-out is projected before the weekly reset (revised 2026-10-31)
+- FR45: User can see pace status and projected run-out time in the popover (revised 2026-10-31)
 
 ### Subscription Intelligence (Phase 3)
 
