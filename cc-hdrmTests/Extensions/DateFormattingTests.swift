@@ -106,6 +106,21 @@ struct DateFormattingTests {
         #expect(date.relativeTimeAgo() == "1d 1h ago")
     }
 
+    // MARK: - spokenCountdownString Tests
+
+    @Test("spokenCountdownString spells out units with countdownString truncation",
+          arguments: [
+              (TimeInterval(2_850), "47 minutes"),
+              (TimeInterval(90), "1 minute"),
+              (TimeInterval(8_010), "2 hours 13 minutes"),
+              (TimeInterval(93_570), "1 day 1 hour"),
+              (TimeInterval(273_630), "3 days 4 hours"),
+              (TimeInterval(-60), "0 minutes")
+          ] as [(TimeInterval, String)])
+    func spokenCountdownString(offset: TimeInterval, expected: String) {
+        #expect(Date().addingTimeInterval(offset).spokenCountdownString() == expected)
+    }
+
     // MARK: - countdownString Tests (Story 3.2, Task 7)
 
     @Test("resetsAt 30 minutes from now → 30m")

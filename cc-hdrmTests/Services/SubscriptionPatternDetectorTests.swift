@@ -288,9 +288,10 @@ struct SubscriptionPatternDetectorTests {
 
     @Test("chronicUnderpowering detected when rate-limited N+ times for 2+ cycles")
     func chronicUnderpoweringDetected() async throws {
-        // Create polls showing frequent rate-limiting over 2 months
+        // 90 days guarantees two complete months after the detector drops the current partial month,
+        // whatever today's date is (a 60-day span leaves the older month partial from mid-month on)
         var polls: [UsagePoll] = []
-        for day in 0..<60 {
+        for day in 0..<90 {
             if day % 5 == 0 {
                 // Rate-limited poll every 5 days
                 polls.append(makePoll(daysAgo: day, fiveHourUtil: 100.0))
@@ -319,8 +320,9 @@ struct SubscriptionPatternDetectorTests {
     func chronicUnderpoweringCostBased() async throws {
         // Pro user ($20/mo) with extra usage costing $90/mo = $110 total > Max 5x $100/mo
         // API returns cents: 9000 = $90
+        // 90 days: two complete months remain after the detector drops the current partial month
         var polls: [UsagePoll] = []
-        for day in 0..<60 {
+        for day in 0..<90 {
             polls.append(makePoll(
                 daysAgo: day,
                 fiveHourUtil: 70.0,

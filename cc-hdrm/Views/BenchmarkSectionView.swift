@@ -29,8 +29,16 @@ struct BenchmarkSectionView: View {
         category: "benchmark-ui"
     )
 
-    /// Known Claude models for auto-detection fallback.
-    private static let defaultModels = ["claude-sonnet-4-6"]
+    /// Models benchmarked when no models are stored in preferences.
+    static let defaultModels = ["claude-sonnet-4-6", "claude-fable-5"]
+
+    /// Shown wherever benchmark cost is explained: Fable requests draw down the separate Fable weekly cap.
+    static let fableCapNote = "Fable requests also count against your Fable weekly cap."
+
+    /// Stored preference wins when non-empty; otherwise the known defaults.
+    static func resolveModels(stored: [String]) -> [String] {
+        stored.isEmpty ? defaultModels : stored
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -54,7 +62,7 @@ struct BenchmarkSectionView: View {
                     } label: {
                         Label("Measure", systemImage: "gauge.with.dots.needle.33percent")
                     }
-                    .help("Send test requests to measure token efficiency per model. Uses real tokens from your quota.")
+                    .help("Send test requests to measure token efficiency per model. Uses real tokens from your quota. \(Self.fableCapNote)")
                     .disabled(benchmarkState.isRunning)
                 }
             }
@@ -248,13 +256,7 @@ struct BenchmarkSectionView: View {
         benchmarkState.isRunning = true
         benchmarkState.results = []
 
-        let models: [String]
-        let storedModels = preferencesManager.benchmarkModels
-        if storedModels.isEmpty {
-            models = Self.defaultModels
-        } else {
-            models = storedModels
-        }
+        let models = Self.resolveModels(stored: preferencesManager.benchmarkModels)
 
         let variantStrings = preferencesManager.benchmarkVariants
         let variants = variantStrings.compactMap { BenchmarkVariant(rawValue: $0) }

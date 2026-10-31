@@ -334,7 +334,7 @@ struct SettingsView: View {
                     .onChange(of: benchmarkVariantCacheHeavy) { _, _ in syncBenchmarkVariants() }
                     .accessibilityLabel("Cache heavy variant, \(benchmarkVariantCacheHeavy ? "on" : "off")")
 
-                Text("Benchmark sends test requests per model to measure how many tokens equal 1% of your usage budget. Each variant uses ~2K-5K tokens. Running all variants for all models uses the most tokens but reveals the most about rate limit weighting.")
+                Text("Benchmark sends test requests per model to measure how many tokens equal 1% of your usage budget. Each variant uses ~2K-5K tokens. Running all variants for all models uses the most tokens but reveals the most about rate limit weighting. \(BenchmarkSectionView.fableCapNote)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

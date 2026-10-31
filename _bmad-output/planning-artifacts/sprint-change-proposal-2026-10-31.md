@@ -4,7 +4,7 @@
 **Triggered by:** External platform change — Anthropic removed the 5-hour usage limit
 **Category:** Strategic pivot / platform change
 **Status:** APPROVED 2026-10-31 (Boss)
-**Release:** `[minor]` (1.5.1 → 1.6.0)
+**Release:** `[minor]` (1.6.0 → 1.7.0)
 **Review mode:** Batch
 
 ---
@@ -53,11 +53,11 @@ Anthropic removed the 5-hour rolling limit. The weekly allowance is now the only
 | 1.1 Trigger | [x] | External API change, no triggering story |
 | 1.2 Problem | [x] | Strategic pivot / platform change |
 | 1.3 Evidence | [x] | `usage.db` polls + code audit above |
-| 2.1 Current epic (21) | [x] | 21.1–21.4 done and unaffected. 21.5 blocked by benchmark rework |
+| 2.1 Current epic (21) | [x] | 21.1–21.5 done and unaffected (21.5 released in 1.6.0) |
 | 2.2 Epic-level change | [!] | New Epic 26 |
 | 2.3 Remaining epics | [!] | Codex epics 22–25 assume Claude's 5h-primary layout as a template |
 | 2.4 Obsolete / new epics | [x] | None obsolete. One new epic |
-| 2.5 Resequencing | [!] | Epic 26 before 21.5 and before Codex (22–25) |
+| 2.5 Resequencing | [!] | Epic 26 before Codex (22–25) |
 | 3.1 PRD | [!] | 15 FRs to rewrite or retire (section 4.2) |
 | 3.2 Architecture | [!] | Dual-window, promotion, slope, credit math, headroom sections |
 | 3.3 UX | [!] | Both UX specs: information hierarchy, gauges, promotion, sparkline, slope |
@@ -70,7 +70,7 @@ Anthropic removed the 5-hour rolling limit. The weekly allowance is now the only
 ### Epic impact
 
 - **Epics 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17, 20** — done; their 5h-based behaviour gets replaced by Epic 26. Completed story files stay as historical record.
-- **Epic 21 (Fable)** — 21.1–21.4 unaffected. **21.5 must wait for 26.8** (it runs through the benchmark path).
+- **Epic 21 (Fable)** — 21.1–21.5 done and unaffected. 21.5 (Fable benchmark default) merged and released in 1.6.0 on 2026-10-31; 26.8 must keep it working on weekly deltas.
 - **Epics 22–25 (Codex, backlog)** — Codex still has its own 5-hour window. But stories 23.1, 23.2, 23.4, 24.1, 25.1–25.3 planned to reuse Claude's 5h components. After Epic 26 those components become weekly-only. Codex stories must be re-validated when Epic 22 starts. No edits to them now.
 
 ### Data
@@ -165,7 +165,7 @@ Stories in build order. 26.1 fixes the live breakage first.
 - Measures the weekly delta. UI copy: "per 1% of your weekly allowance".
 - **Hard spend cap** and an up-front estimate of how much weekly allowance the run will use, confirmed by the user.
 - **Gate:** if one run would cost more than a set share of the weekly allowance, stop and ask whether to retire the benchmark instead.
-- Unblocks 21.5.
+- Keeps the 21.5 Fable default model working.
 
 **26.9 — Notifications, tier credits and settings cleanup**
 - Remove the 5h threshold state machine and its notifications. Weekly and Fable thresholds unchanged.
@@ -221,7 +221,7 @@ Also: prose sections "API Response Format" (L71–107), Phase 1 MVP (L161–162)
 
 - `_bmad-output/planning-artifacts/epics/epic-list.md`: add Epic 26. New file `epic-26-weekly-first-monitoring.md`.
 - `_bmad-output/planning-artifacts/epics/requirements-inventory.md`: stale (stops at FR45). Update FR rows listed in 4.2 only.
-- `_bmad-output/implementation-artifacts/sprint-status.yaml`: add `epic-26` and stories 26-1 … 26-9 as `backlog`; note on 21-5 "blocked by 26-8".
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`: add `epic-26` and stories 26-1 … 26-9 as `backlog`.
 - `README.md`, `docs/images/demo.gif`: updated in the docs step.
 
 ---
@@ -243,7 +243,7 @@ Also: prose sections "API Response Format" (L71–107), Phase 1 MVP (L161–162)
 - Pace line and run-out projection match hand-calculated values in tests.
 - Headroom breakdown, value $, tier advice and TPP produce non-zero results from weekly data.
 - No `DELETE` or `DROP` on historical tables.
-- All tests pass; release 1.6.0 published from the `[minor]` PR.
+- All tests pass; release 1.7.0 published from the `[minor]` PR.
 
 ---
 
@@ -259,7 +259,7 @@ Also: prose sections "API Response Format" (L71–107), Phase 1 MVP (L161–162)
 | `_bmad-output/planning-artifacts/epics/epic-26-weekly-first-monitoring.md` | New |
 | `_bmad-output/planning-artifacts/epics/epic-list.md`, `epics/index.md` | Epic 26 added |
 | `_bmad-output/planning-artifacts/epics/requirements-inventory.md` | Revised / retired FR rows synced with PRD |
-| `_bmad-output/implementation-artifacts/sprint-status.yaml` | `epic-26` + stories 26-1 … 26-9 as backlog; 21-5 marked blocked by 26-8 |
+| `_bmad-output/implementation-artifacts/sprint-status.yaml` | `epic-26` + stories 26-1 … 26-9 as backlog |
 
 **Decisions made while applying:**
 - Fable corner dot also shows when the Fable cap is exhausted.

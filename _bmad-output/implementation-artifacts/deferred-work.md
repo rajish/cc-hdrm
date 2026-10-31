@@ -12,6 +12,10 @@
 
 - Threshold-notification dedup state survives sign-out — `performSignOut` (cc-hdrm/App/AppDelegate.swift:373) clears windows and scoped limits in AppState but never resets `NotificationService`'s `fiveHourThresholdState` / `sevenDayThresholdState` / `scopedThresholdState`. A different account signing in inherits the previous account's warned20/warned5 state, suppressing its first threshold notification until a recovery re-arms the machine. Pre-existing for 5h/7d since Story 5.2; Story 21.4 adds a third machine with the same behavior. Fix would reset all three states on sign-out in one pass.
 
+## Deferred from: code review of spec-26-1-weekly-allowance-menu-bar (2026-11-01)
+
+- `PollingEngine` plan-exhausted rule still counts the 5-hour window — `cc-hdrm/Services/PollingEngine.swift:275` sets `planExhausted` when the 5h window is exhausted, while `AppState.isExtraUsageActive` is now weekly-only. The two rules disagree if a 5-hour value ever returns: extra-usage alerts would fire while the menu bar shows normal headroom. Belongs with the 5h notification cleanup in Story 26.9.
+
 ## Deferred from: code review of spec-26-7-tpp-weekly-deltas (2026-11-01)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-26-7-tpp-weekly-deltas.md`

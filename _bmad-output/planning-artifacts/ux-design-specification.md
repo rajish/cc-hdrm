@@ -410,7 +410,7 @@ Alex's mental model is depletion-based: he has a tank of capacity, and it drains
 - Format: GaugeIcon (semicircular gauge) + weekly headroom percentage or weekly reset countdown (e.g., "67%" or "↻ 3d 4h"); the actionable arrow is appended only when run-out is projected before the weekly reset (e.g., "22% ↗")
 - GaugeIcon serves as the primary visual anchor with color reflecting weekly headroom state
 - GaugeIcon corner indicator for the Fable weekly cap:
-  - **Colored dot** when the Fable cap is in caution/warning/critical — dot uses the Fable cap's HeadroomState color
+  - **Colored dot** when the Fable cap is in caution/warning/critical/exhausted — dot uses the Fable cap's HeadroomState color
   - **Empty** when the Fable cap is normal (>40% headroom), absent, or disconnected — quiet when everything is fine
   - The "7d" promoted label is retired (2026-10-31) — the menu bar always shows weekly
 - Disconnected state: "—" in grey
@@ -839,6 +839,7 @@ Every headroom state is expressed consistently across all three communication ch
 | Caution (20-40%)      | Yellow dot             |
 | Warning (5-20%)       | Orange dot             |
 | Critical (< 5%)       | Red dot                |
+| Exhausted (0%)        | Exhausted-colour dot   |
 | Absent from response  | Empty                  |
 
 **7d promotion rule:** Retired 2026-10-31 — the menu bar always shows the weekly window. The menu bar number stays the overall weekly headroom even when the Fable cap is tighter; the dot carries the Fable signal.
