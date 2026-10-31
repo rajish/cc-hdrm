@@ -58,7 +58,7 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 - **Error handling / graceful degradation** — every component must handle disconnected, token-expired, and no-credentials states consistently using the same grey "—" visual language.
 - **Accessibility** — VoiceOver labels, color independence (number + color + font weight), keyboard navigation, reduced motion support. Applies to all custom UI components.
 - **Data freshness** — staleness tracking affects menu bar display, popover timestamp, and StatusMessageView visibility. Must be centrally managed.
-- **Single weekly window + scoped caps** (revised 2026-10-31) — the weekly (`seven_day`) window is the only plan-wide window. It drives the menu bar text, colour, gauge icon and primary popover gauge. Model-scoped weekly caps (Fable: `limits[]` entries with `kind: "weekly_scoped"`) are tracked alongside it in `scopedLimits`, each with its own threshold state machine. GaugeIcon's corner dot shows the Fable cap state at caution/warning/critical; the menu bar number stays the overall weekly. No `DisplayedWindow`, no promotion rule, no `quotasRemaining`.
+- **Single weekly window + scoped caps** (revised 2026-10-31) — the weekly (`seven_day`) window is the only plan-wide window. It drives the menu bar text, colour, gauge icon and primary popover gauge. Model-scoped weekly caps (Fable: `limits[]` entries with `kind: "weekly_scoped"`) are tracked alongside it in `scopedLimits`, each with its own threshold state machine. GaugeIcon's corner dot shows the Fable cap state at caution/warning/critical/exhausted; the menu bar number stays the overall weekly. No `DisplayedWindow`, no promotion rule, no `quotasRemaining`.
 
 ## Starter Template Evaluation
 
@@ -1135,6 +1135,7 @@ class AnalyticsWindowController {
 ```swift
 func renderMenuBarText() -> String {
     guard connectionStatus != .disconnected else { return "✳ —" }
+    if let extraText = menuBarExtraUsageText { return extraText }  // weekly exhausted + extra usage enabled
     guard sevenDay.headroomState != .exhausted else { return "✳ ↻ \(weeklyCountdown)" }  // "↻ 3d 4h"
     
     let base = "✳ \(weeklyHeadroomPercent)%"
@@ -1143,7 +1144,7 @@ func renderMenuBarText() -> String {
 }
 ```
 
-When the weekly window is exhausted and extra usage is active, the extra-usage $ text shows. The gauge icon's corner dot shows the Fable weekly cap state at caution, warning or critical.
+When the weekly window is exhausted and extra usage is active, the extra-usage $ text shows. The gauge icon's corner dot shows the Fable weekly cap state at caution, warning, critical or exhausted.
 
 **Width impact:** +2 characters when the run-out arrow is visible (~7 chars max vs ~5 chars Phase 1-2).
 

@@ -64,6 +64,21 @@ extension Date {
         return "\(totalHours)h \(minutes)m"
     }
 
+    /// Spoken form of `countdownString()` for VoiceOver, same truncation:
+    /// `"47 minutes"`, `"2 hours 13 minutes"`, `"3 days 4 hours"`. Past or zero: `"0 minutes"`.
+    func spokenCountdownString() -> String {
+        let totalMinutes = Int(max(0, self.timeIntervalSince(Date())) / 60)
+        let days = totalMinutes / 1440
+        let hours = (totalMinutes % 1440) / 60
+        let minutes = totalMinutes % 60
+        func unit(_ value: Int, _ name: String) -> String {
+            "\(value) \(name)\(value == 1 ? "" : "s")"
+        }
+        if days > 0 { return "\(unit(days, "day")) \(unit(hours, "hour"))" }
+        if hours > 0 { return "\(unit(hours, "hour")) \(unit(minutes, "minute"))" }
+        return unit(minutes, "minute")
+    }
+
     private nonisolated(unsafe) static let sameDayTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "h:mm a"

@@ -93,8 +93,7 @@ The weekly gauge (large, primary) always shows a pace line below its countdown. 
 │     42%                      │
 │  resets in 2d 1h             │
 │  at Thu 9:00 AM              │
-│  Ahead of pace — runs out    │  ← pace line (always visible)
-│  ~Thu 14:00                  │
+│  On pace                     │  ← pace line (always visible)
 ├──────────────────────────────┤
 │    ◯ Fable gauge             │
 │  resets in 2d 1h             │
@@ -109,7 +108,7 @@ The weekly gauge (large, primary) always shows a pace line below its countdown. 
 
 ### Accessibility
 
-- VoiceOver announces pace as part of the weekly gauge reading: "Weekly headroom: 42 percent, ahead of pace, runs out around Thursday 14:00"
+- VoiceOver announces pace as part of the weekly gauge reading: "Weekly headroom: 42 percent, on pace". When run-out is projected before the reset: "…, ahead of pace, runs out around Thursday 14:00"
 - Pace is never color-only — the line text and the arrow shape convey meaning independently
 
 ---

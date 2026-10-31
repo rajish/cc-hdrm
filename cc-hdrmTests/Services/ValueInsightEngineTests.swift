@@ -392,7 +392,27 @@ struct ValueInsightEngineTests {
     @Test("All insight stable (no significant trend): quiet mode when 20-80%")
     func allInsightStable() {
         let mock = makeMockService()
-        let events = makeEvents(count: 30, spanDays: 120)
+        // Monthly utilization depends on each calendar month's event span, so anchor events to
+        // fixed days in the last 4 complete months: every month spans 7 days → ~57%, any date.
+        let calendar = Calendar.current
+        let startOfThisMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: Date()))!
+        var events: [ResetEvent] = []
+        for monthsBack in (1...4).reversed() {
+            let monthStart = calendar.date(byAdding: .month, value: -monthsBack, to: startOfThisMonth)!
+            for day in [10, 17] {
+                let date = calendar.date(byAdding: .day, value: day - 1, to: monthStart)!
+                events.append(ResetEvent(
+                    id: Int64(events.count + 1),
+                    timestamp: Int64(date.timeIntervalSince1970 * 1000),
+                    fiveHourPeak: 50.0,
+                    sevenDayUtil: 40.0,
+                    tier: "default_claude_pro",
+                    usedCredits: nil,
+                    constrainedCredits: nil,
+                    unusedCredits: nil
+                ))
+            }
+        }
 
         let insight = ValueInsightEngine.computeInsight(
             timeRange: .all,
@@ -403,7 +423,7 @@ struct ValueInsightEngineTests {
             headroomAnalysisService: mock
         )
 
-        // Mock returns 52% utilization → within 20-80% → quiet
+        // 2.86M used / (5M weekly credits × 7/7 days) ≈ 57% per month → within 20-80% → quiet
         #expect(insight.text.contains("Avg monthly utilization:"))
         #expect(insight.isQuiet == true)
     }
