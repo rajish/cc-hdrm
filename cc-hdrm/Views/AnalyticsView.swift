@@ -228,11 +228,18 @@ struct AnalyticsView: View {
         InsightStack(insights: ([usageInsight] + benchmarkAnchors + extraUsageInsights).sorted { $0.priority > $1.priority })
     }
 
-    /// Computes the time span in hours between the first and last reset events.
+    /// Computes the hours of data covered by the reset events: the first-to-last span of legacy
+    /// 5h events plus 168 hours per weekly cycle (mirrors `SubscriptionValueCalculator.periodDays`).
     /// Static for testability (same pattern as `fetchData`).
     static func computeDataSpanHours(resetEvents: [ResetEvent]) -> Double {
-        guard let first = resetEvents.first, let last = resetEvents.last else { return 0 }
-        return Double(last.timestamp - first.timestamp) / 3_600_000.0
+        let weeklyCount = resetEvents.filter(\.isWeeklyCycle).count
+        let legacyEvents = resetEvents.filter { !$0.isWeeklyCycle }
+
+        var legacyHours: Double = 0
+        if let first = legacyEvents.first, let last = legacyEvents.last {
+            legacyHours = Double(last.timestamp - first.timestamp) / 3_600_000.0
+        }
+        return legacyHours + 168.0 * Double(weeklyCount)
     }
 
     /// Computes the usage insight for the current time range. Used by both
@@ -586,9 +593,9 @@ struct AnalyticsView: View {
 
 /// Minimal stub for HeadroomAnalysisServiceProtocol in previews only.
 private struct PreviewAnalyticsHeadroomService: HeadroomAnalysisServiceProtocol {
-    func analyzeResetEvent(fiveHourPeak: Double, sevenDayUtil: Double, creditLimits: CreditLimits) -> HeadroomBreakdown {
-        HeadroomBreakdown(usedPercent: 52, constrainedPercent: 12, unusedPercent: 36,
-                          usedCredits: 286_000, constrainedCredits: 66_000, unusedCredits: 198_000)
+    func analyzeResetEvent(sevenDayPeak: Double, creditLimits: CreditLimits) -> HeadroomBreakdown {
+        HeadroomBreakdown(usedPercent: 52, unusedPercent: 48,
+                          usedCredits: 2_600_000, unusedCredits: 2_400_000)
     }
 
     func aggregateBreakdown(events: [ResetEvent]) -> PeriodSummary {

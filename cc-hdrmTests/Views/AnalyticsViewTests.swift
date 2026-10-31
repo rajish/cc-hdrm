@@ -627,15 +627,11 @@ struct AnalyticsViewConditionalDisplayTests {
         let totalSpanMs = Int64(spanHours * 3_600_000)
         let stepMs = count > 1 ? totalSpanMs / Int64(count - 1) : 0
         return (0..<count).map { i in
-            ResetEvent(
+            ResetEvent.legacyFixture(
                 id: Int64(i + 1),
                 timestamp: nowMs - totalSpanMs + Int64(i) * stepMs,
                 fiveHourPeak: 50.0 + Double(i),
-                sevenDayUtil: 30.0 + Double(i),
-                tier: "default_claude_pro",
-                usedCredits: nil,
-                constrainedCredits: nil,
-                unusedCredits: nil
+                sevenDayUtil: 30.0 + Double(i)
             )
         }
     }
@@ -684,6 +680,34 @@ struct AnalyticsViewConditionalDisplayTests {
         let events = sampleEvents(count: 1, spanHours: 0)
         let hours = AnalyticsView.computeDataSpanHours(resetEvents: events)
         #expect(hours == 0, "Single event has zero span")
+    }
+
+    private func weeklyCycleEvent(id: Int64, weekIndex: Int) -> ResetEvent {
+        ResetEvent(
+            id: id,
+            timestamp: ResetEvent.fiveHourLimitRetiredAtMs + Int64(weekIndex + 1) * 7 * 86_400_000,
+            fiveHourPeak: nil, sevenDayUtil: 70, tier: "default_claude_pro",
+            usedCredits: nil, constrainedCredits: nil, unusedCredits: nil
+        )
+    }
+
+    @Test("computeDataSpanHours counts a single weekly cycle as 168 hours")
+    func dataSpanHoursSingleWeeklyCycle() {
+        let hours = AnalyticsView.computeDataSpanHours(resetEvents: [weeklyCycleEvent(id: 1, weekIndex: 0)])
+        #expect(hours == 168)
+    }
+
+    @Test("computeDataSpanHours sums legacy span and 168 hours per weekly cycle")
+    func dataSpanHoursMixed() {
+        let legacyStart = ResetEvent.fiveHourLimitRetiredAtMs - 10 * 3_600_000
+        let events = [
+            ResetEvent.legacyFixture(id: 1, timestamp: legacyStart, fiveHourPeak: 50, sevenDayUtil: 30),
+            ResetEvent.legacyFixture(id: 2, timestamp: legacyStart + 6 * 3_600_000, fiveHourPeak: 60, sevenDayUtil: 35),
+            weeklyCycleEvent(id: 3, weekIndex: 0),
+            weeklyCycleEvent(id: 4, weekIndex: 1),
+        ]
+        let hours = AnalyticsView.computeDataSpanHours(resetEvents: events)
+        #expect(abs(hours - (6 + 2 * 168)) < 0.0001)
     }
 
     // MARK: - 4.4 fetchData call counts unchanged (no regression)

@@ -67,10 +67,10 @@ enum SubscriptionValueCalculator {
         )
     }
 
-    /// Returns the number of days for a time range.
-    /// For fixed ranges (.day, .week, .month), caps at actual data span so the
-    /// denominator never exceeds the time the user has real data for.
-    /// For `.all`, uses the actual span from the first to last event.
+    /// Returns the number of days of capacity covered by the events in a time range.
+    /// Legacy 5h events contribute their actual data span (min 1 day), capped at the
+    /// nominal range length (.day 1, .week 7, .month 30, .all uncapped).
+    /// Each weekly cycle contributes a full 7 days, since its reset event represents the whole cycle.
     static func periodDays(for timeRange: TimeRange, events: [ResetEvent]) -> Double {
         let nominalDays: Double
         switch timeRange {
@@ -80,11 +80,17 @@ enum SubscriptionValueCalculator {
         case .all: nominalDays = .greatestFiniteMagnitude
         }
 
-        guard let first = events.first, let last = events.last else { return 0 }
-        let spanMs = last.timestamp - first.timestamp
-        let actualDays = max(1.0, Double(spanMs) / (24.0 * 60.0 * 60.0 * 1000.0))
+        let weeklyCount = events.filter(\.isWeeklyCycle).count
+        let legacyEvents = events.filter { !$0.isWeeklyCycle }
 
-        return min(nominalDays, actualDays)
+        var legacyDays: Double = 0
+        if let first = legacyEvents.first, let last = legacyEvents.last {
+            let spanMs = last.timestamp - first.timestamp
+            let actualDays = max(1.0, Double(spanMs) / (24.0 * 60.0 * 60.0 * 1000.0))
+            legacyDays = min(nominalDays, actualDays)
+        }
+
+        return legacyDays + 7.0 * Double(weeklyCount)
     }
 
     /// Formats a dollar amount for display.

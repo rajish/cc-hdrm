@@ -11,3 +11,12 @@
 ## Deferred from: code review of spec-21-4-fable-threshold-notifications (2026-08-13)
 
 - Threshold-notification dedup state survives sign-out — `performSignOut` (cc-hdrm/App/AppDelegate.swift:373) clears windows and scoped limits in AppState but never resets `NotificationService`'s `fiveHourThresholdState` / `sevenDayThresholdState` / `scopedThresholdState`. A different account signing in inherits the previous account's warned20/warned5 state, suppressing its first threshold notification until a recovery re-arms the machine. Pre-existing for 5h/7d since Story 5.2; Story 21.4 adds a third machine with the same behavior. Fix would reset all three states on sign-out in one pass.
+
+## Deferred from: code review of spec-26-5-value-headroom-per-weekly-cycle (2026-11-01)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-per-weekly-cycle.md`
+  summary: The first weekly cycle after the 2026-10-31 cutover overlaps the last days of legacy 5h events, so month/all ranges spanning the cutover count those days' capacity and usage twice.
+  evidence: `SubscriptionValueCalculator.periodDays` adds the legacy span plus 7 days per weekly cycle, and `HeadroomAnalysisService.aggregateBreakdown` sums both; nothing trims legacy events inside the first weekly cycle. Affects only ranges containing the transition week.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-per-weekly-cycle.md`
+  summary: 5h reset detection branches and `getRecentPeakUtilization` in `cc-hdrm/Services/HistoricalDataService.swift` are dead since `five_hour` is null; remove per the "remove, don't hide" principle.
+  evidence: Detection still checks `fiveHourResetsAt`/`fiveHourUtil` and queries `MAX(five_hour_util)`; many `HistoricalDataServiceTests` cover them, so removal belongs in a cleanup story (26.9 or follow-up).

@@ -13,17 +13,43 @@ struct HeadroomAnalysisServiceTests {
     /// Service instance (no preferencesManager — tests pass explicit creditLimits to analyzeResetEvent)
     private let service = HeadroomAnalysisService()
 
-    private func makeEvent(
+    private static let preCutoverMs: Int64 = 1706976000000
+    private static let postCutoverMs: Int64 = ResetEvent.fiveHourLimitRetiredAtMs + 7 * 86_400_000
+
+    /// Legacy 5h event with stored credits (Pro: 72% peak, 85% 7d → used 396k, unused 154k).
+    private func makeLegacyEvent(
         id: Int64 = 1,
-        timestamp: Int64 = 1706976000000,
+        timestamp: Int64 = HeadroomAnalysisServiceTests.preCutoverMs,
         fiveHourPeak: Double? = 72.0,
         sevenDayUtil: Double? = 85.0,
-        tier: String? = "default_claude_pro"
+        tier: String? = "default_claude_pro",
+        usedCredits: Double? = 396_000,
+        constrainedCredits: Double? = 0,
+        unusedCredits: Double? = 154_000
     ) -> ResetEvent {
         ResetEvent(
             id: id,
             timestamp: timestamp,
             fiveHourPeak: fiveHourPeak,
+            sevenDayUtil: sevenDayUtil,
+            tier: tier,
+            usedCredits: usedCredits,
+            constrainedCredits: constrainedCredits,
+            unusedCredits: unusedCredits
+        )
+    }
+
+    /// Post-cutover weekly cycle event (no 5h peak, no stored credits needed).
+    private func makeWeeklyEvent(
+        id: Int64 = 100,
+        timestamp: Int64 = HeadroomAnalysisServiceTests.postCutoverMs,
+        sevenDayUtil: Double = 70.0,
+        tier: String? = "default_claude_pro"
+    ) -> ResetEvent {
+        ResetEvent(
+            id: id,
+            timestamp: timestamp,
+            fiveHourPeak: nil,
             sevenDayUtil: sevenDayUtil,
             tier: tier,
             usedCredits: nil,
@@ -32,148 +58,214 @@ struct HeadroomAnalysisServiceTests {
         )
     }
 
-    // MARK: - 8.2: 5h_remaining <= 7d_remaining (AC-1 case 1)
+    // MARK: - analyzeResetEvent (weekly two-band)
 
-    @Test("analyzeResetEvent: 5h_remaining <= 7d_remaining — true_unused = 5h_remaining, constrained = 0")
-    func analyzeWithFiveHourNotConstrained() {
-        // 72% peak, 85% 7d util
-        // 5h_remaining = (1-0.72) * 550,000 = 154,000
-        // 7d_remaining = (1-0.85) * 5,000,000 = 750,000
-        // 5h_remaining (154,000) <= 7d_remaining (750,000)
-        let breakdown = service.analyzeResetEvent(
-            fiveHourPeak: 72.0,
-            sevenDayUtil: 85.0,
-            creditLimits: proLimits
-        )
+    @Test("analyzeResetEvent: 70% weekly peak on Pro — used 70% (3.5M), unused 30% (1.5M)")
+    func analyzeWeeklySeventyPercent() {
+        let breakdown = service.analyzeResetEvent(sevenDayPeak: 70.0, creditLimits: proLimits)
 
-        #expect(isClose(breakdown.usedPercent, 72.0))
-        #expect(isClose(breakdown.unusedPercent, 28.0))
-        #expect(isClose(breakdown.constrainedPercent, 0.0))
-        #expect(isClose(breakdown.usedCredits, 396_000))
-        #expect(isClose(breakdown.unusedCredits, 154_000))
-        #expect(isClose(breakdown.constrainedCredits, 0))
+        #expect(isClose(breakdown.usedPercent, 70.0))
+        #expect(isClose(breakdown.unusedPercent, 30.0))
+        #expect(isClose(breakdown.usedCredits, 3_500_000))
+        #expect(isClose(breakdown.unusedCredits, 1_500_000))
     }
-
-    // MARK: - 8.3: 5h_remaining > 7d_remaining (AC-1 case 2)
-
-    @Test("analyzeResetEvent: 5h_remaining > 7d_remaining — true_unused = 7d_remaining, constrained = difference")
-    func analyzeWithSevenDayConstrained() {
-        // 50% peak, 98% 7d util
-        // 5h_remaining = (1-0.50) * 550,000 = 275,000
-        // 7d_remaining = (1-0.98) * 5,000,000 = 100,000
-        // 5h_remaining (275,000) > 7d_remaining (100,000)
-        let breakdown = service.analyzeResetEvent(
-            fiveHourPeak: 50.0,
-            sevenDayUtil: 98.0,
-            creditLimits: proLimits
-        )
-
-        #expect(isClose(breakdown.usedPercent, 50.0))
-        #expect(isClose(breakdown.usedCredits, 275_000))
-
-        // true_unused = 7d_remaining = 100,000
-        #expect(isClose(breakdown.unusedCredits, 100_000))
-
-        // constrained = 5h_remaining - 7d_remaining = 175,000
-        #expect(isClose(breakdown.constrainedCredits, 175_000))
-
-        // Percentages relative to 5h limit (550,000)
-        let expectedUnusedPercent = (100_000.0 / 550_000.0) * 100.0
-        let expectedConstrainedPercent = (175_000.0 / 550_000.0) * 100.0
-        #expect(isClose(breakdown.unusedPercent, expectedUnusedPercent))
-        #expect(isClose(breakdown.constrainedPercent, expectedConstrainedPercent))
-    }
-
-    // MARK: - 8.4: Percentages sum to 100%
 
     @Test("analyzeResetEvent: percentages always sum to 100%")
     func percentagesSumTo100() {
-        // Test several scenarios
-        let scenarios: [(peak: Double, util7d: Double)] = [
-            (72.0, 85.0),
-            (50.0, 98.0),
-            (0.0, 0.0),
-            (100.0, 100.0),
-            (33.33, 66.66),
-            (99.9, 10.0),
-            (10.0, 99.9),
-        ]
-
-        for scenario in scenarios {
-            let breakdown = service.analyzeResetEvent(
-                fiveHourPeak: scenario.peak,
-                sevenDayUtil: scenario.util7d,
-                creditLimits: proLimits
-            )
-
-            let sum = breakdown.usedPercent + breakdown.constrainedPercent + breakdown.unusedPercent
-            #expect(isClose(sum, 100.0), "Percentages should sum to 100%, got \(sum) for peak=\(scenario.peak), 7d=\(scenario.util7d)")
+        for peak in [0.0, 33.33, 70.0, 99.9, 100.0] {
+            let breakdown = service.analyzeResetEvent(sevenDayPeak: peak, creditLimits: proLimits)
+            let sum = breakdown.usedPercent + breakdown.unusedPercent
+            #expect(isClose(sum, 100.0), "Percentages should sum to 100%, got \(sum) for peak=\(peak)")
+            #expect(isClose(breakdown.usedCredits + breakdown.unusedCredits, 5_000_000))
         }
     }
 
-    // MARK: - 8.5: 0% peak (no usage = 100% unused)
-
-    @Test("analyzeResetEvent: 0% peak — all unused, no usage, no constrained")
+    @Test("analyzeResetEvent: 0% peak — all unused")
     func analyzeWithZeroPeak() {
-        let breakdown = service.analyzeResetEvent(
-            fiveHourPeak: 0.0,
-            sevenDayUtil: 0.0,
-            creditLimits: proLimits
-        )
+        let breakdown = service.analyzeResetEvent(sevenDayPeak: 0.0, creditLimits: proLimits)
 
         #expect(isClose(breakdown.usedPercent, 0.0))
         #expect(isClose(breakdown.usedCredits, 0.0))
-        #expect(isClose(breakdown.constrainedPercent, 0.0))
-        #expect(isClose(breakdown.constrainedCredits, 0.0))
-
-        // All 550,000 credits unused
         #expect(isClose(breakdown.unusedPercent, 100.0))
-        #expect(isClose(breakdown.unusedCredits, 550_000))
+        #expect(isClose(breakdown.unusedCredits, 5_000_000))
     }
 
-    // MARK: - 8.6: 100% peak (all used, 0 unused, 0 constrained)
-
-    @Test("analyzeResetEvent: 100% peak — all used, no unused, no constrained")
-    func analyzeWithFullPeak() {
-        let breakdown = service.analyzeResetEvent(
-            fiveHourPeak: 100.0,
-            sevenDayUtil: 100.0,
-            creditLimits: proLimits
-        )
+    @Test("analyzeResetEvent: peak over 100% clamps to used 100 / unused 0")
+    func analyzeClampsOverHundred() {
+        let breakdown = service.analyzeResetEvent(sevenDayPeak: 104.0, creditLimits: proLimits)
 
         #expect(isClose(breakdown.usedPercent, 100.0))
-        #expect(isClose(breakdown.usedCredits, 550_000))
         #expect(isClose(breakdown.unusedPercent, 0.0))
+        #expect(isClose(breakdown.usedCredits, 5_000_000))
         #expect(isClose(breakdown.unusedCredits, 0.0))
-        #expect(isClose(breakdown.constrainedPercent, 0.0))
-        #expect(isClose(breakdown.constrainedCredits, 0.0))
     }
 
-    // MARK: - 8.7: aggregateBreakdown sums credits across multiple events
+    @Test("analyzeResetEvent: negative peak clamps to 0")
+    func analyzeClampsNegative() {
+        let breakdown = service.analyzeResetEvent(sevenDayPeak: -3.0, creditLimits: proLimits)
 
-    @Test("aggregateBreakdown: sums credits across multiple events correctly")
-    func aggregateSumsCredits() {
+        #expect(isClose(breakdown.usedPercent, 0.0))
+        #expect(isClose(breakdown.unusedPercent, 100.0))
+    }
+
+    // MARK: - aggregateBreakdown: weekly cycles
+
+    @Test("aggregateBreakdown: weekly cycle with 70% peak reports 70% used / 30% unused")
+    func aggregateWeeklyCycle() {
+        let summary = service.aggregateBreakdown(events: [makeWeeklyEvent(sevenDayUtil: 70.0)])
+
+        #expect(summary.resetCount == 1)
+        #expect(isClose(summary.usedCredits, 3_500_000))
+        #expect(isClose(summary.unusedCredits, 1_500_000))
+        #expect(summary.constrainedCredits == 0)
+        #expect(isClose(summary.usedPercent, 70.0))
+        #expect(isClose(summary.unusedPercent, 30.0))
+        #expect(summary.constrainedPercent == 0)
+        #expect(isClose(summary.avgPeakUtilization, 70.0))
+    }
+
+    @Test("aggregateBreakdown: weekly cycle over 100% clamps to 100 used / 0 unused")
+    func aggregateWeeklyOverHundred() {
+        let summary = service.aggregateBreakdown(events: [makeWeeklyEvent(sevenDayUtil: 104.0)])
+
+        #expect(isClose(summary.usedPercent, 100.0))
+        #expect(isClose(summary.unusedPercent, 0.0))
+        #expect(isClose(summary.usedCredits, 5_000_000))
+        #expect(isClose(summary.avgPeakUtilization, 100.0))
+    }
+
+    @Test("aggregateBreakdown: weekly cycle ignores stored credits and recomputes from 7d peak")
+    func aggregateWeeklyRecomputes() {
+        let event = ResetEvent(
+            id: 1, timestamp: Self.postCutoverMs, fiveHourPeak: nil, sevenDayUtil: 40.0,
+            tier: "default_claude_pro", usedCredits: 1, constrainedCredits: 1, unusedCredits: 1
+        )
+        let summary = service.aggregateBreakdown(events: [event])
+
+        #expect(isClose(summary.usedCredits, 2_000_000))
+        #expect(isClose(summary.unusedCredits, 3_000_000))
+        #expect(summary.constrainedCredits == 0)
+    }
+
+    @Test("aggregateBreakdown: weekly cycle with unresolvable tier is skipped")
+    func aggregateWeeklyUnknownTier() {
+        let summary = service.aggregateBreakdown(events: [
+            makeWeeklyEvent(id: 1, tier: "unknown_tier_xyz"),
+            makeWeeklyEvent(id: 2, tier: nil),
+        ])
+
+        #expect(summary.resetCount == 0)
+        #expect(summary.usedCredits == 0)
+    }
+
+    @Test("aggregateBreakdown: weekly cycles resolve per-event tier")
+    func aggregateWeeklyMixedTier() {
+        let summary = service.aggregateBreakdown(events: [
+            makeWeeklyEvent(id: 1, sevenDayUtil: 50.0, tier: "default_claude_pro"),
+            makeWeeklyEvent(id: 2, timestamp: Self.postCutoverMs + 7 * 86_400_000, sevenDayUtil: 50.0, tier: "default_claude_max_5x"),
+        ])
+
+        let max5x = Double(RateLimitTier.max5x.creditLimits.sevenDayCredits)
+        #expect(summary.resetCount == 2)
+        #expect(isClose(summary.usedCredits, 2_500_000 + max5x / 2))
+        #expect(isClose(summary.usedPercent, 50.0))
+    }
+
+    // MARK: - aggregateBreakdown: legacy 5h events
+
+    @Test("aggregateBreakdown: legacy events use stored credits unchanged")
+    func aggregateLegacyStoredCredits() {
         let events = [
-            makeEvent(id: 1, fiveHourPeak: 72.0, sevenDayUtil: 85.0),
-            makeEvent(id: 2, fiveHourPeak: 50.0, sevenDayUtil: 98.0),
+            makeLegacyEvent(id: 1, fiveHourPeak: 72.0, usedCredits: 396_000, constrainedCredits: 0, unusedCredits: 154_000),
+            makeLegacyEvent(id: 2, fiveHourPeak: 50.0, sevenDayUtil: 98.0, usedCredits: 275_000, constrainedCredits: 175_000, unusedCredits: 100_000),
         ]
 
         let summary = service.aggregateBreakdown(events: events)
 
-        // Event 1: used=396,000 constrained=0 unused=154,000
-        // Event 2: used=275,000 constrained=175,000 unused=100,000
         #expect(isClose(summary.usedCredits, 396_000 + 275_000))
         #expect(isClose(summary.constrainedCredits, 0 + 175_000))
         #expect(isClose(summary.unusedCredits, 154_000 + 100_000))
         #expect(summary.resetCount == 2)
         #expect(isClose(summary.avgPeakUtilization, (72.0 + 50.0) / 2.0))
 
-        // Percentages should sum to 100%
         let sum = summary.usedPercent + summary.constrainedPercent + summary.unusedPercent
         #expect(isClose(sum, 100.0))
     }
 
-    // MARK: - 8.8: aggregateBreakdown with zero events
+    @Test("aggregateBreakdown: legacy event stored credits are not recomputed from peak or tier")
+    func aggregateLegacyNotRecomputed() {
+        // Stored values deliberately inconsistent with peak × 5h credits, and tier unresolvable
+        let event = makeLegacyEvent(tier: "unknown_tier_xyz", usedCredits: 123, constrainedCredits: 45, unusedCredits: 678)
+        let summary = service.aggregateBreakdown(events: [event])
+
+        #expect(summary.resetCount == 1)
+        #expect(summary.usedCredits == 123)
+        #expect(summary.constrainedCredits == 45)
+        #expect(summary.unusedCredits == 678)
+    }
+
+    @Test("aggregateBreakdown: legacy event with nil stored constrained counts as 0 constrained")
+    func aggregateLegacyNilConstrained() {
+        let summary = service.aggregateBreakdown(events: [makeLegacyEvent(constrainedCredits: nil)])
+
+        #expect(summary.resetCount == 1)
+        #expect(summary.constrainedCredits == 0)
+        #expect(isClose(summary.usedCredits, 396_000))
+    }
+
+    @Test("aggregateBreakdown: legacy event without stored credits is skipped")
+    func aggregateLegacyNoStoredCredits() {
+        let events = [
+            makeLegacyEvent(id: 1),
+            makeLegacyEvent(id: 2, usedCredits: nil, constrainedCredits: nil, unusedCredits: nil),
+            makeLegacyEvent(id: 3, usedCredits: 100, unusedCredits: nil),
+        ]
+
+        let summary = service.aggregateBreakdown(events: events)
+
+        #expect(summary.resetCount == 1)
+        #expect(isClose(summary.usedCredits, 396_000))
+        #expect(isClose(summary.avgPeakUtilization, 72.0))
+    }
+
+    @Test("aggregateBreakdown: pre-cutover peak-nil event is not a weekly cycle and is skipped")
+    func aggregatePreCutoverPeakNilSkipped() {
+        let events = [
+            makeLegacyEvent(id: 1, fiveHourPeak: nil, sevenDayUtil: 70.0, usedCredits: nil, constrainedCredits: nil, unusedCredits: nil),
+            // Even with stored credits, a peak-nil pre-cutover event is not counted
+            makeLegacyEvent(id: 2, fiveHourPeak: nil, sevenDayUtil: 70.0, usedCredits: 1_000, constrainedCredits: 0, unusedCredits: 1_000),
+        ]
+
+        let summary = service.aggregateBreakdown(events: events)
+
+        #expect(summary.resetCount == 0)
+        #expect(summary.usedCredits == 0)
+    }
+
+    @Test("aggregateBreakdown: post-cutover event without peak or 7d util is skipped")
+    func aggregatePostCutoverNoDataSkipped() {
+        let event = makeLegacyEvent(timestamp: Self.postCutoverMs, fiveHourPeak: nil, sevenDayUtil: nil, usedCredits: nil, constrainedCredits: nil, unusedCredits: nil)
+        let summary = service.aggregateBreakdown(events: [event])
+
+        #expect(summary.resetCount == 0)
+    }
+
+    // MARK: - aggregateBreakdown: mixed and empty
+
+    @Test("aggregateBreakdown: mixed legacy and weekly events sum both")
+    func aggregateMixed() {
+        let events = [
+            makeLegacyEvent(id: 1),
+            makeWeeklyEvent(id: 2, sevenDayUtil: 70.0),
+        ]
+
+        let summary = service.aggregateBreakdown(events: events)
+
+        #expect(summary.resetCount == 2)
+        #expect(isClose(summary.usedCredits, 396_000 + 3_500_000))
+        #expect(isClose(summary.unusedCredits, 154_000 + 1_500_000))
+        #expect(isClose(summary.avgPeakUtilization, (72.0 + 70.0) / 2.0))
+    }
 
     @Test("aggregateBreakdown: zero events returns zeroed PeriodSummary")
     func aggregateWithZeroEvents() {
@@ -187,45 +279,6 @@ struct HeadroomAnalysisServiceTests {
         #expect(summary.usedPercent == 0)
         #expect(summary.constrainedPercent == 0)
         #expect(summary.unusedPercent == 0)
-    }
-
-    // MARK: - 8.9: aggregateBreakdown skips events with nil peak/util
-
-    @Test("aggregateBreakdown: skips events with nil fiveHourPeak or sevenDayUtil")
-    func aggregateSkipsNilEvents() {
-        let events = [
-            makeEvent(id: 1, fiveHourPeak: 72.0, sevenDayUtil: 85.0),
-            makeEvent(id: 2, fiveHourPeak: nil, sevenDayUtil: 85.0),   // skipped
-            makeEvent(id: 3, fiveHourPeak: 72.0, sevenDayUtil: nil),   // skipped
-            makeEvent(id: 4, fiveHourPeak: nil, sevenDayUtil: nil),    // skipped
-        ]
-
-        let summary = service.aggregateBreakdown(events: events)
-
-        // Only event 1 should be counted
-        #expect(summary.resetCount == 1)
-        #expect(isClose(summary.usedCredits, 396_000))
-        #expect(isClose(summary.constrainedCredits, 0))
-        #expect(isClose(summary.unusedCredits, 154_000))
-        #expect(isClose(summary.avgPeakUtilization, 72.0))
-    }
-
-    // MARK: - 8.10 (review fix): aggregateBreakdown skips events with unknown tier
-
-    @Test("aggregateBreakdown: skips events with unresolvable tier")
-    func aggregateSkipsUnknownTierEvents() {
-        let events = [
-            makeEvent(id: 1, fiveHourPeak: 72.0, sevenDayUtil: 85.0, tier: "default_claude_pro"),
-            makeEvent(id: 2, fiveHourPeak: 50.0, sevenDayUtil: 98.0, tier: "unknown_tier_xyz"),  // skipped
-            makeEvent(id: 3, fiveHourPeak: 60.0, sevenDayUtil: 90.0, tier: nil),                  // skipped
-        ]
-
-        let summary = service.aggregateBreakdown(events: events)
-
-        // Only event 1 should be counted (Pro tier resolves, others don't)
-        #expect(summary.resetCount == 1)
-        #expect(isClose(summary.usedCredits, 396_000))
-        #expect(isClose(summary.avgPeakUtilization, 72.0))
     }
 
     // MARK: - Floating Point Helper

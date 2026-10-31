@@ -1,7 +1,8 @@
 import Foundation
 import os
 
-/// Calculates headroom breakdown (used, constrained, unused) at each 5-hour reset event.
+/// Calculates headroom breakdown (used vs unused) per weekly cycle and aggregates reset events.
+/// Legacy 5h events are aggregated from their stored credits, never recomputed.
 /// Pure computation — no database access, no side effects.
 final class HeadroomAnalysisService: HeadroomAnalysisServiceProtocol, @unchecked Sendable {
     private static let logger = Logger(
@@ -17,49 +18,19 @@ final class HeadroomAnalysisService: HeadroomAnalysisServiceProtocol, @unchecked
     }
 
     func analyzeResetEvent(
-        fiveHourPeak: Double,
-        sevenDayUtil: Double,
+        sevenDayPeak: Double,
         creditLimits: CreditLimits
     ) -> HeadroomBreakdown {
-        let fiveHourLimit = Double(creditLimits.fiveHourCredits)
-        let sevenDayLimit = Double(creditLimits.sevenDayCredits)
+        let peak = min(max(sevenDayPeak, 0), 100)
+        let weeklyLimit = Double(creditLimits.sevenDayCredits)
+        let usedCredits = (peak / 100.0) * weeklyLimit
 
-        // Remaining credits in each window
-        let fiveHourRemaining = (1.0 - fiveHourPeak / 100.0) * fiveHourLimit
-        let sevenDayRemaining = (1.0 - sevenDayUtil / 100.0) * sevenDayLimit
-
-        // Credits actually used
-        let usedCredits = (fiveHourPeak / 100.0) * fiveHourLimit
-
-        // Determine unused vs constrained
-        let trueUnusedCredits: Double
-        let constrainedCredits: Double
-
-        if fiveHourRemaining <= sevenDayRemaining {
-            // 5h was NOT the binding constraint — all unused 5h was genuinely available
-            trueUnusedCredits = fiveHourRemaining
-            constrainedCredits = 0
-        } else {
-            // 7d was the binding constraint — only 7d_remaining was truly unused
-            trueUnusedCredits = sevenDayRemaining
-            constrainedCredits = fiveHourRemaining - sevenDayRemaining
-        }
-
-        // All percentages relative to 5h limit
-        let usedPercent = fiveHourLimit > 0 ? (usedCredits / fiveHourLimit) * 100.0 : 0
-        let unusedPercent = fiveHourLimit > 0 ? (trueUnusedCredits / fiveHourLimit) * 100.0 : 0
-        let constrainedPercent = fiveHourLimit > 0 ? (constrainedCredits / fiveHourLimit) * 100.0 : 0
-
-        let breakdown = HeadroomBreakdown(
-            usedPercent: usedPercent,
-            constrainedPercent: constrainedPercent,
-            unusedPercent: unusedPercent,
+        return HeadroomBreakdown(
+            usedPercent: peak,
+            unusedPercent: 100.0 - peak,
             usedCredits: usedCredits,
-            constrainedCredits: constrainedCredits,
-            unusedCredits: trueUnusedCredits
+            unusedCredits: weeklyLimit - usedCredits
         )
-
-        return breakdown
     }
 
     func aggregateBreakdown(
@@ -69,43 +40,51 @@ final class HeadroomAnalysisService: HeadroomAnalysisServiceProtocol, @unchecked
         var totalConstrained: Double = 0
         var totalUnused: Double = 0
         var peakSum: Double = 0
-        var validCount = 0
+        var weeklyCount = 0
+        var legacyCount = 0
 
         for event in events {
-            // Skip events with nil fiveHourPeak or sevenDayUtil
-            guard let peak = event.fiveHourPeak,
-                  let util7d = event.sevenDayUtil else {
-                Self.logger.info("Skipping event id=\(event.id) — missing fiveHourPeak or sevenDayUtil")
+            if event.isWeeklyCycle, let sevenDayPeak = event.sevenDayUtil {
+                guard let limits = RateLimitTier.resolve(
+                    tierString: event.tier,
+                    preferencesManager: preferencesManager
+                ) else {
+                    Self.logger.info("Skipping weekly cycle id=\(event.id) — unresolvable tier '\(event.tier ?? "nil", privacy: .public)'")
+                    continue
+                }
+
+                let breakdown = analyzeResetEvent(sevenDayPeak: sevenDayPeak, creditLimits: limits)
+                totalUsed += breakdown.usedCredits
+                totalUnused += breakdown.unusedCredits
+                peakSum += breakdown.usedPercent
+                weeklyCount += 1
                 continue
             }
 
-            // Resolve credit limits per-event from each event's tier
-            guard let limits = RateLimitTier.resolve(
-                tierString: event.tier,
-                preferencesManager: preferencesManager
-            ) else {
-                Self.logger.info("Skipping event id=\(event.id) — unresolvable tier '\(event.tier ?? "nil", privacy: .public)'")
+            guard let peak = event.fiveHourPeak else {
+                Self.logger.info("Skipping event id=\(event.id) — no 5h peak and not a weekly cycle (ts=\(event.timestamp))")
+                continue
+            }
+            guard let used = event.usedCredits, let unused = event.unusedCredits else {
+                Self.logger.info("Skipping legacy event id=\(event.id) — no stored credits")
                 continue
             }
 
-            let breakdown = analyzeResetEvent(
-                fiveHourPeak: peak,
-                sevenDayUtil: util7d,
-                creditLimits: limits
-            )
-
-            totalUsed += breakdown.usedCredits
-            totalConstrained += breakdown.constrainedCredits
-            totalUnused += breakdown.unusedCredits
+            totalUsed += used
+            totalConstrained += event.constrainedCredits ?? 0
+            totalUnused += unused
             peakSum += peak
-            validCount += 1
+            legacyCount += 1
         }
 
+        let validCount = weeklyCount + legacyCount
         let totalCredits = totalUsed + totalConstrained + totalUnused
         let usedPercent = totalCredits > 0 ? (totalUsed / totalCredits) * 100.0 : 0
         let constrainedPercent = totalCredits > 0 ? (totalConstrained / totalCredits) * 100.0 : 0
         let unusedPercent = totalCredits > 0 ? (totalUnused / totalCredits) * 100.0 : 0
         let avgPeak = validCount > 0 ? peakSum / Double(validCount) : 0
+
+        Self.logger.debug("Aggregated \(events.count) events: weekly=\(weeklyCount) legacy=\(legacyCount) skipped=\(events.count - validCount) used=\(totalUsed, format: .fixed(precision: 0))")
 
         return PeriodSummary(
             usedCredits: totalUsed,
