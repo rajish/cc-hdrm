@@ -908,17 +908,17 @@ struct UsageChartTests {
     ) -> [UsageRollup] {
         let calendar = Calendar.current
         let baseDate = calendar.startOfDay(for: calendar.date(byAdding: .day, value: -totalDays, to: Date())!)
-        let baseMs = Int64(baseDate.timeIntervalSince1970 * 1000)
-        let dayMs: Int64 = 86_400_000
         let hourMs: Int64 = 3_600_000
 
         var rollups: [UsageRollup] = []
         var rollupId: Int64 = 0
         for day in 0..<totalDays {
             if missingDayOffsets.contains(day) { continue }
+            // Calendar days, not fixed 24h steps: a DST change inside the window would shift later days
+            let dayStartMs = Int64(calendar.date(byAdding: .day, value: day, to: baseDate)!.timeIntervalSince1970 * 1000)
             // Create 2 hourly rollups per day
             for sub in 0..<2 {
-                let periodStart = baseMs + Int64(day) * dayMs + Int64(sub) * hourMs
+                let periodStart = dayStartMs + Int64(sub) * hourMs
                 rollups.append(UsageRollup(
                     id: rollupId,
                     periodStart: periodStart,
@@ -968,10 +968,9 @@ struct UsageChartTests {
         // Should have 2 gap ranges (day 2 and day 5 are non-consecutive)
         #expect(gapRanges.count == 2)
 
-        // Verify gap durations are ~1 day each
+        // Each gap is one calendar day (23-25h across a DST change)
         for gap in gapRanges {
-            let durationDays = gap.end.timeIntervalSince(gap.start) / 86400
-            #expect(abs(durationDays - 1.0) < 0.01)
+            #expect(Calendar.current.date(byAdding: .day, value: 1, to: gap.start) == gap.end)
         }
     }
 

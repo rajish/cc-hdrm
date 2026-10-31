@@ -320,8 +320,9 @@ struct SubscriptionPatternDetectorTests {
     func chronicUnderpoweringCostBased() async throws {
         // Pro user ($20/mo) with extra usage costing $90/mo = $110 total > Max 5x $100/mo
         // API returns cents: 9000 = $90
+        // 90 days: two complete months remain after the detector drops the current partial month
         var polls: [UsagePoll] = []
-        for day in 0..<60 {
+        for day in 0..<90 {
             polls.append(makePoll(
                 daysAgo: day,
                 fiveHourUtil: 70.0,
