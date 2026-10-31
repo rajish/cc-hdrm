@@ -218,3 +218,15 @@ development_status:
   25-1-provider-dimension-schema-migration: backlog
   25-2-codex-poll-persistence-rollups: backlog
   25-3-analytics-provider-integration: backlog
+
+  # Sprint Change Proposal 2026-10-31 — Claude 5-hour limit retired; one [minor] release for the epic
+  epic-26: backlog  # Weekly-First Monitoring
+  26-1-weekly-allowance-menu-bar: backlog  # fixes live menu bar "—" since 2026-10-31
+  26-2-weekly-pace-replaces-slope: backlog
+  26-3-weekly-first-popover: backlog
+  26-4-analytics-charts-weekly-first: backlog
+  26-5-value-headroom-per-weekly-cycle: backlog
+  26-6-tier-advice-patterns-weekly: backlog
+  26-7-tpp-weekly-deltas: backlog
+  26-8-benchmark-weekly-deltas: backlog  # spend-cap gate needs maintainer decision
+  26-9-cleanup-settings-release: backlog  # PR title carries [minor]

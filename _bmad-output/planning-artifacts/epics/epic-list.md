@@ -116,3 +116,9 @@ Alex never hits the Codex wall by surprise — threshold notifications fire for 
 Alex's Codex usage builds the same permanent record his Claude usage does — poll snapshots persisted with a provider dimension, rolled up on the existing tiers, and explorable in the analytics window via provider selection.
 **FRs covered:** FR58, FR59
 **Stories:** 25.1 Provider-Dimension Schema Migration (additive, non-destructive), 25.2 Codex Poll Persistence & Rollups, 25.3 Analytics Provider Integration
+
+## Epic 26: Weekly-First Monitoring
+
+Anthropic retired the Claude 5-hour limit on 2026-10-31. Alex's menu bar now tracks his weekly allowance: headroom, colour, and a pace check that tells him whether his week will last until the reset. The popover leads with the weekly gauge and a this-week trend line; analytics, value breakdown, tier advice and token efficiency all run on weekly cycles. History from the 5-hour era stays intact.
+**FRs covered:** FR6, FR10, FR17, FR18, FR33, FR35, FR40, FR41, FR42, FR43, FR44, FR45 (revised 2026-10-31); retires FR9, FR11, FR39
+**Stories:** 26.1 Weekly menu bar, 26.2 Weekly pace (replaces slope), 26.3 Weekly-first popover, 26.4 Analytics charts, 26.5 Value & headroom per weekly cycle, 26.6 Tier advice & patterns, 26.7 TPP on weekly deltas, 26.8 Benchmark on weekly deltas, 26.9 Cleanup + `[minor]` release (Sprint change proposal 2026-10-31)

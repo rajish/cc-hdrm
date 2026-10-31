@@ -89,7 +89,7 @@ Follow **Apple Swift API Design Guidelines** consistently:
 | ---------------- | ----------------- | -------------------------------------------- |
 | Types            | UpperCamelCase    | `HeadroomState`, `KeychainService`           |
 | Functions        | lowerCamelCase    | `fetchUsage()`, `refreshToken()`             |
-| Properties       | lowerCamelCase    | `fiveHourUtilization`, `resetTime`           |
+| Properties       | lowerCamelCase    | `sevenDayUtilization`, `resetTime`           |
 | Protocols        | +Protocol suffix  | `KeychainServiceProtocol`, `APIClientProtocol` |
 | Enum cases       | lowerCamelCase    | `.normal`, `.warning`, `.critical`           |
 | Constants        | lowerCamelCase    | `let defaultPollInterval: TimeInterval = 30` |
