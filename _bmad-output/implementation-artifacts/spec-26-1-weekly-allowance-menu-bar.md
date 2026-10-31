@@ -55,7 +55,7 @@ context:
 - [x] `cc-hdrm/Views/GaugeIcon.swift` -- replace `SevenDayOverlay` with `capDot: HeadroomState? = nil`; dot draws for caution/warning/critical/exhausted; delete `drawSevenDayLabel` -- promotion label retired.
 - [x] `cc-hdrm/App/AppDelegate.swift` -- gauge uses weekly headroom; `capDot` from `scopedLimits.first`; VoiceOver: `cc-hdrm: Claude weekly headroom: N percent, state[, slope]`, exhausted: `cc-hdrm: Claude weekly allowance exhausted, resets in <countdownString>`; remove `previousDisplayedWindow` -- weekly-first menu bar.
 - [x] `cc-hdrm/Views/SevenDayGaugeSection.swift` -- remove quotas text and a11y clause -- orphaned by `quotasRemaining` removal.
-- [ ] Tests listed in Code Map -- rewrite menu bar tests on `sevenDay`; delete promotion/quotas tests; add matrix cases (weekly-only, 5h ignored, `↻ 3d 4h`, extra usage on weekly, `↗` for steep, Fable dot incl. exhausted).
+- [x] Tests listed in Code Map -- rewrite menu bar tests on `sevenDay`; delete promotion/quotas tests; add matrix cases (weekly-only, 5h ignored, `↻ 3d 4h`, extra usage on weekly, `↗` for steep, Fable dot incl. exhausted).
 
 **Acceptance Criteria:**
 - Given `five_hour: null` and a connection, when the menu bar renders, then it shows weekly headroom % and colour, not "—".
