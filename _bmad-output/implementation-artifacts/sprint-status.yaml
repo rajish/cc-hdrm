@@ -227,6 +227,6 @@ development_status:
   26-4-analytics-charts-weekly-first: backlog
   26-5-value-headroom-per-weekly-cycle: backlog
   26-6-tier-advice-patterns-weekly: backlog
-  26-7-tpp-weekly-deltas: backlog
+  26-7-tpp-weekly-deltas: review
   26-8-benchmark-weekly-deltas: backlog  # spend-cap gate needs maintainer decision
   26-9-cleanup-settings-release: backlog  # PR title carries [minor]

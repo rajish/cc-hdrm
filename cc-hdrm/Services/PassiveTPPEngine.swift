@@ -25,17 +25,14 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
         category: "passive-tpp"
     )
 
-    /// Maximum accumulation window duration (30 minutes in milliseconds).
-    private static let maxAccumulationMs: Int64 = 30 * 60 * 1000
+    /// Maximum accumulation window duration (6 hours in milliseconds).
+    private static let maxAccumulationMs: Int64 = 6 * 60 * 60 * 1000
 
-    /// Minimum utilization delta to trigger a TPP measurement.
+    /// Minimum weekly utilization delta to trigger a TPP measurement.
     private static let minDelta: Double = 1.0
 
-    /// Utilization drop threshold for reset detection (50%).
-    private static let resetDropThreshold: Double = 50.0
-
-    /// Minimum 5h delta for medium confidence (single model).
-    private static let mediumConfidenceDelta: Double = 3.0
+    /// Minimum weekly delta for medium confidence (single model).
+    private static let mediumConfidenceDelta: Double = 2.0
 
     init(logParser: any ClaudeCodeLogParserProtocol, tppStorage: any TPPStorageServiceProtocol) {
         self.logParser = logParser
@@ -43,24 +40,32 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
     }
 
     func processPoll(current: UsagePoll, previous: UsagePoll) async {
-        guard let currentFiveHour = current.fiveHourUtil,
-              let previousFiveHour = previous.fiveHourUtil else {
-            Self.logger.debug("Skipping passive TPP: missing 5h utilization data")
-            return
-        }
-
-        // Reset detection: 5h utilization drops by >= 50%
-        if previousFiveHour - currentFiveHour >= Self.resetDropThreshold {
-            Self.logger.info("Reset detected: 5h dropped from \(previousFiveHour) to \(currentFiveHour) — discarding accumulation")
+        guard let currentSevenDay = current.sevenDayUtil,
+              let previousSevenDay = previous.sevenDayUtil else {
+            Self.logger.debug("Skipping passive TPP: missing 7d utilization data — discarding accumulation")
             lock.withLock { accumulationWindow = nil }
             return
         }
 
-        let fiveHourDelta = currentFiveHour - previousFiveHour
-        let sevenDayDelta: Double? = {
-            guard let curr = current.sevenDayUtil, let prev = previous.sevenDayUtil else { return nil }
-            return curr - prev
-        }()
+        // Weekly utilization only falls at a reset
+        if currentSevenDay < previousSevenDay {
+            Self.logger.info("Weekly reset detected: 7d dropped from \(previousSevenDay) to \(currentSevenDay) — discarding accumulation")
+            lock.withLock { accumulationWindow = nil }
+            return
+        }
+
+        // One snapshot per poll; a window older than the cap is dropped even if this poll
+        // carries a weekly step, so a step never absorbs tokens from a stale window.
+        let openWindow = lock.withLock { () -> AccumulationWindow? in
+            guard let window = accumulationWindow else { return nil }
+            if current.timestamp - window.startTimestamp > Self.maxAccumulationMs {
+                accumulationWindow = nil
+                Self.logger.info("Accumulation window from \(window.startTimestamp) exceeded 6h cap — discarding, restarting at \(previous.timestamp)")
+                return nil
+            }
+            return window
+        }
+        let cumulativeDelta = currentSevenDay - (openWindow?.startSevenDayUtil ?? previousSevenDay)
 
         // Query log parser for tokens in [previous.timestamp, current.timestamp)
         let tokenAggregates = logParser.getTokens(from: previous.timestamp, to: current.timestamp)
@@ -68,181 +73,69 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
             $0 + $1.inputTokens + $1.outputTokens + $1.cacheCreateTokens + $1.cacheReadTokens
         }
 
-        let hasDelta = fiveHourDelta >= Self.minDelta || (sevenDayDelta ?? 0) >= Self.minDelta
-
-        if hasDelta {
-            // We have a meaningful utilization change — process it
+        if cumulativeDelta >= Self.minDelta {
             lock.withLock { totalUtilizationChanges += 1 }
 
-            // Check if we have an accumulation window to flush
-            let window = lock.withLock { () -> AccumulationWindow? in
-                let w = accumulationWindow
-                accumulationWindow = nil
-                return w
+            lock.withLock { accumulationWindow = nil }
+            let window = openWindow
+
+            var tokensByModel = window?.tokensByModel ?? [:]
+            for aggregate in tokenAggregates {
+                tokensByModel[aggregate.model] = Self.merge(tokensByModel[aggregate.model], aggregate)
+            }
+            let totalTokens = tokensByModel.values.reduce(0) {
+                $0 + $1.inputTokens + $1.outputTokens + $1.cacheCreateTokens + $1.cacheReadTokens
             }
 
-            if let window = window {
-                // Flush accumulated window + current poll tokens
-                var mergedTokens = window.tokensByModel
-                for aggregate in tokenAggregates {
-                    if var existing = mergedTokens[aggregate.model] {
-                        existing.inputTokens += aggregate.inputTokens
-                        existing.outputTokens += aggregate.outputTokens
-                        existing.cacheCreateTokens += aggregate.cacheCreateTokens
-                        existing.cacheReadTokens += aggregate.cacheReadTokens
-                        existing.messageCount += aggregate.messageCount
-                        mergedTokens[aggregate.model] = existing
-                    } else {
-                        mergedTokens[aggregate.model] = aggregate
-                    }
-                }
+            let sevenDayBefore = window?.startSevenDayUtil ?? previousSevenDay
+            let windowStart = window?.startTimestamp ?? previous.timestamp
+            let windowDelta = currentSevenDay - sevenDayBefore
+            Self.logger.debug("Weekly delta \(windowDelta) since \(windowStart) (accumulated=\(window != nil)) — tokens=\(totalTokens)")
 
-                let totalMerged = mergedTokens.values.reduce(0) {
-                    $0 + $1.inputTokens + $1.outputTokens + $1.cacheCreateTokens + $1.cacheReadTokens
-                }
-
-                // Compute delta from window start to current poll
-                let windowFiveHourDelta = currentFiveHour - window.startFiveHourUtil
-                let windowSevenDayDelta: Double? = {
-                    guard let startSD = window.startSevenDayUtil, let currSD = current.sevenDayUtil else { return nil }
-                    return currSD - startSD
-                }()
-
-                if totalMerged > 0 {
-                    lock.withLock { windowsWithTokenData += 1 }
-                    await storePerModelMeasurements(
-                        tokensByModel: mergedTokens,
-                        fiveHourBefore: window.startFiveHourUtil,
-                        fiveHourAfter: currentFiveHour,
-                        fiveHourDelta: windowFiveHourDelta,
-                        sevenDayBefore: window.startSevenDayUtil,
-                        sevenDayAfter: current.sevenDayUtil,
-                        sevenDayDelta: windowSevenDayDelta,
-                        windowStart: window.startTimestamp,
-                        timestamp: current.timestamp
-                    )
-                } else {
-                    // Delta with no tokens — non-Claude-Code usage
-                    await storeDeltaOnlyRecord(
-                        fiveHourBefore: window.startFiveHourUtil,
-                        fiveHourAfter: currentFiveHour,
-                        fiveHourDelta: windowFiveHourDelta,
-                        sevenDayBefore: window.startSevenDayUtil,
-                        sevenDayAfter: current.sevenDayUtil,
-                        sevenDayDelta: windowSevenDayDelta,
-                        windowStart: window.startTimestamp,
-                        timestamp: current.timestamp
-                    )
-                }
+            if totalTokens > 0 {
+                lock.withLock { windowsWithTokenData += 1 }
+                await storePerModelMeasurements(
+                    tokensByModel: tokensByModel,
+                    sevenDayBefore: sevenDayBefore,
+                    sevenDayAfter: currentSevenDay,
+                    sevenDayDelta: windowDelta,
+                    windowStart: windowStart,
+                    timestamp: current.timestamp
+                )
             } else {
-                // No accumulation window — use direct poll-to-poll data
-                if totalTokensAcrossModels > 0 {
-                    lock.withLock { windowsWithTokenData += 1 }
-                    var tokensByModel: [String: TokenAggregate] = [:]
-                    for aggregate in tokenAggregates {
-                        tokensByModel[aggregate.model] = aggregate
-                    }
-                    await storePerModelMeasurements(
-                        tokensByModel: tokensByModel,
-                        fiveHourBefore: previousFiveHour,
-                        fiveHourAfter: currentFiveHour,
-                        fiveHourDelta: fiveHourDelta,
-                        sevenDayBefore: previous.sevenDayUtil,
-                        sevenDayAfter: current.sevenDayUtil,
-                        sevenDayDelta: sevenDayDelta,
-                        windowStart: previous.timestamp,
-                        timestamp: current.timestamp
-                    )
-                } else {
-                    // Delta with no tokens — non-Claude-Code usage
-                    await storeDeltaOnlyRecord(
-                        fiveHourBefore: previousFiveHour,
-                        fiveHourAfter: currentFiveHour,
-                        fiveHourDelta: fiveHourDelta,
-                        sevenDayBefore: previous.sevenDayUtil,
-                        sevenDayAfter: current.sevenDayUtil,
-                        sevenDayDelta: sevenDayDelta,
-                        windowStart: previous.timestamp,
-                        timestamp: current.timestamp
-                    )
-                }
+                // Delta with no tokens — non-Claude-Code usage
+                await storeDeltaOnlyRecord(
+                    sevenDayBefore: sevenDayBefore,
+                    sevenDayAfter: currentSevenDay,
+                    sevenDayDelta: windowDelta,
+                    windowStart: windowStart,
+                    timestamp: current.timestamp
+                )
             }
         } else if totalTokensAcrossModels > 0 {
             // No meaningful delta but tokens consumed — accumulate
-            enum AccumulationAction { case capExceeded, monotonicViolation, accumulated, started }
-            let action: AccumulationAction = lock.withLock {
-                if var window = accumulationWindow {
-                    // Check 30-minute cap
-                    if current.timestamp - window.startTimestamp > Self.maxAccumulationMs {
-                        accumulationWindow = AccumulationWindow(
-                            startTimestamp: previous.timestamp,
-                            startFiveHourUtil: previousFiveHour,
-                            startSevenDayUtil: previous.sevenDayUtil,
-                            tokensByModel: [:],
-                            lastPollTimestamp: current.timestamp
-                        )
-                        // Add current tokens to the fresh window
-                        for aggregate in tokenAggregates {
-                            accumulationWindow?.tokensByModel[aggregate.model] = aggregate
-                        }
-                        return .capExceeded
-                    }
-
-                    // Monotonic guard: if utilization decreased during accumulation, discard
-                    if currentFiveHour < window.startFiveHourUtil {
-                        accumulationWindow = AccumulationWindow(
-                            startTimestamp: previous.timestamp,
-                            startFiveHourUtil: previousFiveHour,
-                            startSevenDayUtil: previous.sevenDayUtil,
-                            tokensByModel: [:],
-                            lastPollTimestamp: current.timestamp
-                        )
-                        for aggregate in tokenAggregates {
-                            accumulationWindow?.tokensByModel[aggregate.model] = aggregate
-                        }
-                        return .monotonicViolation
-                    }
-
-                    // Accumulate tokens into existing window
+            let accumulated = lock.withLock { () -> Bool in
+                if var window = openWindow {
                     for aggregate in tokenAggregates {
-                        if var existing = window.tokensByModel[aggregate.model] {
-                            existing.inputTokens += aggregate.inputTokens
-                            existing.outputTokens += aggregate.outputTokens
-                            existing.cacheCreateTokens += aggregate.cacheCreateTokens
-                            existing.cacheReadTokens += aggregate.cacheReadTokens
-                            existing.messageCount += aggregate.messageCount
-                            window.tokensByModel[aggregate.model] = existing
-                        } else {
-                            window.tokensByModel[aggregate.model] = aggregate
-                        }
+                        window.tokensByModel[aggregate.model] = Self.merge(window.tokensByModel[aggregate.model], aggregate)
                     }
                     window.lastPollTimestamp = current.timestamp
                     accumulationWindow = window
-                    return .accumulated
-                } else {
-                    // Start new accumulation window
-                    var tokensByModel: [String: TokenAggregate] = [:]
-                    for aggregate in tokenAggregates {
-                        tokensByModel[aggregate.model] = aggregate
-                    }
-                    accumulationWindow = AccumulationWindow(
-                        startTimestamp: previous.timestamp,
-                        startFiveHourUtil: previousFiveHour,
-                        startSevenDayUtil: previous.sevenDayUtil,
-                        tokensByModel: tokensByModel,
-                        lastPollTimestamp: current.timestamp
-                    )
-                    return .started
+                    return true
                 }
+                var tokensByModel: [String: TokenAggregate] = [:]
+                for aggregate in tokenAggregates {
+                    tokensByModel[aggregate.model] = aggregate
+                }
+                accumulationWindow = AccumulationWindow(
+                    startTimestamp: previous.timestamp,
+                    startSevenDayUtil: previousSevenDay,
+                    tokensByModel: tokensByModel,
+                    lastPollTimestamp: current.timestamp
+                )
+                return false
             }
-            switch action {
-            case .capExceeded:
-                Self.logger.info("Accumulation window exceeded 30min cap — discarding and restarting")
-            case .monotonicViolation:
-                Self.logger.info("Utilization decreased during accumulation — discarding window")
-            case .accumulated, .started:
-                Self.logger.debug("Tokens accumulated — no utilization delta yet")
-            }
+            Self.logger.debug("Tokens \(accumulated ? "accumulated" : "window started") — no weekly utilization delta yet (7d=\(currentSevenDay))")
         }
         // If no delta AND no tokens, nothing to do
     }
@@ -273,14 +166,21 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
 
     // MARK: - Private Helpers
 
+    private static func merge(_ existing: TokenAggregate?, _ aggregate: TokenAggregate) -> TokenAggregate {
+        guard var merged = existing else { return aggregate }
+        merged.inputTokens += aggregate.inputTokens
+        merged.outputTokens += aggregate.outputTokens
+        merged.cacheCreateTokens += aggregate.cacheCreateTokens
+        merged.cacheReadTokens += aggregate.cacheReadTokens
+        merged.messageCount += aggregate.messageCount
+        return merged
+    }
+
     private func storePerModelMeasurements(
         tokensByModel: [String: TokenAggregate],
-        fiveHourBefore: Double,
-        fiveHourAfter: Double,
-        fiveHourDelta: Double,
-        sevenDayBefore: Double?,
-        sevenDayAfter: Double?,
-        sevenDayDelta: Double?,
+        sevenDayBefore: Double,
+        sevenDayAfter: Double,
+        sevenDayDelta: Double,
         windowStart: Int64,
         timestamp: Int64
     ) async {
@@ -290,20 +190,10 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
             let totalRaw = aggregate.inputTokens + aggregate.outputTokens + aggregate.cacheCreateTokens + aggregate.cacheReadTokens
             // cache_read is free; cache_create costs 1.25x base input
             let effectiveTokens = Double(aggregate.inputTokens + aggregate.outputTokens) + Double(aggregate.cacheCreateTokens) * 1.25
-            let tppFiveHour: Double? = fiveHourDelta >= Self.minDelta ? effectiveTokens / fiveHourDelta : nil
-            let tppSevenDay: Double? = {
-                guard let sd = sevenDayDelta, sd >= Self.minDelta else { return nil }
-                return effectiveTokens / sd
-            }()
+            let tppSevenDay = effectiveTokens / sevenDayDelta
 
-            let confidence: MeasurementConfidence
-            if isMultiModel {
-                confidence = .low
-            } else if fiveHourDelta >= Self.mediumConfidenceDelta {
-                confidence = .medium
-            } else {
-                confidence = .low
-            }
+            let confidence: MeasurementConfidence =
+                !isMultiModel && sevenDayDelta >= Self.mediumConfidenceDelta ? .medium : .low
 
             let measurement = TPPMeasurement(
                 id: nil,
@@ -312,9 +202,9 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
                 model: aggregate.model,
                 variant: nil,
                 source: .passive,
-                fiveHourBefore: fiveHourBefore,
-                fiveHourAfter: fiveHourAfter,
-                fiveHourDelta: fiveHourDelta,
+                fiveHourBefore: nil,
+                fiveHourAfter: nil,
+                fiveHourDelta: nil,
                 sevenDayBefore: sevenDayBefore,
                 sevenDayAfter: sevenDayAfter,
                 sevenDayDelta: sevenDayDelta,
@@ -323,7 +213,7 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
                 cacheCreateTokens: aggregate.cacheCreateTokens,
                 cacheReadTokens: aggregate.cacheReadTokens,
                 totalRawTokens: totalRaw,
-                tppFiveHour: tppFiveHour,
+                tppFiveHour: nil,
                 tppSevenDay: tppSevenDay,
                 confidence: confidence,
                 messageCount: aggregate.messageCount
@@ -331,7 +221,7 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
 
             do {
                 try await tppStorage.storePassiveResult(measurement)
-                Self.logger.info("Stored passive TPP: model=\(aggregate.model, privacy: .public) tpp5h=\(tppFiveHour ?? -1) confidence=\(confidence.rawValue, privacy: .public)")
+                Self.logger.info("Stored passive TPP: model=\(aggregate.model, privacy: .public) tpp7d=\(tppSevenDay) delta7d=\(sevenDayDelta) confidence=\(confidence.rawValue, privacy: .public)")
             } catch {
                 Self.logger.error("Failed to store passive TPP measurement: \(error.localizedDescription)")
             }
@@ -339,12 +229,9 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
     }
 
     private func storeDeltaOnlyRecord(
-        fiveHourBefore: Double,
-        fiveHourAfter: Double,
-        fiveHourDelta: Double,
-        sevenDayBefore: Double?,
-        sevenDayAfter: Double?,
-        sevenDayDelta: Double?,
+        sevenDayBefore: Double,
+        sevenDayAfter: Double,
+        sevenDayDelta: Double,
         windowStart: Int64,
         timestamp: Int64
     ) async {
@@ -355,9 +242,9 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
             model: "unknown",
             variant: nil,
             source: .passive,
-            fiveHourBefore: fiveHourBefore,
-            fiveHourAfter: fiveHourAfter,
-            fiveHourDelta: fiveHourDelta,
+            fiveHourBefore: nil,
+            fiveHourAfter: nil,
+            fiveHourDelta: nil,
             sevenDayBefore: sevenDayBefore,
             sevenDayAfter: sevenDayAfter,
             sevenDayDelta: sevenDayDelta,
@@ -374,7 +261,7 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
 
         do {
             try await tppStorage.storePassiveResult(measurement)
-            Self.logger.info("Stored delta-only record (non-Claude-Code usage): 5h delta=\(fiveHourDelta)")
+            Self.logger.info("Stored delta-only record (non-Claude-Code usage): 7d delta=\(sevenDayDelta)")
         } catch {
             Self.logger.error("Failed to store delta-only TPP record: \(error.localizedDescription)")
         }
@@ -386,8 +273,7 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
 extension PassiveTPPEngine {
     struct AccumulationWindow {
         let startTimestamp: Int64
-        let startFiveHourUtil: Double
-        let startSevenDayUtil: Double?
+        let startSevenDayUtil: Double
         var tokensByModel: [String: TokenAggregate]
         var lastPollTimestamp: Int64
     }
