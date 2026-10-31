@@ -221,7 +221,7 @@ development_status:
 
   # Sprint Change Proposal 2026-10-31 — Claude 5-hour limit retired; one [minor] release for the epic
   epic-26: backlog  # Weekly-First Monitoring
-  26-1-weekly-allowance-menu-bar: backlog  # fixes live menu bar "—" since 2026-10-31
+  26-1-weekly-allowance-menu-bar: review  # fixes live menu bar "—" since 2026-10-31
   26-2-weekly-pace-replaces-slope: backlog
   26-3-weekly-first-popover: backlog
   26-4-analytics-charts-weekly-first: backlog

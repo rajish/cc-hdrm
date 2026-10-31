@@ -166,7 +166,7 @@ struct AppStateTests {
         #expect(state.dataFreshness == .veryStale)
     }
 
-    // MARK: - Menu Bar Headroom State Tests (Task 7)
+    // MARK: - Menu Bar Headroom State Tests (weekly window)
 
     @Test("disconnected connectionStatus → menuBarHeadroomState == .disconnected and menuBarText == em dash")
     @MainActor
@@ -177,61 +177,101 @@ struct AppStateTests {
         #expect(state.menuBarText == "\u{2014}")
     }
 
-    @Test("connected with nil fiveHour → .disconnected")
+    @Test("connected with nil sevenDay → .disconnected and em dash, even when fiveHour is present")
     @MainActor
-    func menuBarConnectedNilFiveHour() {
+    func menuBarConnectedNilSevenDay() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
+        state.updateWindows(fiveHour: WindowState(utilization: 17.0, resetsAt: nil), sevenDay: nil)
         #expect(state.menuBarHeadroomState == .disconnected)
         #expect(state.menuBarText == "\u{2014}")
     }
 
-    @Test("connected with utilization 17.0 → headroom 83% → .normal")
+    @Test("weekly only: fiveHour nil, sevenDay 17% → 83% and .normal")
     @MainActor
-    func menuBarNormal83() {
+    func menuBarWeeklyOnly() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
-        state.updateWindows(fiveHour: WindowState(utilization: 17.0, resetsAt: nil), sevenDay: nil)
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 17.0, resetsAt: nil))
         #expect(state.menuBarHeadroomState == .normal)
         #expect(state.menuBarText == "83%")
     }
 
-    @Test("connected with utilization 65.0 → headroom 35% → .caution")
+    @Test("5h present is ignored: fiveHour 90%, sevenDay 30% → 70%")
+    @MainActor
+    func menuBarIgnoresFiveHour() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 90.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 30.0, resetsAt: nil)
+        )
+        #expect(state.menuBarHeadroomState == .normal)
+        #expect(state.menuBarText == "70%")
+    }
+
+    @Test("5h exhausted is ignored: weekly 40% → 60%, no countdown")
+    @MainActor
+    func menuBarIgnoresFiveHourExhausted() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 100.0, resetsAt: Date().addingTimeInterval(30 * 60)),
+            sevenDay: WindowState(utilization: 40.0, resetsAt: nil)
+        )
+        #expect(state.menuBarHeadroomState == .normal)
+        #expect(state.menuBarText == "60%")
+    }
+
+    @Test("5h and weekly both exhausted → weekly countdown, not the 5h one")
+    @MainActor
+    func menuBarBothExhaustedShowsWeeklyCountdown() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateWindows(
+            fiveHour: WindowState(utilization: 100.0, resetsAt: Date().addingTimeInterval(20 * 60 + 30)),
+            sevenDay: WindowState(utilization: 100.0, resetsAt: Date().addingTimeInterval(3 * 86400 + 4 * 3600 + 30))
+        )
+        #expect(state.menuBarHeadroomState == .exhausted)
+        #expect(state.menuBarText == "\u{21BB} 3d 4h")
+    }
+
+    @Test("weekly utilization 65.0 → headroom 35% → .caution")
     @MainActor
     func menuBarCaution35() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
-        state.updateWindows(fiveHour: WindowState(utilization: 65.0, resetsAt: nil), sevenDay: nil)
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 65.0, resetsAt: nil))
         #expect(state.menuBarHeadroomState == .caution)
         #expect(state.menuBarText == "35%")
     }
 
-    @Test("connected with utilization 85.0 → headroom 15% → .warning")
+    @Test("weekly utilization 85.0 → headroom 15% → .warning")
     @MainActor
     func menuBarWarning15() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
-        state.updateWindows(fiveHour: WindowState(utilization: 85.0, resetsAt: nil), sevenDay: nil)
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 85.0, resetsAt: nil))
         #expect(state.menuBarHeadroomState == .warning)
         #expect(state.menuBarText == "15%")
     }
 
-    @Test("connected with utilization 97.0 → headroom 3% → .critical")
+    @Test("weekly utilization 97.0 → headroom 3% → .critical")
     @MainActor
     func menuBarCritical3() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
-        state.updateWindows(fiveHour: WindowState(utilization: 97.0, resetsAt: nil), sevenDay: nil)
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 97.0, resetsAt: nil))
         #expect(state.menuBarHeadroomState == .critical)
         #expect(state.menuBarText == "3%")
     }
 
-    @Test("connected with utilization 100.0 → headroom 0% → .exhausted")
+    @Test("weekly exhausted without resetsAt → 0% and .exhausted")
     @MainActor
     func menuBarExhausted0() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
-        state.updateWindows(fiveHour: WindowState(utilization: 100.0, resetsAt: nil), sevenDay: nil)
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 100.0, resetsAt: nil))
         #expect(state.menuBarHeadroomState == .exhausted)
         #expect(state.menuBarText == "0%")
     }
@@ -241,6 +281,7 @@ struct AppStateTests {
     func menuBarTokenExpired() {
         let state = AppState()
         state.updateConnectionStatus(.tokenExpired)
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 17.0, resetsAt: nil))
         #expect(state.menuBarHeadroomState == .disconnected)
         #expect(state.menuBarText == "\u{2014}")
     }
@@ -254,308 +295,82 @@ struct AppStateTests {
         #expect(state.menuBarText == "\u{2014}")
     }
 
-    @Test("utilization > 100 clamps headroom to 0%")
+    @Test("weekly utilization > 100 clamps headroom to 0%")
     @MainActor
     func menuBarUtilizationOver100() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
-        state.updateWindows(fiveHour: WindowState(utilization: 110.0, resetsAt: nil), sevenDay: nil)
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 110.0, resetsAt: nil))
         #expect(state.menuBarText == "0%")
     }
 
-    // MARK: - Headroom Percentage Edge Cases (Task 9)
+    // MARK: - Headroom Percentage Edge Cases
 
-    @Test("utilization 0.0 → headroom 100%")
+    @Test("weekly utilization 0.0 → headroom 100%")
     @MainActor
     func menuBarHeadroom100() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
-        state.updateWindows(fiveHour: WindowState(utilization: 0.0, resetsAt: nil), sevenDay: nil)
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 0.0, resetsAt: nil))
         #expect(state.menuBarText == "100%")
     }
 
-    @Test("utilization 50.5 → headroom 49% (Int truncation)")
+    @Test("weekly utilization 50.5 → headroom 49% (Int truncation)")
     @MainActor
     func menuBarHeadroomTruncation() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
-        state.updateWindows(fiveHour: WindowState(utilization: 50.5, resetsAt: nil), sevenDay: nil)
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 50.5, resetsAt: nil))
         // Int(100 - 50.5) = Int(49.5) = 49
         #expect(state.menuBarText == "49%")
     }
 
-    @Test("utilization 99.9 → headroom 0% display (Int truncation) but .critical state (0.1% actual headroom)")
+    @Test("weekly utilization 99.9 → headroom 0% display (Int truncation) but .critical state (0.1% actual headroom)")
     @MainActor
     func menuBarHeadroom99_9() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
-        state.updateWindows(fiveHour: WindowState(utilization: 99.9, resetsAt: nil), sevenDay: nil)
-        // Int(100 - 99.9) = Int(0.1) = 0 for display
-        // But HeadroomState uses actual 0.1% headroom → 0<0.1<5 → .critical
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 99.9, resetsAt: nil))
+        // HeadroomState uses actual 0.1% headroom → 0<0.1<5 → .critical
         #expect(state.menuBarText == "0%")
         #expect(state.menuBarHeadroomState == .critical)
     }
 
-    // MARK: - Context-Adaptive Display Tests (Story 3.2, Task 8)
+    // MARK: - Weekly Countdown Tests
 
-    @Test("5h exhausted with resetsAt 47m → countdown text")
+    @Test("weekly exhausted with resetsAt +3d4h → countdown ↻ 3d 4h")
     @MainActor
-    func menuBarExhaustedWithCountdown() {
+    func menuBarWeeklyExhaustedCountdownDays() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
-        let resetsAt = Date().addingTimeInterval(47 * 60 + 10)
-        state.updateWindows(fiveHour: WindowState(utilization: 100.0, resetsAt: resetsAt), sevenDay: nil)
-        #expect(state.menuBarText == "\u{21BB} 47m")
+        let resetsAt = Date().addingTimeInterval(3 * 86400 + 4 * 3600 + 30)
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 100.0, resetsAt: resetsAt))
+        #expect(state.menuBarText == "\u{21BB} 3d 4h")
         #expect(state.menuBarHeadroomState == .exhausted)
     }
 
-    @Test("5h exhausted with resetsAt nil → fallback to percentage 0%")
+    @Test("weekly exhausted with resetsAt 47m → countdown ↻ 47m")
     @MainActor
-    func menuBarExhaustedNoResetsAt() {
+    func menuBarWeeklyExhaustedCountdownMinutes() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
-        state.updateWindows(fiveHour: WindowState(utilization: 100.0, resetsAt: nil), sevenDay: nil)
-        #expect(state.menuBarText == "0%")
+        let resetsAt = Date().addingTimeInterval(47 * 60 + 10)
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 100.0, resetsAt: resetsAt))
+        #expect(state.menuBarText == "\u{21BB} 47m")
     }
 
-    @Test("5h normal utilization 17 → unchanged 83%")
-    @MainActor
-    func menuBarNormalUnchanged() {
-        let state = AppState()
-        state.updateConnectionStatus(.connected)
-        state.updateWindows(fiveHour: WindowState(utilization: 17.0, resetsAt: nil), sevenDay: nil)
-        #expect(state.menuBarText == "83%")
-    }
-
-    @Test("5h recovers from exhausted → switches back to percentage")
+    @Test("weekly recovers from exhausted → switches back to percentage")
     @MainActor
     func menuBarRecoveryFromExhausted() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
-        let resetsAt = Date().addingTimeInterval(30 * 60)
-        state.updateWindows(fiveHour: WindowState(utilization: 100.0, resetsAt: resetsAt), sevenDay: nil)
+        let resetsAt = Date().addingTimeInterval(2 * 86400)
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 100.0, resetsAt: resetsAt))
         #expect(state.menuBarText.contains("\u{21BB}"))
 
-        // Recovery: utilization drops to 5%
-        state.updateWindows(fiveHour: WindowState(utilization: 5.0, resetsAt: nil), sevenDay: nil)
+        // Weekly reset: utilization drops to 5%
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 5.0, resetsAt: nil))
         #expect(state.menuBarText == "95%")
-    }
-
-    // MARK: - Credit-Math Promotion Tests (Story 3.3)
-
-    @Test("Pro tier, 7d utilization 95% → quotas=0.45 → promotes 7d")
-    @MainActor
-    func creditMathProTierPromotes() {
-        let state = AppState()
-        state.updateConnectionStatus(.connected)
-        state.updateCreditLimits(RateLimitTier.pro.creditLimits)
-        // 7d: utilization 95 → remaining = 0.05 * 5,000,000 = 250,000 → quotas = 250,000/550,000 = 0.45
-        state.updateWindows(
-            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
-            sevenDay: WindowState(utilization: 95.0, resetsAt: nil)
-        )
-        #expect(state.displayedWindow == .sevenDay)
-    }
-
-    @Test("Pro tier, 7d utilization 80% → quotas=1.82 → stays 5h")
-    @MainActor
-    func creditMathProTierStays5h() {
-        let state = AppState()
-        state.updateConnectionStatus(.connected)
-        state.updateCreditLimits(RateLimitTier.pro.creditLimits)
-        // 7d: utilization 80 → remaining = 0.20 * 5,000,000 = 1,000,000 → quotas = 1,000,000/550,000 = 1.82
-        state.updateWindows(
-            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
-            sevenDay: WindowState(utilization: 80.0, resetsAt: nil)
-        )
-        #expect(state.displayedWindow == .fiveHour)
-    }
-
-    @Test("Max 5x tier, 7d utilization 95% → quotas=0.63 → promotes 7d")
-    @MainActor
-    func creditMathMax5xTierPromotes() {
-        let state = AppState()
-        state.updateConnectionStatus(.connected)
-        state.updateCreditLimits(RateLimitTier.max5x.creditLimits)
-        // 7d: utilization 95 → remaining = 0.05 * 41,666,700 = 2,083,335 → quotas = 2,083,335/3,300,000 = 0.63
-        state.updateWindows(
-            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
-            sevenDay: WindowState(utilization: 95.0, resetsAt: nil)
-        )
-        #expect(state.displayedWindow == .sevenDay)
-    }
-
-    @Test("Max 5x tier, 7d utilization 90% → quotas=1.26 → stays 5h")
-    @MainActor
-    func creditMathMax5xTierStays5h() {
-        let state = AppState()
-        state.updateConnectionStatus(.connected)
-        state.updateCreditLimits(RateLimitTier.max5x.creditLimits)
-        // 7d: utilization 90 → remaining = 0.10 * 41,666,700 = 4,166,670 → quotas = 4,166,670/3,300,000 = 1.26
-        state.updateWindows(
-            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
-            sevenDay: WindowState(utilization: 90.0, resetsAt: nil)
-        )
-        #expect(state.displayedWindow == .fiveHour)
-    }
-
-    @Test("nil tier (fallback) → 5h 72%, 7d 18% warning → promotes 7d via percentage rule")
-    @MainActor
-    func fallbackPromotionPercentageRule() {
-        let state = AppState()
-        state.updateConnectionStatus(.connected)
-        // No credit limits — falls back to Story 3.2 rule
-        state.updateWindows(
-            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
-            sevenDay: WindowState(utilization: 82.0, resetsAt: nil)
-        )
-        #expect(state.displayedWindow == .sevenDay)
-    }
-
-    @Test("nil tier (fallback) → 5h 35% caution, 7d 30% caution → stays 5h (7d not warning/critical)")
-    @MainActor
-    func fallbackNoPromotionCaution() {
-        let state = AppState()
-        state.updateConnectionStatus(.connected)
-        // No credit limits — falls back to Story 3.2 rule
-        state.updateWindows(
-            fiveHour: WindowState(utilization: 65.0, resetsAt: nil),
-            sevenDay: WindowState(utilization: 70.0, resetsAt: nil)
-        )
-        #expect(state.displayedWindow == .fiveHour)
-    }
-
-    @Test("5h exhausted + Pro tier with quotas < 1 → stays 5h (exhausted guard fires first)")
-    @MainActor
-    func exhaustedGuardOverridesCreditMath() {
-        let state = AppState()
-        state.updateConnectionStatus(.connected)
-        state.updateCreditLimits(RateLimitTier.pro.creditLimits)
-        let resetsAt = Date().addingTimeInterval(30 * 60)
-        // 5h: utilization 100 → exhausted → exhausted guard fires first
-        // 7d: utilization 95 → quotas = 0.45 < 1 → would promote, but exhausted guard prevents it
-        state.updateWindows(
-            fiveHour: WindowState(utilization: 100.0, resetsAt: resetsAt),
-            sevenDay: WindowState(utilization: 95.0, resetsAt: nil)
-        )
-        #expect(state.displayedWindow == .fiveHour)
-        #expect(state.menuBarHeadroomState == .exhausted)
-        #expect(state.menuBarText.contains("\u{21BB}"), "Should show 5h countdown, not 7d percentage")
-    }
-
-    @Test("both 5h and 7d exhausted → stays on 5h (countdown more useful)")
-    @MainActor
-    func bothExhausted() {
-        let state = AppState()
-        state.updateConnectionStatus(.connected)
-        state.updateCreditLimits(RateLimitTier.pro.creditLimits)
-        let resetsAt5h = Date().addingTimeInterval(20 * 60)
-        let resetsAt7d = Date().addingTimeInterval(3 * 3600)
-        state.updateWindows(
-            fiveHour: WindowState(utilization: 100.0, resetsAt: resetsAt5h),
-            sevenDay: WindowState(utilization: 100.0, resetsAt: resetsAt7d)
-        )
-        #expect(state.displayedWindow == .fiveHour)
-        #expect(state.menuBarHeadroomState == .exhausted)
-        #expect(state.menuBarText.contains("\u{21BB}"), "Should show countdown for 5h")
-    }
-
-    @Test("5h exhausted, 7d warning, nil tier → stays on 5h (exhausted guard fires first)")
-    @MainActor
-    func fiveHourExhaustedSevenDayWarningFallback() {
-        let state = AppState()
-        state.updateConnectionStatus(.connected)
-        let resetsAt = Date().addingTimeInterval(30 * 60)
-        state.updateWindows(
-            fiveHour: WindowState(utilization: 100.0, resetsAt: resetsAt),
-            sevenDay: WindowState(utilization: 85.0, resetsAt: nil)
-        )
-        #expect(state.displayedWindow == .fiveHour)
-        #expect(state.menuBarHeadroomState == .exhausted)
-        #expect(state.menuBarText.contains("\u{21BB}"), "Should show 5h countdown, not 7d percentage")
-    }
-
-    // MARK: - quotasRemaining Tests (Story 3.3)
-
-    @Test("quotasRemaining returns correct value for Pro tier with 7d utilization 90%")
-    @MainActor
-    func quotasRemainingProTier90() {
-        let state = AppState()
-        state.updateConnectionStatus(.connected)
-        state.updateCreditLimits(RateLimitTier.pro.creditLimits)
-        // 7d: utilization 90 → remaining = 0.10 * 5,000,000 = 500,000 → quotas = 500,000/550,000 = 0.909
-        state.updateWindows(
-            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
-            sevenDay: WindowState(utilization: 90.0, resetsAt: nil)
-        )
-        let quotas = state.quotasRemaining
-        #expect(quotas != nil)
-        #expect(abs(quotas! - 0.909) < 0.01)
-    }
-
-    @Test("quotasRemaining returns nil when creditLimits is nil")
-    @MainActor
-    func quotasRemainingNilWhenNoLimits() {
-        let state = AppState()
-        state.updateConnectionStatus(.connected)
-        state.updateWindows(
-            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
-            sevenDay: WindowState(utilization: 90.0, resetsAt: nil)
-        )
-        #expect(state.quotasRemaining == nil)
-    }
-
-    @Test("quotasRemaining returns nil when sevenDay is nil")
-    @MainActor
-    func quotasRemainingNilWhenNoSevenDay() {
-        let state = AppState()
-        state.updateConnectionStatus(.connected)
-        state.updateCreditLimits(RateLimitTier.pro.creditLimits)
-        state.updateWindows(
-            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
-            sevenDay: nil
-        )
-        #expect(state.quotasRemaining == nil)
-    }
-
-    @Test("Boundary: Pro tier, 7d utilization exactly 89% → quotas=1.0 → stays 5h (strict less-than)")
-    @MainActor
-    func creditMathBoundaryExactlyOne() {
-        let state = AppState()
-        state.updateConnectionStatus(.connected)
-        state.updateCreditLimits(RateLimitTier.pro.creditLimits)
-        // 7d: utilization 89 → remaining = 0.11 * 5,000,000 = 550,000 → quotas = 550,000/550,000 = 1.0
-        state.updateWindows(
-            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
-            sevenDay: WindowState(utilization: 89.0, resetsAt: nil)
-        )
-        #expect(state.displayedWindow == .fiveHour, "quotas == 1.0 exactly should NOT promote (strict less-than)")
-    }
-
-    @Test("5h 72%, 7d nil, with credit limits → stays on 5h")
-    @MainActor
-    func noPromotionSevenDayNilWithLimits() {
-        let state = AppState()
-        state.updateConnectionStatus(.connected)
-        state.updateCreditLimits(RateLimitTier.pro.creditLimits)
-        state.updateWindows(
-            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
-            sevenDay: nil
-        )
-        #expect(state.displayedWindow == .fiveHour)
-    }
-
-    @Test("quotasRemaining returns nil when fiveHourCredits is 0 (defensive guard)")
-    @MainActor
-    func quotasRemainingNilWhenZeroCredits() {
-        let state = AppState()
-        state.updateConnectionStatus(.connected)
-        state.updateCreditLimits(CreditLimits(fiveHourCredits: 0, sevenDayCredits: 1_000_000))
-        state.updateWindows(
-            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
-            sevenDay: WindowState(utilization: 90.0, resetsAt: nil)
-        )
-        #expect(state.quotasRemaining == nil, "Should return nil, not infinity")
     }
 
     // MARK: - Countdown Tick Tests (Story 3.2)
@@ -756,9 +571,9 @@ struct AppStateTests {
 
     // MARK: - Extra Usage State Tests (Story 17.1)
 
-    @Test("isExtraUsageActive returns true when enabled AND 5h exhausted")
+    @Test("isExtraUsageActive returns false when enabled and only 5h exhausted (weekly drives the menu bar)")
     @MainActor
-    func extraUsageActiveWhen5hExhausted() {
+    func extraUsageInactiveWhenOnly5hExhausted() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
         state.updateExtraUsage(enabled: true, monthlyLimit: 100.0, usedCredits: 15.0, utilization: 0.15)
@@ -766,20 +581,22 @@ struct AppStateTests {
             fiveHour: WindowState(utilization: 100.0, resetsAt: nil),
             sevenDay: WindowState(utilization: 70.0, resetsAt: nil)
         )
-        #expect(state.isExtraUsageActive == true)
+        #expect(state.isExtraUsageActive == false)
+        #expect(state.menuBarText == "30%")
     }
 
-    @Test("isExtraUsageActive returns true when enabled AND 7d exhausted")
+    @Test("isExtraUsageActive returns true when enabled AND weekly exhausted")
     @MainActor
-    func extraUsageActiveWhen7dExhausted() {
+    func extraUsageActiveWhenWeeklyExhausted() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
         state.updateExtraUsage(enabled: true, monthlyLimit: 100.0, usedCredits: 15.0, utilization: 0.15)
         state.updateWindows(
-            fiveHour: WindowState(utilization: 50.0, resetsAt: nil),
-            sevenDay: WindowState(utilization: 100.0, resetsAt: nil)
+            fiveHour: nil,
+            sevenDay: WindowState(utilization: 100.0, resetsAt: Date().addingTimeInterval(3 * 86400))
         )
         #expect(state.isExtraUsageActive == true)
+        #expect(state.menuBarText == "$0.85")
     }
 
     @Test("isExtraUsageActive returns false when enabled but no window exhausted")
@@ -831,8 +648,8 @@ struct AppStateTests {
         state.updateConnectionStatus(.connected)
         state.updateExtraUsage(enabled: true, monthlyLimit: 10000.0, usedCredits: 7261.0, utilization: 0.7261)
         state.updateWindows(
-            fiveHour: WindowState(utilization: 100.0, resetsAt: nil),
-            sevenDay: WindowState(utilization: 70.0, resetsAt: nil)
+            fiveHour: nil,
+            sevenDay: WindowState(utilization: 100.0, resetsAt: nil)
         )
         #expect(state.menuBarText == "$27.39")
     }
@@ -844,8 +661,8 @@ struct AppStateTests {
         state.updateConnectionStatus(.connected)
         state.updateExtraUsage(enabled: true, monthlyLimit: nil, usedCredits: 1561.0, utilization: nil)
         state.updateWindows(
-            fiveHour: WindowState(utilization: 100.0, resetsAt: nil),
-            sevenDay: WindowState(utilization: 70.0, resetsAt: nil)
+            fiveHour: nil,
+            sevenDay: WindowState(utilization: 100.0, resetsAt: nil)
         )
         #expect(state.menuBarText == "$15.61 spent")
     }
@@ -860,7 +677,7 @@ struct AppStateTests {
             fiveHour: WindowState(utilization: 50.0, resetsAt: nil),
             sevenDay: WindowState(utilization: 70.0, resetsAt: nil)
         )
-        #expect(state.menuBarText == "50%")
+        #expect(state.menuBarText == "30%")
     }
 
     @Test("updateExtraUsage clears previous values when called with nil")
@@ -886,8 +703,8 @@ struct AppStateTests {
         // usedCredits exceeds monthlyLimit (in cents)
         state.updateExtraUsage(enabled: true, monthlyLimit: 10000.0, usedCredits: 10523.0, utilization: 1.0523)
         state.updateWindows(
-            fiveHour: WindowState(utilization: 100.0, resetsAt: nil),
-            sevenDay: WindowState(utilization: 70.0, resetsAt: nil)
+            fiveHour: nil,
+            sevenDay: WindowState(utilization: 100.0, resetsAt: nil)
         )
         #expect(state.menuBarText == "-$5.23")
     }
@@ -899,8 +716,8 @@ struct AppStateTests {
         state.updateConnectionStatus(.connected)
         state.updateExtraUsage(enabled: true, monthlyLimit: nil, usedCredits: nil, utilization: nil)
         state.updateWindows(
-            fiveHour: WindowState(utilization: 100.0, resetsAt: nil),
-            sevenDay: WindowState(utilization: 70.0, resetsAt: nil)
+            fiveHour: nil,
+            sevenDay: WindowState(utilization: 100.0, resetsAt: nil)
         )
         #expect(state.menuBarExtraUsageText == "$0.00")
         #expect(state.menuBarText == "$0.00")

@@ -259,21 +259,61 @@ struct AppDelegateLaunchAtLoginTests {
     }
 }
 
-// MARK: - Menu Bar Display Tests (Task 8)
+// MARK: - Menu Bar Display Tests (weekly window)
 
 @Suite("AppDelegate Menu Bar Display Tests")
 struct AppDelegateMenuBarTests {
 
-    @Test("updateMenuBarDisplay updates attributedTitle with correct text after state change")
+    /// Launches a delegate with mocks and returns it with its AppState.
     @MainActor
-    func updateMenuBarDisplayReflectsState() async {
-        let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
-
+    private func launchedDelegate() async -> (AppDelegate, AppState)? {
+        let delegate = AppDelegate(pollingEngine: MockPollingEngine(), notificationService: MockNotificationService())
         delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
         try? await Task.sleep(for: .milliseconds(50))
+        guard let appState = delegate.appState else { return nil }
+        return (delegate, appState)
+    }
 
-        guard let appState = delegate.appState else {
+    @Test("five_hour null with weekly data → title shows weekly headroom, not em dash")
+    @MainActor
+    func updateMenuBarDisplayShowsWeeklyWhenFiveHourNull() async {
+        guard let (delegate, appState) = await launchedDelegate() else {
+            #expect(Bool(false), "AppState should exist after launch")
+            return
+        }
+
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 17.0, resetsAt: nil))
+        delegate.updateMenuBarDisplay()
+
+        let title = delegate.statusItem?.button?.attributedTitle
+        #expect(title?.string == "83%", "attributedTitle text should reflect 83% weekly headroom")
+        let color = title?.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor
+        #expect(color == NSColor.headroomColor(for: .normal))
+    }
+
+    @Test("5h present is ignored in the title")
+    @MainActor
+    func updateMenuBarDisplayIgnoresFiveHour() async {
+        guard let (delegate, appState) = await launchedDelegate() else {
+            #expect(Bool(false), "AppState should exist after launch")
+            return
+        }
+
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 90.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 30.0, resetsAt: nil)
+        )
+        delegate.updateMenuBarDisplay()
+
+        #expect(delegate.statusItem?.button?.attributedTitle.string == "70%")
+    }
+
+    @Test("connected without weekly data → em dash and disconnected icon")
+    @MainActor
+    func noWeeklyDataShowsDisconnected() async {
+        guard let (delegate, appState) = await launchedDelegate() else {
             #expect(Bool(false), "AppState should exist after launch")
             return
         }
@@ -282,12 +322,11 @@ struct AppDelegateMenuBarTests {
         appState.updateWindows(fiveHour: WindowState(utilization: 17.0, resetsAt: nil), sevenDay: nil)
         delegate.updateMenuBarDisplay()
 
-        let title = delegate.statusItem?.button?.attributedTitle
-        #expect(title != nil, "attributedTitle should be set")
-        #expect(title?.string == "83%", "attributedTitle text should reflect 83% headroom")
+        #expect(delegate.statusItem?.button?.attributedTitle.string == "\u{2014}")
+        #expect(delegate.statusItem?.button?.image?.tiffRepresentation == makeDisconnectedIcon().tiffRepresentation)
     }
 
-    @Test("status item button has accessibilityLabel set matching AC#6 format")
+    @Test("status item button has accessibilityLabel set with 'cc-hdrm:' prefix")
     @MainActor
     func statusItemHasAccessibilityLabel() async {
         let mockEngine = MockPollingEngine()
@@ -298,99 +337,96 @@ struct AppDelegateMenuBarTests {
 
         let label = delegate.statusItem?.button?.accessibilityLabel() as? String
         #expect(label != nil, "accessibilityLabel should be set")
-        #expect(label?.contains("cc-hdrm:") == true, "accessibilityLabel should start with 'cc-hdrm:'")
+        #expect(label?.hasPrefix("cc-hdrm:") == true, "accessibilityLabel should start with 'cc-hdrm:'")
     }
 
-    @Test("status item accessibilityValue includes percent for connected states")
+    @Test("VoiceOver speaks weekly headroom")
     @MainActor
-    func accessibilityValueIncludesPercent() async {
-        let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
-
-        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
-        try? await Task.sleep(for: .milliseconds(50))
-
-        guard let appState = delegate.appState else {
+    func accessibilityValueSpeaksWeeklyHeadroom() async {
+        guard let (delegate, appState) = await launchedDelegate() else {
             #expect(Bool(false), "AppState should exist")
             return
         }
 
         appState.updateConnectionStatus(.connected)
-        appState.updateWindows(fiveHour: WindowState(utilization: 50.0, resetsAt: nil), sevenDay: nil)
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 17.0, resetsAt: nil))
         delegate.updateMenuBarDisplay()
 
         let value = delegate.statusItem?.button?.accessibilityValue() as? String
-        #expect(value != nil, "accessibilityValue should be set")
-        #expect(value?.contains("percent") == true, "accessibilityValue should include 'percent' for connected states")
-        #expect(value?.contains("50") == true, "accessibilityValue should include the headroom percentage")
+        #expect(value == "cc-hdrm: Claude weekly headroom: 83 percent, normal")
+        let label = delegate.statusItem?.button?.accessibilityLabel() as? String
+        #expect(label == "cc-hdrm: Claude weekly headroom: 83 percent, normal")
     }
 
-    // MARK: - Exhausted Accessibility Tests (Story 3.2, Task 10)
+    // MARK: - Exhausted
 
-    @Test("exhausted state with resetsAt → accessibility contains 'exhausted' and 'resets in'")
+    @Test("weekly exhausted with resetsAt → title ↻ 3d 4h and VoiceOver names the weekly countdown")
     @MainActor
-    func accessibilityExhaustedWithResetsAt() async {
-        let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
-
-        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
-        try? await Task.sleep(for: .milliseconds(50))
-
-        guard let appState = delegate.appState else {
+    func weeklyExhaustedWithResetsAt() async {
+        guard let (delegate, appState) = await launchedDelegate() else {
             #expect(Bool(false), "AppState should exist")
             return
         }
 
-        let resetsAt = Date().addingTimeInterval(30 * 60)
+        let resetsAt = Date().addingTimeInterval(3 * 86400 + 4 * 3600 + 30)
         appState.updateConnectionStatus(.connected)
-        appState.updateWindows(fiveHour: WindowState(utilization: 100.0, resetsAt: resetsAt), sevenDay: nil)
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 100.0, resetsAt: resetsAt))
         delegate.updateMenuBarDisplay()
 
+        #expect(delegate.statusItem?.button?.attributedTitle.string == "\u{21BB} 3d 4h")
         let label = delegate.statusItem?.button?.accessibilityLabel() as? String
-        #expect(label?.contains("exhausted") == true, "Should contain 'exhausted'")
-        #expect(label?.contains("resets in") == true, "Should contain 'resets in'")
+        #expect(label == "cc-hdrm: Claude weekly allowance exhausted, resets in 3 days 4 hours")
     }
 
-    @Test("exhausted state without resetsAt → accessibility contains 'exhausted' but not 'resets in'")
+    @Test("weekly exhausted without resetsAt → accessibility says exhausted without 'resets in'")
     @MainActor
-    func accessibilityExhaustedWithoutResetsAt() async {
-        let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
-
-        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
-        try? await Task.sleep(for: .milliseconds(50))
-
-        guard let appState = delegate.appState else {
+    func weeklyExhaustedWithoutResetsAt() async {
+        guard let (delegate, appState) = await launchedDelegate() else {
             #expect(Bool(false), "AppState should exist")
             return
         }
 
         appState.updateConnectionStatus(.connected)
-        appState.updateWindows(fiveHour: WindowState(utilization: 100.0, resetsAt: nil), sevenDay: nil)
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 100.0, resetsAt: nil))
         delegate.updateMenuBarDisplay()
 
+        #expect(delegate.statusItem?.button?.attributedTitle.string == "0%")
         let label = delegate.statusItem?.button?.accessibilityLabel() as? String
-        #expect(label?.contains("exhausted") == true, "Should contain 'exhausted'")
-        #expect(label?.contains("resets in") == false, "Should not contain 'resets in' without resetsAt")
+        #expect(label == "cc-hdrm: Claude weekly allowance exhausted")
     }
 
-    @Test("attributedTitle uses correct font weight for state")
+    @Test("weekly exhausted with extra usage enabled → $ text and extra-usage icon")
+    @MainActor
+    func weeklyExhaustedExtraUsage() async {
+        guard let (delegate, appState) = await launchedDelegate() else {
+            #expect(Bool(false), "AppState should exist")
+            return
+        }
+
+        appState.updateConnectionStatus(.connected)
+        appState.updateExtraUsage(enabled: true, monthlyLimit: 10000.0, usedCredits: 2739.0, utilization: 0.2739)
+        appState.updateWindows(
+            fiveHour: nil,
+            sevenDay: WindowState(utilization: 100.0, resetsAt: Date().addingTimeInterval(3 * 86400))
+        )
+        delegate.updateMenuBarDisplay()
+
+        #expect(delegate.statusItem?.button?.attributedTitle.string == "$72.61")
+        let expectedIcon = GaugeIcon.makeExtraUsage(remainingFraction: 0.7261, utilization: 0.2739)
+        #expect(delegate.statusItem?.button?.image?.tiffRepresentation == expectedIcon.tiffRepresentation)
+    }
+
+    @Test("attributedTitle uses correct font weight for weekly state")
     @MainActor
     func attributedTitleUsesCorrectFontWeight() async {
-        let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
-
-        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
-        try? await Task.sleep(for: .milliseconds(50))
-
-        guard let appState = delegate.appState else {
+        guard let (delegate, appState) = await launchedDelegate() else {
             #expect(Bool(false), "AppState should exist")
             return
         }
 
-        // Set critical state (bold weight expected)
+        // Critical state (bold weight expected)
         appState.updateConnectionStatus(.connected)
-        appState.updateWindows(fiveHour: WindowState(utilization: 97.0, resetsAt: nil), sevenDay: nil)
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 97.0, resetsAt: nil))
         delegate.updateMenuBarDisplay()
 
         let title = delegate.statusItem?.button?.attributedTitle
@@ -402,100 +438,149 @@ struct AppDelegateMenuBarTests {
         }
     }
 
-    // MARK: - Slope Accessibility Tests (Story 11.3, AC #5)
+    // MARK: - Slope Accessibility
 
-    @Test("accessibility includes slope when rising (AC #5)")
+    @Test("accessibility includes weekly slope when rising")
     @MainActor
     func accessibilityIncludesSlopeWhenRising() async {
-        let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
-
-        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
-        try? await Task.sleep(for: .milliseconds(50))
-
-        guard let appState = delegate.appState else {
+        guard let (delegate, appState) = await launchedDelegate() else {
             #expect(Bool(false), "AppState should exist")
             return
         }
 
         appState.updateConnectionStatus(.connected)
-        appState.updateWindows(fiveHour: WindowState(utilization: 22.0, resetsAt: Date().addingTimeInterval(3600)), sevenDay: nil)
-        appState.updateSlopes(fiveHour: .rising, sevenDay: .flat)
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 22.0, resetsAt: Date().addingTimeInterval(3 * 86400)))
+        appState.updateSlopes(fiveHour: .flat, sevenDay: .rising)
         delegate.updateMenuBarDisplay()
 
         let label = delegate.statusItem?.button?.accessibilityLabel() as? String
-        #expect(label?.contains("rising") == true, "Accessibility should include 'rising' slope label when actionable")
+        #expect(label == "cc-hdrm: Claude weekly headroom: 78 percent, normal, rising")
     }
 
-    @Test("accessibility includes slope when steep (AC #5)")
+    @Test("accessibility includes weekly slope when steep")
     @MainActor
     func accessibilityIncludesSlopeWhenSteep() async {
-        let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
-
-        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
-        try? await Task.sleep(for: .milliseconds(50))
-
-        guard let appState = delegate.appState else {
+        guard let (delegate, appState) = await launchedDelegate() else {
             #expect(Bool(false), "AppState should exist")
             return
         }
 
         appState.updateConnectionStatus(.connected)
-        appState.updateWindows(fiveHour: WindowState(utilization: 35.0, resetsAt: Date().addingTimeInterval(3600)), sevenDay: nil)
-        appState.updateSlopes(fiveHour: .steep, sevenDay: .flat)
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 42.0, resetsAt: Date().addingTimeInterval(3 * 86400)))
+        appState.updateSlopes(fiveHour: .flat, sevenDay: .steep)
         delegate.updateMenuBarDisplay()
 
+        #expect(delegate.statusItem?.button?.attributedTitle.string == "58% \u{2197}")
         let label = delegate.statusItem?.button?.accessibilityLabel() as? String
         #expect(label?.contains("steep") == true, "Accessibility should include 'steep' slope label when actionable")
     }
 
-    @Test("accessibility excludes slope when flat (AC #5)")
+    @Test("accessibility excludes slope when flat, and ignores the 5h slope")
     @MainActor
     func accessibilityExcludesSlopeWhenFlat() async {
-        let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
-
-        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
-        try? await Task.sleep(for: .milliseconds(50))
-
-        guard let appState = delegate.appState else {
+        guard let (delegate, appState) = await launchedDelegate() else {
             #expect(Bool(false), "AppState should exist")
             return
         }
 
         appState.updateConnectionStatus(.connected)
-        appState.updateWindows(fiveHour: WindowState(utilization: 17.0, resetsAt: Date().addingTimeInterval(3600)), sevenDay: nil)
-        appState.updateSlopes(fiveHour: .flat, sevenDay: .flat)
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 17.0, resetsAt: Date().addingTimeInterval(3 * 86400)))
+        appState.updateSlopes(fiveHour: .steep, sevenDay: .flat)
         delegate.updateMenuBarDisplay()
 
         let label = delegate.statusItem?.button?.accessibilityLabel() as? String
-        #expect(label?.contains("flat") == false, "Accessibility should NOT include slope when flat (not actionable)")
-        #expect(label?.contains("rising") == false, "Accessibility should NOT include rising when slope is flat")
-        #expect(label?.contains("steep") == false, "Accessibility should NOT include steep when slope is flat")
+        #expect(label == "cc-hdrm: Claude weekly headroom: 83 percent, normal")
     }
 
-    @Test("accessibility excludes slope when exhausted even with actionable slope (AC #5)")
+    @Test("accessibility excludes slope when exhausted even with actionable slope")
     @MainActor
     func accessibilityExcludesSlopeWhenExhausted() async {
-        let mockEngine = MockPollingEngine()
-        let delegate = AppDelegate(pollingEngine: mockEngine, notificationService: MockNotificationService())
-
-        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
-        try? await Task.sleep(for: .milliseconds(50))
-
-        guard let appState = delegate.appState else {
+        guard let (delegate, appState) = await launchedDelegate() else {
             #expect(Bool(false), "AppState should exist")
             return
         }
 
         appState.updateConnectionStatus(.connected)
-        appState.updateWindows(fiveHour: WindowState(utilization: 100.0, resetsAt: Date().addingTimeInterval(720)), sevenDay: nil)
-        appState.updateSlopes(fiveHour: .steep, sevenDay: .flat)
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 100.0, resetsAt: Date().addingTimeInterval(2 * 86400)))
+        appState.updateSlopes(fiveHour: .flat, sevenDay: .steep)
         delegate.updateMenuBarDisplay()
 
         let label = delegate.statusItem?.button?.accessibilityLabel() as? String
         #expect(label?.contains("exhausted") == true, "Accessibility should contain 'exhausted'")
         #expect(label?.contains("steep") == false, "Accessibility should NOT include slope when exhausted")
+    }
+
+    // MARK: - Fable Cap Dot
+
+    @Test("Fable cap at caution/warning/critical/exhausted → gauge icon carries a dot in that state",
+          arguments: [(65.0, HeadroomState.caution), (85.0, .warning), (97.0, .critical), (100.0, .exhausted)])
+    @MainActor
+    func fableCapDotDrawn(fableUtilization: Double, expectedDot: HeadroomState) async {
+        guard let (delegate, appState) = await launchedDelegate() else {
+            #expect(Bool(false), "AppState should exist")
+            return
+        }
+
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 17.0, resetsAt: nil))
+        appState.updateScopedLimits([
+            ScopedLimitState(displayName: "Fable", utilization: fableUtilization, resetsAt: nil)
+        ])
+        // Sanity: fixture maps to the intended state
+        #expect(appState.scopedLimits.first?.headroomState == expectedDot)
+        delegate.updateMenuBarDisplay()
+
+        let actual = delegate.statusItem?.button?.image?.tiffRepresentation
+        let withDot = GaugeIcon.make(headroomPercentage: 83, state: .normal, capDot: expectedDot).tiffRepresentation
+        let withoutDot = GaugeIcon.make(headroomPercentage: 83, state: .normal).tiffRepresentation
+        #expect(actual == withDot)
+        #expect(actual != withoutDot)
+        // Menu bar number stays the overall weekly value
+        #expect(delegate.statusItem?.button?.attributedTitle.string == "83%")
+        // Dot is not colour-only: VoiceOver names the cap state
+        let label = delegate.statusItem?.button?.accessibilityLabel() as? String
+        #expect(label == "cc-hdrm: Claude weekly headroom: 83 percent, normal, Fable cap \(expectedDot.rawValue)")
+    }
+
+    @Test("Fable cap dot also shows on the extra-usage icon")
+    @MainActor
+    func fableCapDotInExtraUsageMode() async {
+        guard let (delegate, appState) = await launchedDelegate() else {
+            #expect(Bool(false), "AppState should exist")
+            return
+        }
+
+        appState.updateConnectionStatus(.connected)
+        appState.updateExtraUsage(enabled: true, monthlyLimit: 10000.0, usedCredits: 2739.0, utilization: 0.2739)
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 100.0, resetsAt: nil))
+        appState.updateScopedLimits([ScopedLimitState(displayName: "Fable", utilization: 85.0, resetsAt: nil)])
+        delegate.updateMenuBarDisplay()
+
+        let expected = GaugeIcon.makeExtraUsage(remainingFraction: 0.7261, utilization: 0.2739, capDot: .warning)
+        #expect(delegate.statusItem?.button?.image?.tiffRepresentation == expected.tiffRepresentation)
+        let label = delegate.statusItem?.button?.accessibilityLabel() as? String
+        #expect(label?.hasSuffix(", Fable cap warning") == true)
+    }
+
+    @Test("Fable cap normal or absent → no dot")
+    @MainActor
+    func fableCapDotAbsent() async {
+        guard let (delegate, appState) = await launchedDelegate() else {
+            #expect(Bool(false), "AppState should exist")
+            return
+        }
+
+        let withoutDot = GaugeIcon.make(headroomPercentage: 83, state: .normal).tiffRepresentation
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 17.0, resetsAt: nil))
+
+        delegate.updateMenuBarDisplay()
+        #expect(delegate.statusItem?.button?.image?.tiffRepresentation == withoutDot, "No scoped limits → no dot")
+
+        appState.updateScopedLimits([ScopedLimitState(displayName: "Fable", utilization: 10.0, resetsAt: nil)])
+        delegate.updateMenuBarDisplay()
+        #expect(delegate.statusItem?.button?.image?.tiffRepresentation == withoutDot, "Fable normal → no dot")
+        let label = delegate.statusItem?.button?.accessibilityLabel() as? String
+        #expect(label?.contains(" cap ") == false, "No dot → no cap clause")
     }
 }

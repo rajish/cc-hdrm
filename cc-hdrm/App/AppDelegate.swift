@@ -29,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var onboardingWindowController: OnboardingWindowController?
     private var eventMonitor: Any?
     private var previousAccessibilityValue: String?
-    private var previousDisplayedWindow: DisplayedWindow?
+    private var previousCapDot: HeadroomState?
     private var previousShowingCountdown: Bool = false
     private var previousExtraUsageActive: Bool = false
 
@@ -523,6 +523,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let state = appState.menuBarHeadroomState
         let text = appState.menuBarText
+        let capLimit = appState.scopedLimits.first
+        let capDot: HeadroomState? = capLimit.map(\.headroomState).flatMap {
+            state != .disconnected && GaugeIcon.showsCapDot($0) ? $0 : nil
+        }
 
         // Generate gauge icon based on state
         let icon: NSImage
@@ -534,28 +538,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let remainingCents = appState.extraUsageRemainingBalanceCents,
                let limitCents = appState.extraUsageMonthlyLimitCents, limitCents > 0 {
                 let remainingFraction = Double(remainingCents) / Double(limitCents)
-                icon = GaugeIcon.makeExtraUsage(remainingFraction: remainingFraction, utilization: utilization)
+                icon = GaugeIcon.makeExtraUsage(remainingFraction: remainingFraction, utilization: utilization, capDot: capDot)
             } else {
-                icon = GaugeIcon.makeExtraUsageNoLimit(utilization: utilization)
+                icon = GaugeIcon.makeExtraUsageNoLimit(utilization: utilization, capDot: capDot)
             }
         } else {
-            let window: WindowState? = appState.displayedWindow == .fiveHour ? appState.fiveHour : appState.sevenDay
-            let headroom = min(100, max(0, 100.0 - (window?.utilization ?? 0)))
-
-            // Determine 7d overlay: promoted label, colored dot, or none
-            let sevenDayOverlay: GaugeIcon.SevenDayOverlay
-            if appState.sevenDay == nil {
-                sevenDayOverlay = .none
-            } else if appState.displayedWindow == .sevenDay {
-                sevenDayOverlay = .promoted
-            } else if let sdState = appState.sevenDay?.headroomState,
-                      sdState == .caution || sdState == .warning || sdState == .critical {
-                sevenDayOverlay = .dot(sdState)
-            } else {
-                sevenDayOverlay = .none
-            }
-
-            icon = GaugeIcon.make(headroomPercentage: headroom, state: state, sevenDayOverlay: sevenDayOverlay)
+            let headroom = min(100, max(0, 100.0 - (appState.sevenDay?.utilization ?? 0)))
+            icon = GaugeIcon.make(headroomPercentage: headroom, state: state, capDot: capDot)
         }
         statusItem?.button?.image = icon
 
@@ -577,7 +566,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem?.button?.attributedTitle = NSAttributedString(string: text, attributes: attributes)
 
         // Accessibility (AC #6, #7, Story 17.1 AC #8)
-        let accessibilityValue: String
+        var accessibilityValue: String
         if state == .disconnected {
             accessibilityValue = "cc-hdrm: Claude headroom disconnected"
         } else if appState.isExtraUsageActive {
@@ -588,28 +577,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 accessibilityValue = "cc-hdrm: Claude usage: extra usage active, \(AppState.formatCents(usedCents)) spent, no limit set"
             }
         } else if state == .exhausted {
-            let window: WindowState? = appState.displayedWindow == .fiveHour ? appState.fiveHour : appState.sevenDay
-            if let resetsAt = window?.resetsAt {
-                let minutes = max(0, Int(resetsAt.timeIntervalSince(Date()) / 60))
-                accessibilityValue = "cc-hdrm: Claude headroom exhausted, resets in \(minutes) minutes"
+            if let resetsAt = appState.sevenDay?.resetsAt {
+                accessibilityValue = "cc-hdrm: Claude weekly allowance exhausted, resets in \(resetsAt.spokenCountdownString())"
             } else {
-                accessibilityValue = "cc-hdrm: Claude headroom exhausted"
+                accessibilityValue = "cc-hdrm: Claude weekly allowance exhausted"
             }
         } else {
-            let window: WindowState? = appState.displayedWindow == .fiveHour ? appState.fiveHour : appState.sevenDay
-            let headroom = max(0, Int(100.0 - (window?.utilization ?? 0)))
-            let slope = appState.displayedSlope
+            let headroom = max(0, Int(100.0 - (appState.sevenDay?.utilization ?? 0)))
+            let slope = appState.sevenDaySlope
             if slope.isActionable {
-                accessibilityValue = "cc-hdrm: Claude headroom \(headroom) percent, \(state.rawValue), \(slope.accessibilityLabel)"
+                accessibilityValue = "cc-hdrm: Claude weekly headroom: \(headroom) percent, \(state.rawValue), \(slope.accessibilityLabel)"
             } else {
-                accessibilityValue = "cc-hdrm: Claude headroom \(headroom) percent, \(state.rawValue)"
+                accessibilityValue = "cc-hdrm: Claude weekly headroom: \(headroom) percent, \(state.rawValue)"
             }
+        }
+        if let capDot, let capLimit {
+            let name = ScopedLimitGaugeSection(appState: appState).label(for: capLimit)
+            accessibilityValue += ", \(name) cap \(capDot.rawValue)"
         }
 
         statusItem?.button?.setAccessibilityLabel(accessibilityValue)
 
-        // Log display mode transitions (percentage↔countdown, 5h↔7d promotion, extra usage)
-        let currentWindow = appState.displayedWindow
+        // Log display mode transitions (percentage↔countdown, extra usage, cap dot)
+        let currentCapDot = capDot
         let currentShowingCountdown = text.contains("\u{21BB}")
         let currentExtraUsageActive = appState.isExtraUsageActive
 
@@ -617,16 +607,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let mode = currentExtraUsageActive ? "extra usage" : "normal headroom"
             Self.logger.info("Display mode switched to \(mode, privacy: .public)")
         }
-        if previousDisplayedWindow != nil && previousDisplayedWindow != currentWindow {
-            let from = previousDisplayedWindow == .fiveHour ? "5h" : "7d"
-            let to = currentWindow == .fiveHour ? "5h" : "7d"
-            Self.logger.info("Display window switched: \(from, privacy: .public) → \(to, privacy: .public)")
+        if previousCapDot != currentCapDot {
+            let from = previousCapDot?.rawValue ?? "none"
+            let to = currentCapDot?.rawValue ?? "none"
+            Self.logger.info("Cap dot changed: \(from, privacy: .public) → \(to, privacy: .public)")
         }
         if previousShowingCountdown != currentShowingCountdown {
             let mode = currentShowingCountdown ? "countdown" : "percentage"
             Self.logger.info("Display mode switched to \(mode, privacy: .public)")
         }
-        previousDisplayedWindow = currentWindow
+        previousCapDot = currentCapDot
         previousShowingCountdown = currentShowingCountdown
         previousExtraUsageActive = currentExtraUsageActive
 
