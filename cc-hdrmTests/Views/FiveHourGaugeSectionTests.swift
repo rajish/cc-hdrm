@@ -27,6 +27,25 @@ struct FiveHourGaugeSectionTests {
         #expect(appState.fiveHour == nil)
     }
 
+    @Test("combinedAccessibilityLabel reads headroom then reset, with no pace or slope clause")
+    @MainActor
+    func connectedAccessibilityLabel() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 25.0, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: nil
+        )
+        let section = FiveHourGaugeSection(appState: appState)
+        #expect(section.combinedAccessibilityLabel.hasPrefix("5-hour headroom: 75 percent, resets in "))
+    }
+
+    @Test("combinedAccessibilityLabel without 5h data → \"5-hour headroom: unavailable\"")
+    @MainActor
+    func unavailableAccessibilityLabel() {
+        #expect(FiveHourGaugeSection(appState: AppState()).combinedAccessibilityLabel == "5-hour headroom: unavailable")
+    }
+
     // MARK: - Story 4.6 — onTap + Accessibility Hint Tests
 
     @Test("Section renders with onTap callback without crash")

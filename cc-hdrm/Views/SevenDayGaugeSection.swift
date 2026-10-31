@@ -19,14 +19,23 @@ struct SevenDayGaugeSection: View {
 
     @State private var isHovered: Bool = false
 
-    /// Combined VoiceOver announcement (AC #7) + Story 11.4 AC #4:
-    /// "7-day headroom: [X] percent, [slope level], resets in [relative], at [absolute]"
+    /// Pace line shown below the countdown. `nil` when pace is unavailable
+    /// (no reset time or exhausted). Internal to allow @testable import verification.
+    var paceLineText: String? {
+        appState.weeklyPace?.paceLineText
+    }
+
+    /// Combined VoiceOver announcement:
+    /// "7-day headroom: [X] percent, [pace], resets in [relative], at [absolute]"
     /// Internal (not private) to allow @testable import verification.
     var combinedAccessibilityLabel: String {
         guard let headroom else {
             return "7-day headroom: unavailable"
         }
-        var label = "7-day headroom: \(Int(max(0, headroom))) percent, \(appState.sevenDaySlope.accessibilityLabel)"
+        var label = "7-day headroom: \(Int(max(0, headroom))) percent"
+        if let pace = appState.weeklyPace {
+            label += ", \(pace.accessibilityText)"
+        }
         if let resetsAt = appState.sevenDay?.resetsAt {
             label += ", resets in \(resetsAt.countdownString()), \(resetsAt.absoluteTimeString())"
         }
@@ -42,13 +51,12 @@ struct SevenDayGaugeSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                // Ring gauge: 56px diameter, 4px stroke (AC #1-#2) + slope display (Story 11.4)
+                // Ring gauge: 56px diameter, 4px stroke
                 HeadroomRingGauge(
                     headroomPercentage: headroom,
                     windowLabel: "7d",
                     ringSize: 56,
-                    strokeWidth: 4,
-                    slopeLevel: appState.sevenDaySlope
+                    strokeWidth: 4
                 )
 
                 // Countdown: relative + absolute (AC #4, #5)
@@ -57,6 +65,12 @@ struct SevenDayGaugeSection: View {
                     headroomState: sevenDayState,
                     countdownTick: appState.countdownTick
                 )
+
+                if let paceLineText {
+                    Text(paceLineText)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
             .background(
                 RoundedRectangle(cornerRadius: 6)

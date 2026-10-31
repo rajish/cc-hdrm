@@ -15,3 +15,7 @@
 ## Deferred from: code review of spec-26-1-weekly-allowance-menu-bar (2026-11-01)
 
 - `PollingEngine` plan-exhausted rule still counts the 5-hour window — `cc-hdrm/Services/PollingEngine.swift:275` sets `planExhausted` when the 5h window is exhausted, while `AppState.isExtraUsageActive` is now weekly-only. The two rules disagree if a 5-hour value ever returns: extra-usage alerts would fire while the menu bar shows normal headroom. Belongs with the 5h notification cleanup in Story 26.9.
+
+## Deferred from: code review of spec-26-2-weekly-pace-replaces-slope (2026-11-01)
+
+- Run-out time can name today's weekday for next week — `Date.dayTimeString()` (`cc-hdrm/Extensions/Date+Formatting.swift`) shows only weekday and time. A run-out can be up to ~6d 20h away, so on a Monday "Ahead of pace — runs out ~Mon 8:00 AM" means next Monday but reads as today. The reset line ("at Mon 9:00 AM") has the same ambiguity, softened by its relative countdown. Fix: add a date qualifier when the target is 6+ days away, or show a relative run-out. Fits the popover redesign in Story 26.3.

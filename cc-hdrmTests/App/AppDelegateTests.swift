@@ -438,63 +438,52 @@ struct AppDelegateMenuBarTests {
         }
     }
 
-    // MARK: - Slope Accessibility
+    // MARK: - Weekly Pace
 
-    @Test("accessibility includes weekly slope when rising")
+    @Test("ahead of weekly pace → title shows ↗ and VoiceOver says ahead of pace, without a run-out time")
     @MainActor
-    func accessibilityIncludesSlopeWhenRising() async {
+    func paceAheadShowsArrowAndSpokenPace() async {
         guard let (delegate, appState) = await launchedDelegate() else {
             #expect(Bool(false), "AppState should exist")
             return
         }
 
+        // 60% used with 3 of 7 days elapsed → run-out in ~2 days, before the reset in 4 days
         appState.updateConnectionStatus(.connected)
-        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 22.0, resetsAt: Date().addingTimeInterval(3 * 86400)))
-        appState.updateSlopes(fiveHour: .flat, sevenDay: .rising)
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 60.0, resetsAt: Date().addingTimeInterval(4 * 86400)))
         delegate.updateMenuBarDisplay()
 
+        #expect(delegate.statusItem?.button?.attributedTitle.string == "40% \u{2197}")
         let label = delegate.statusItem?.button?.accessibilityLabel() as? String
-        #expect(label == "cc-hdrm: Claude weekly headroom: 78 percent, normal, rising")
+        #expect(label == "cc-hdrm: Claude weekly headroom: 40 percent, caution, ahead of pace")
+        #expect(label?.contains("runs out") == false)
+        let value = delegate.statusItem?.button?.accessibilityValue() as? String
+        #expect(value == label)
     }
 
-    @Test("accessibility includes weekly slope when steep")
+    @Test("behind weekly pace → no arrow and no pace clause")
     @MainActor
-    func accessibilityIncludesSlopeWhenSteep() async {
+    func paceBehindHasNoArrow() async {
         guard let (delegate, appState) = await launchedDelegate() else {
             #expect(Bool(false), "AppState should exist")
             return
         }
 
-        appState.updateConnectionStatus(.connected)
-        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 42.0, resetsAt: Date().addingTimeInterval(3 * 86400)))
-        appState.updateSlopes(fiveHour: .flat, sevenDay: .steep)
-        delegate.updateMenuBarDisplay()
-
-        #expect(delegate.statusItem?.button?.attributedTitle.string == "58% \u{2197}")
-        let label = delegate.statusItem?.button?.accessibilityLabel() as? String
-        #expect(label?.contains("steep") == true, "Accessibility should include 'steep' slope label when actionable")
-    }
-
-    @Test("accessibility excludes slope when flat, and ignores the 5h slope")
-    @MainActor
-    func accessibilityExcludesSlopeWhenFlat() async {
-        guard let (delegate, appState) = await launchedDelegate() else {
-            #expect(Bool(false), "AppState should exist")
-            return
-        }
-
+        // 17% used with 4 of 7 days elapsed → well behind an even pace
         appState.updateConnectionStatus(.connected)
         appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 17.0, resetsAt: Date().addingTimeInterval(3 * 86400)))
-        appState.updateSlopes(fiveHour: .steep, sevenDay: .flat)
         delegate.updateMenuBarDisplay()
 
+        #expect(delegate.statusItem?.button?.attributedTitle.string == "83%")
         let label = delegate.statusItem?.button?.accessibilityLabel() as? String
         #expect(label == "cc-hdrm: Claude weekly headroom: 83 percent, normal")
+        #expect(label?.contains("ahead of pace") == false)
+        #expect(label?.contains("runs out") == false)
     }
 
-    @Test("accessibility excludes slope when exhausted even with actionable slope")
+    @Test("exhausted → VoiceOver says exhausted, never pace")
     @MainActor
-    func accessibilityExcludesSlopeWhenExhausted() async {
+    func paceAbsentWhenExhausted() async {
         guard let (delegate, appState) = await launchedDelegate() else {
             #expect(Bool(false), "AppState should exist")
             return
@@ -502,12 +491,13 @@ struct AppDelegateMenuBarTests {
 
         appState.updateConnectionStatus(.connected)
         appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 100.0, resetsAt: Date().addingTimeInterval(2 * 86400)))
-        appState.updateSlopes(fiveHour: .flat, sevenDay: .steep)
         delegate.updateMenuBarDisplay()
 
         let label = delegate.statusItem?.button?.accessibilityLabel() as? String
-        #expect(label?.contains("exhausted") == true, "Accessibility should contain 'exhausted'")
-        #expect(label?.contains("steep") == false, "Accessibility should NOT include slope when exhausted")
+        #expect(label?.contains("exhausted") == true)
+        #expect(label?.contains("pace") == false)
+        #expect(label?.contains("runs out") == false)
+        #expect(delegate.statusItem?.button?.attributedTitle.string.contains("\u{2197}") == false)
     }
 
     // MARK: - Fable Cap Dot

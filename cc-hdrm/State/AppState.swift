@@ -61,8 +61,6 @@ final class AppState {
     private(set) var subscriptionTier: String?
     private(set) var statusMessage: StatusMessage?
     private(set) var availableUpdate: AvailableUpdate?
-    private(set) var fiveHourSlope: SlopeLevel = .flat
-    private(set) var sevenDaySlope: SlopeLevel = .flat
     private(set) var creditLimits: CreditLimits?
 
     /// Model-scoped weekly caps from the API's `limits` array.
@@ -131,6 +129,13 @@ final class AppState {
         return sevenDay?.headroomState ?? .disconnected
     }
 
+    /// Weekly pace from the current weekly window, recomputed on every read.
+    /// Nil when there is no weekly window, no reset time, or the allowance is exhausted.
+    var weeklyPace: WeeklyPace? {
+        guard let sevenDay else { return nil }
+        return WeeklyPace(utilization: sevenDay.utilization, resetsAt: sevenDay.resetsAt, now: Date())
+    }
+
     /// Whether extra usage mode is active: enabled AND the weekly window exhausted.
     var isExtraUsageActive: Bool {
         guard extraUsageEnabled else { return false }
@@ -165,8 +170,8 @@ final class AppState {
     }
 
     /// Derived menu bar text from the weekly window: headroom percentage, countdown,
-    /// or em dash when disconnected. Appends `↗` when the weekly slope is actionable
-    /// and the window is not exhausted.
+    /// or em dash when disconnected. Appends `↗` when weekly run-out is projected before
+    /// the reset and the window is not exhausted.
     /// Note: Sparkle icon removed — gauge icon now provides the visual indicator.
     var menuBarText: String {
         if menuBarHeadroomState == .disconnected {
@@ -187,7 +192,7 @@ final class AppState {
         let headroom = max(0, Int(100.0 - (sevenDay?.utilization ?? 0)))
 
         // Exhausted without resetsAt shows percentage only, no arrow
-        if sevenDaySlope.isActionable && sevenDay?.headroomState != .exhausted {
+        if weeklyPace?.runOut != nil && sevenDay?.headroomState != .exhausted {
             return "\(headroom)% \u{2197}" // ↗
         }
         return "\(headroom)%"
@@ -241,12 +246,6 @@ final class AppState {
     /// Called by PollingEngine after resolving tier from Keychain credentials each poll cycle.
     func updateCreditLimits(_ limits: CreditLimits?) {
         self.creditLimits = limits
-    }
-
-    /// Updates the slope levels for both time windows.
-    func updateSlopes(fiveHour: SlopeLevel, sevenDay: SlopeLevel) {
-        self.fiveHourSlope = fiveHour
-        self.sevenDaySlope = sevenDay
     }
 
     /// Updates extra usage billing state from API data.

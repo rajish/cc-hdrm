@@ -126,20 +126,6 @@ struct RateLimitTierTests {
         #expect(limits == nil, "Should return nil when only 7d custom limit is set")
     }
 
-    // MARK: - CreditLimits normalizationFactor
-
-    @Test("CreditLimits.normalizationFactor is approximately correct for each tier")
-    func normalizationFactors() {
-        let proFactor = RateLimitTier.pro.creditLimits.normalizationFactor
-        #expect(abs(proFactor - 9.09) < 0.01)
-
-        let max5xFactor = RateLimitTier.max5x.creditLimits.normalizationFactor
-        #expect(abs(max5xFactor - 12.63) < 0.01)
-
-        let max20xFactor = RateLimitTier.max20x.creditLimits.normalizationFactor
-        #expect(abs(max20xFactor - 7.58) < 0.01)
-    }
-
     // MARK: - RateLimitTier.creditLimits
 
     @Test("RateLimitTier.creditLimits returns CreditLimits with matching values for each tier")
@@ -149,19 +135,5 @@ struct RateLimitTierTests {
             #expect(limits.fiveHourCredits == tier.fiveHourCredits)
             #expect(limits.sevenDayCredits == tier.sevenDayCredits)
         }
-    }
-
-    // MARK: - Defensive Guards (Code Review Fixes)
-
-    @Test("CreditLimits.normalizationFactor returns 0 when fiveHourCredits is 0 (defensive guard)")
-    func normalizationFactorZeroGuard() {
-        let limits = CreditLimits(fiveHourCredits: 0, sevenDayCredits: 1_000_000)
-        #expect(limits.normalizationFactor == 0, "Should return 0, not infinity")
-    }
-
-    @Test("CreditLimits.normalizationFactor returns 0 when both credits are 0")
-    func normalizationFactorBothZero() {
-        let limits = CreditLimits(fiveHourCredits: 0, sevenDayCredits: 0)
-        #expect(limits.normalizationFactor == 0)
     }
 }

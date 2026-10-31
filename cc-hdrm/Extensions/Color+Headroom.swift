@@ -121,14 +121,6 @@ extension Color {
     static var extraUsageHot: Color { Color("ExtraUsageColors/ExtraUsageHot", bundle: .main) }
     static var extraUsageCritical: Color { Color("ExtraUsageColors/ExtraUsageCritical", bundle: .main) }
 
-    /// Returns the SwiftUI `Color` for the given headroom state.
-    /// Delegates to `HeadroomState.swiftUIColor` to avoid duplication.
-    /// - Parameter state: The headroom state to get the color for.
-    /// - Returns: The corresponding SwiftUI Color.
-    static func headroomColor(for state: HeadroomState) -> Color {
-        state.swiftUIColor
-    }
-
     /// Returns the SwiftUI extra usage color for the given utilization fraction (0-1).
     /// Mirrors the `NSColor.extraUsageColor(for:)` 4-tier ramp.
     static func extraUsageColor(for utilization: Double) -> Color {

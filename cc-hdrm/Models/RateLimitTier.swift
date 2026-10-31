@@ -71,24 +71,12 @@ enum RateLimitTier: String, CaseIterable, Sendable {
         if let prefs = preferencesManager,
            let custom5h = prefs.customFiveHourCredits,
            let custom7d = prefs.customSevenDayCredits {
-            let limits = CreditLimits(fiveHourCredits: custom5h, sevenDayCredits: custom7d, monthlyPrice: prefs.customMonthlyPrice)
-            validateCustomLimits(limits)
-            return limits
+            return CreditLimits(fiveHourCredits: custom5h, sevenDayCredits: custom7d, monthlyPrice: prefs.customMonthlyPrice)
         }
 
         // No match — log and return nil
         logger.warning("Unknown rate limit tier: \(tierString ?? "nil", privacy: .public)")
         return nil
-    }
-
-    /// Validates that custom credit limits produce a sensible normalization factor.
-    /// Logs a warning if the factor is extreme (< 0.1 or > 200), which would cause
-    /// misleading slope readings. Called after resolving custom limits.
-    private static func validateCustomLimits(_ limits: CreditLimits) {
-        let factor = limits.normalizationFactor
-        if factor < 0.1 || factor > 200 {
-            logger.warning("Custom credit limits produce extreme normalization factor (\(String(format: "%.2f", factor), privacy: .public)). 5h=\(limits.fiveHourCredits), 7d=\(limits.sevenDayCredits). Slope readings may be misleading.")
-        }
     }
 }
 
@@ -103,13 +91,5 @@ struct CreditLimits: Sendable, Equatable {
         self.fiveHourCredits = fiveHourCredits
         self.sevenDayCredits = sevenDayCredits
         self.monthlyPrice = monthlyPrice
-    }
-
-    /// 7d_limit / 5h_limit — used for slope normalization.
-    /// ~9.09 for Pro, ~12.63 for Max 5x, ~7.58 for Max 20x.
-    /// Returns 0 if `fiveHourCredits` is zero (defensive guard — prevents inf propagation).
-    var normalizationFactor: Double {
-        guard fiveHourCredits > 0 else { return 0 }
-        return Double(sevenDayCredits) / Double(fiveHourCredits)
     }
 }

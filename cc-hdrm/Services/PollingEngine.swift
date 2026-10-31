@@ -13,7 +13,6 @@ final class PollingEngine: PollingEngineProtocol {
     private let notificationService: (any NotificationServiceProtocol)?
     private let preferencesManager: any PreferencesManagerProtocol
     private let historicalDataService: (any HistoricalDataServiceProtocol)?
-    private let slopeCalculationService: (any SlopeCalculationServiceProtocol)?
     private let patternDetector: (any SubscriptionPatternDetectorProtocol)?
     private let patternNotificationService: (any PatternNotificationServiceProtocol)?
     private let extraUsageAlertService: (any ExtraUsageAlertServiceProtocol)?
@@ -41,7 +40,6 @@ final class PollingEngine: PollingEngineProtocol {
         notificationService: (any NotificationServiceProtocol)? = nil,
         preferencesManager: any PreferencesManagerProtocol = PreferencesManager(),
         historicalDataService: (any HistoricalDataServiceProtocol)? = nil,
-        slopeCalculationService: (any SlopeCalculationServiceProtocol)? = nil,
         patternDetector: (any SubscriptionPatternDetectorProtocol)? = nil,
         patternNotificationService: (any PatternNotificationServiceProtocol)? = nil,
         extraUsageAlertService: (any ExtraUsageAlertServiceProtocol)? = nil,
@@ -56,7 +54,6 @@ final class PollingEngine: PollingEngineProtocol {
         self.notificationService = notificationService
         self.preferencesManager = preferencesManager
         self.historicalDataService = historicalDataService
-        self.slopeCalculationService = slopeCalculationService
         self.patternDetector = patternDetector
         self.patternNotificationService = patternNotificationService
         self.extraUsageAlertService = extraUsageAlertService
@@ -338,25 +335,6 @@ final class PollingEngine: PollingEngineProtocol {
                     )
                     await engine.processPoll(current: currentPoll, previous: prevPoll)
                 }
-            }
-
-            // Update slope calculation with new poll data
-            if let slopeService = slopeCalculationService {
-                // Convert UsageResponse to UsagePoll for slope service
-                let poll = UsagePoll(
-                    id: 0, // Not from DB, ID doesn't matter
-                    timestamp: Int64(Date().timeIntervalSince1970 * 1000),
-                    fiveHourUtil: response.fiveHour?.utilization,
-                    fiveHourResetsAt: nil, // Not needed for slope
-                    sevenDayUtil: response.sevenDay?.utilization,
-                    sevenDayResetsAt: nil
-                )
-                slopeService.addPoll(poll)
-
-                let normFactor = resolvedLimits?.normalizationFactor
-                let fiveHourSlope = slopeService.calculateSlope(for: .fiveHour)
-                let sevenDaySlope = slopeService.calculateSlope(for: .sevenDay, normalizationFactor: normFactor)
-                appState.updateSlopes(fiveHour: fiveHourSlope, sevenDay: sevenDaySlope)
             }
 
             // Cancel any in-flight sparkline refresh to prevent races

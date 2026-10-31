@@ -410,53 +410,6 @@ struct UsageChartTests {
         #expect(view.chartPoints[2].fiveHourUtil == 5.0)
     }
 
-    @Test("Slope calculation returns flat for uniform data")
-    func slopeCalculationFlat() {
-        let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
-        var polls: [UsagePoll] = []
-        for i in 0..<20 {
-            let ts: Int64 = nowMs - Int64(19 - i) * 30_000
-            polls.append(UsagePoll(
-                id: Int64(i),
-                timestamp: ts,
-                fiveHourUtil: 50.0,
-                fiveHourResetsAt: nil,
-                sevenDayUtil: nil,
-                sevenDayResetsAt: nil
-            ))
-        }
-        let slopes = StepAreaChartView.computeSlopeAtEachPoint(polls: polls)
-
-        // All slopes should be flat (rate ~0%/min)
-        for slope in slopes {
-            #expect(slope == .flat)
-        }
-    }
-
-    @Test("Slope calculation classifies rising correctly")
-    func slopeCalculationRising() {
-        let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
-        var polls: [UsagePoll] = []
-        for i in 0..<20 {
-            let ts: Int64 = nowMs - Int64(19 - i) * 30_000
-            let util: Double = 10.0 + Double(i) * 0.25 // ~0.5%/min
-            polls.append(UsagePoll(
-                id: Int64(i),
-                timestamp: ts,
-                fiveHourUtil: util,
-                fiveHourResetsAt: nil,
-                sevenDayUtil: nil,
-                sevenDayResetsAt: nil
-            ))
-        }
-        let slopes = StepAreaChartView.computeSlopeAtEachPoint(polls: polls)
-
-        // After the first few polls (window needs to build), should have rising slopes
-        let laterSlopes = slopes.suffix(10).compactMap { $0 }
-        let hasRising = laterSlopes.contains(.rising)
-        #expect(hasRising)
-    }
-
     @Test("Chart points are created from polls with correct dates")
     func chartPointCreation() {
         let nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
@@ -492,15 +445,6 @@ struct UsageChartTests {
         #expect(points[0].sevenDayUtil == 10.0)
         #expect(points[1].fiveHourUtil == 35.0)
         #expect(points[1].sevenDayUtil == nil)
-    }
-
-    @Test("Slope calculation detects steep slopes in steep poll data")
-    func slopeDetectsSteep() {
-        let polls = makeSteepPolls()
-        let slopes = StepAreaChartView.computeSlopeAtEachPoint(polls: polls)
-        // The middle section has steep rate (>1.5%/min)
-        let hasSteep = slopes.contains(.steep)
-        #expect(hasSteep)
     }
 
     @Test("Gap in poll data creates separate segments (gap must exceed 60-min threshold)")

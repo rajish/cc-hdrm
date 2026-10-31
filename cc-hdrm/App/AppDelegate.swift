@@ -17,7 +17,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var oauthService: OAuthService?
     private var oauthKeychainService: OAuthKeychainService?
     private var apiClient: (any APIClientProtocol)?
-    private var slopeCalculationService: SlopeCalculationService?
     private var claudeCodeLogParser: (any ClaudeCodeLogParserProtocol)?
     private var historicalDataServiceRef: HistoricalDataService?
     private var headroomAnalysisServiceRef: (any HeadroomAnalysisServiceProtocol)?
@@ -32,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var previousCapDot: HeadroomState?
     private var previousShowingCountdown: Bool = false
     private var previousExtraUsageActive: Bool = false
+    private var previousShowingPaceArrow: Bool = false
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -103,10 +103,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             self.historicalDataServiceRef = historicalDataService
 
-            // Create SlopeCalculationService for burn rate tracking
-            let slopeService = SlopeCalculationService()
-            self.slopeCalculationService = slopeService
-
             // Create SubscriptionPatternDetector for slow-burn pattern analysis
             let patternDetector = SubscriptionPatternDetector(
                 historicalDataService: historicalDataService,
@@ -159,7 +155,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 notificationService: notificationService,
                 preferencesManager: preferences,
                 historicalDataService: historicalDataService,
-                slopeCalculationService: slopeService,
                 patternDetector: patternDetector,
                 patternNotificationService: patternNotifService,
                 extraUsageAlertService: extraUsageAlertService,
@@ -273,7 +268,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Start services with proper sequencing:
-        // 1. Bootstrap slope buffer FIRST (before polling starts) to avoid race condition
+        // 1. Restore outage state FIRST (before polling starts)
         // 2. Then start polling engine
         // 3. Other services can start in parallel
         Task {
@@ -286,24 +281,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
 
-            // Bootstrap slope buffer from historical data OFF main thread (SQLite is blocking)
-            // Must complete before polling starts to avoid losing early polls
-            if let histService = self.historicalDataServiceRef,
-               let slopeService = self.slopeCalculationService {
-                do {
-                    // Run SQLite query off MainActor to avoid UI stall during launch
-                    let recentPolls = try await Task.detached {
-                        try await histService.getRecentPolls(hours: 1)
-                    }.value
-                    slopeService.bootstrapFromHistory(recentPolls)
-                    Self.logger.info("Slope buffer bootstrapped with \(recentPolls.count) historical polls")
-                } catch {
-                    // Continue without historical data - buffer will fill naturally
-                    Self.logger.warning("Failed to bootstrap slope buffer: \(error.localizedDescription)")
-                }
-            }
-
-            // NOW start polling (after bootstrap complete)
+            // NOW start polling (after outage state restored)
             await pollingEngine?.start()
             await freshnessMonitor?.start()
             await notificationService?.requestAuthorization()
@@ -565,6 +543,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ]
         statusItem?.button?.attributedTitle = NSAttributedString(string: text, attributes: attributes)
 
+        let currentShowingPaceArrow = text.contains("\u{2197}")
+
         // Accessibility (AC #6, #7, Story 17.1 AC #8)
         var accessibilityValue: String
         if state == .disconnected {
@@ -584,9 +564,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         } else {
             let headroom = max(0, Int(100.0 - (appState.sevenDay?.utilization ?? 0)))
-            let slope = appState.sevenDaySlope
-            if slope.isActionable {
-                accessibilityValue = "cc-hdrm: Claude weekly headroom: \(headroom) percent, \(state.rawValue), \(slope.accessibilityLabel)"
+            if currentShowingPaceArrow {
+                accessibilityValue = "cc-hdrm: Claude weekly headroom: \(headroom) percent, \(state.rawValue), ahead of pace"
             } else {
                 accessibilityValue = "cc-hdrm: Claude weekly headroom: \(headroom) percent, \(state.rawValue)"
             }
@@ -616,9 +595,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let mode = currentShowingCountdown ? "countdown" : "percentage"
             Self.logger.info("Display mode switched to \(mode, privacy: .public)")
         }
+        if previousShowingPaceArrow != currentShowingPaceArrow {
+            if currentShowingPaceArrow {
+                let pace = appState.weeklyPace
+                let paceDelta = pace.map { String(format: "%.1f", $0.paceDelta) } ?? "nil"
+                let runOut = pace?.runOut?.ISO8601Format() ?? "nil"
+                Self.logger.info("Weekly pace arrow shown: paceDelta=\(paceDelta, privacy: .public) runOut=\(runOut, privacy: .public)")
+            } else {
+                Self.logger.info("Weekly pace arrow hidden")
+            }
+        }
         previousCapDot = currentCapDot
         previousShowingCountdown = currentShowingCountdown
         previousExtraUsageActive = currentExtraUsageActive
+        previousShowingPaceArrow = currentShowingPaceArrow
 
         if previousAccessibilityValue != accessibilityValue {
             statusItem?.button?.setAccessibilityValue(accessibilityValue)

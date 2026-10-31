@@ -66,3 +66,12 @@ Anthropic retired Claude's 5-hour limit on 2026-10-31. Since 08:03 UTC that day 
 - 26.8 needs the maintainer to approve its spend gate. It unblocks Story 21.5 (Fable), which runs through the benchmark path.
 - Codex epics 22–25 planned to reuse Claude's 5h components. Those components become weekly-only after this epic, so the Codex stories must be re-validated before they start. Do not edit them in this epic.
 - 26.9 also updates `README.md` and re-records `docs/images/demo.gif`.
+
+## Story 26.2 Notes (done)
+
+- `WeeklyPace` (`cc-hdrm/Models/WeeklyPace.swift`) holds `paceDelta` and `runOut`. It is nil when `resets_at` is missing or usage is ≥ 100%.
+- `AppState.weeklyPace` is computed on read from `sevenDay`. There is no stored pace state and no PollingEngine wiring.
+- Popover pace copy: `WeeklyPace.paceLineText` and spoken `accessibilityText`. Run-out uses the app's day/time format ("~Thu 2:00 PM") via `Date.dayTimeString()`.
+- Menu bar VoiceOver says only ", ahead of pace". It carries no run-out time, so it does not re-announce on every poll.
+- Slope is gone: service, protocol, `SlopeLevel`, `SlopeIndicator`, `UsageWindow`, `CreditLimits.normalizationFactor`, and chart per-point slope.
+- The pace line currently sits in `cc-hdrm/Views/SevenDayGaugeSection.swift`. Story 26.3 moves it into the large weekly ring layout.

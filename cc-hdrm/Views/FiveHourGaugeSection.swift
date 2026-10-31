@@ -18,14 +18,14 @@ struct FiveHourGaugeSection: View {
 
     @State private var isHovered: Bool = false
 
-    /// Combined VoiceOver announcement per AC #14 + Story 11.4 AC #4:
-    /// "5-hour headroom: [X] percent, [slope level], resets in [relative], at [absolute]"
+    /// Combined VoiceOver announcement:
+    /// "5-hour headroom: [X] percent, resets in [relative], at [absolute]"
     /// Internal (not private) to allow @testable import verification.
     var combinedAccessibilityLabel: String {
         guard let headroom else {
             return "5-hour headroom: unavailable"
         }
-        var label = "5-hour headroom: \(Int(max(0, headroom))) percent, \(appState.fiveHourSlope.accessibilityLabel)"
+        var label = "5-hour headroom: \(Int(max(0, headroom))) percent"
         if let resetsAt = appState.fiveHour?.resetsAt {
             label += ", resets in \(resetsAt.countdownString()), \(resetsAt.absoluteTimeString())"
         }
@@ -39,13 +39,12 @@ struct FiveHourGaugeSection: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            // Ring gauge (AC #1-#5, #9, #11-#13) + slope display (Story 11.4)
+            // Ring gauge
             HeadroomRingGauge(
                 headroomPercentage: headroom,
                 windowLabel: "5h",
                 ringSize: 96,
-                strokeWidth: 7,
-                slopeLevel: appState.fiveHourSlope
+                strokeWidth: 7
             )
 
             // Countdown: relative + absolute (AC #7, #8, #10)

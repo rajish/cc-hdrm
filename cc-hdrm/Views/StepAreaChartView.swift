@@ -274,7 +274,6 @@ struct StepAreaChartView: View {
                     date: point.date,
                     fiveHourUtil: nil,
                     sevenDayUtil: nil,
-                    slopeLevel: nil,
                     segment: point.segment,
                     extraUsageActive: nil,
                     extraUsageUsedCredits: nil,
@@ -316,7 +315,6 @@ struct StepAreaChartView: View {
         let date: Date
         let fiveHourUtil: Double?
         let sevenDayUtil: Double?
-        let slopeLevel: SlopeLevel?
         let segment: Int
         var extraUsageActive: Bool? = nil
         var extraUsageUsedCredits: Double? = nil
@@ -338,7 +336,6 @@ struct StepAreaChartView: View {
     static func makeChartPoints(from polls: [UsagePoll]) -> [ChartPoint] {
         guard !polls.isEmpty else { return [] }
 
-        let slopes = computeSlopeAtEachPoint(polls: polls)
         let gapThreshold = SparklinePathBuilder.gapThresholdMs
         var currentSegment = 0
 
@@ -358,7 +355,6 @@ struct StepAreaChartView: View {
                 date: Date(timeIntervalSince1970: Double(poll.timestamp) / 1000.0),
                 fiveHourUtil: poll.fiveHourUtil,
                 sevenDayUtil: poll.sevenDayUtil,
-                slopeLevel: slopes[index],
                 segment: currentSegment,
                 extraUsageActive: isExtraUsageActive,
                 extraUsageUsedCredits: poll.extraUsageUsedCredits,
@@ -411,40 +407,6 @@ struct StepAreaChartView: View {
             }
         }
         return resets
-    }
-
-    static func computeSlopeAtEachPoint(polls: [UsagePoll]) -> [SlopeLevel?] {
-        guard !polls.isEmpty else { return [] }
-
-        let windowMs: Int64 = 5 * 60 * 1000
-
-        return polls.enumerated().map { index, currentPoll in
-            guard let currentUtil = currentPoll.fiveHourUtil else { return nil }
-
-            var windowStartIndex = index
-            for j in stride(from: index - 1, through: 0, by: -1) {
-                if currentPoll.timestamp - polls[j].timestamp > windowMs { break }
-                windowStartIndex = j
-            }
-
-            guard windowStartIndex != index,
-                  let startUtil = polls[windowStartIndex].fiveHourUtil else {
-                return SlopeLevel.flat
-            }
-
-            let timeDeltaMs = currentPoll.timestamp - polls[windowStartIndex].timestamp
-            guard timeDeltaMs > 0 else { return SlopeLevel.flat }
-
-            let ratePerMin = (currentUtil - startUtil) / (Double(timeDeltaMs) / 60_000.0)
-
-            if ratePerMin > 1.5 {
-                return .steep
-            } else if ratePerMin > 0.3 {
-                return .rising
-            } else {
-                return .flat
-            }
-        }
     }
 
     /// Enforces monotonically increasing utilization within each segment.
@@ -540,7 +502,6 @@ struct StepAreaChartView: View {
                     date: point.date,
                     fiveHourUtil: clampedFive,
                     sevenDayUtil: clampedSeven,
-                    slopeLevel: point.slopeLevel,
                     segment: point.segment,
                     extraUsageActive: point.extraUsageActive,
                     extraUsageUsedCredits: point.extraUsageUsedCredits,
@@ -984,8 +945,6 @@ private struct HoverOverlayContent: View {
 
     @ViewBuilder
     private func tooltipView(for point: StepAreaChartView.ChartPoint) -> some View {
-        let slopeText = point.slopeLevel?.rawValue.capitalized ?? "Unknown"
-
         VStack(alignment: .leading, spacing: 2) {
             Text(point.date, format: .dateTime.hour().minute())
                 .font(.caption)
@@ -1024,9 +983,6 @@ private struct HoverOverlayContent: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            Text(slopeText)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
         }
         .padding(6)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6))

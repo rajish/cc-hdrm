@@ -199,4 +199,59 @@ struct SevenDayGaugeSectionTests {
         appState.updateWindows(fiveHour: nil, sevenDay: nil)
         #expect(appState.sevenDay?.headroomState == nil)
     }
+
+    @Test("combinedAccessibilityLabel without weekly data → \"7-day headroom: unavailable\"")
+    @MainActor
+    func unavailableAccessibilityLabel() {
+        #expect(SevenDayGaugeSection(appState: AppState()).combinedAccessibilityLabel == "7-day headroom: unavailable")
+    }
+}
+
+@Suite("SevenDayGaugeSection Pace Line")
+@MainActor
+struct SevenDayGaugeSectionPaceTests {
+
+    private func section(utilization: Double, resetsIn: TimeInterval?) -> SevenDayGaugeSection {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: nil,
+            sevenDay: WindowState(utilization: utilization, resetsAt: resetsIn.map { Date().addingTimeInterval($0) })
+        )
+        return SevenDayGaugeSection(appState: appState)
+    }
+
+    @Test("ahead of pace → \"Ahead of pace — runs out ~<day time>\" and VoiceOver reads it")
+    func aheadOfPaceLine() throws {
+        let section = section(utilization: 60, resetsIn: 4 * 86400)
+        let pace = try #require(section.appState.weeklyPace)
+        #expect(section.paceLineText?.hasPrefix("Ahead of pace \u{2014} runs out ~") == true)
+        #expect(section.combinedAccessibilityLabel.hasPrefix("7-day headroom: 40 percent, \(pace.accessibilityText), resets in "))
+        #expect(section.combinedAccessibilityLabel.contains("ahead of pace, runs out around "))
+        _ = section.body
+    }
+
+    @Test("behind pace at half-week → \"On pace\" and VoiceOver reads it")
+    func onPaceLine() {
+        let section = section(utilization: 40, resetsIn: 3.5 * 86400)
+        #expect(section.paceLineText == "On pace")
+        #expect(section.combinedAccessibilityLabel.hasPrefix("7-day headroom: 60 percent, on pace, resets in "))
+    }
+
+    @Test("well behind pace → \"On pace\"")
+    func behindPaceLine() {
+        #expect(section(utilization: 20, resetsIn: 2 * 86400).paceLineText == "On pace")
+    }
+
+    @Test("missing resets_at → no pace line")
+    func missingResetsAtHasNoPaceLine() {
+        let section = section(utilization: 60, resetsIn: nil)
+        #expect(section.paceLineText == nil)
+        #expect(section.combinedAccessibilityLabel == "7-day headroom: 40 percent")
+    }
+
+    @Test("exhausted → no pace line")
+    func exhaustedHasNoPaceLine() {
+        #expect(section(utilization: 100, resetsIn: 86400).paceLineText == nil)
+    }
 }

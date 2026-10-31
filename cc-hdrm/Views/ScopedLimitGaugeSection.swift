@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Composed view for model-scoped limit gauges in the popover.
 /// Renders one label + ring + countdown block per `AppState.scopedLimits` entry,
-/// matching the 7-day section's label + ring + countdown layout (no hover, slope,
+/// matching the 7-day section's label + ring + countdown layout (no hover, pace line,
 /// or tap behavior). Renders nothing when no scoped limit is reported.
 struct ScopedLimitGaugeSection: View {
     let appState: AppState
