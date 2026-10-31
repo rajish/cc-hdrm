@@ -371,6 +371,19 @@ struct SubscriptionValueCalculatorTests {
         #expect(SubscriptionValueCalculator.periodDays(for: .month, events: events) == 7.0 + 14.0)
     }
 
+    @Test("periodDays: legacy events inside the first weekly cycle add no capacity")
+    func periodDaysExcludesWeeklyOverlap() {
+        let weekly = weeklyEvent(id: 3, weekIndex: 0, sevenDayUtil: 70)
+        let events = [
+            legacyEvent(id: 1, timestamp: weekly.timestamp - 12 * Self.dayMs),
+            legacyEvent(id: 2, timestamp: weekly.timestamp - 10 * Self.dayMs),
+            legacyEvent(id: 4, timestamp: weekly.timestamp - 5 * Self.dayMs),
+            weekly,
+        ]
+        // Legacy span 2 days (events 1-2) + one weekly cycle
+        #expect(SubscriptionValueCalculator.periodDays(for: .all, events: events) == 2.0 + 7.0)
+    }
+
     @Test("periodDays: pre-cutover peak-nil events count toward legacy span, not as weekly cycles")
     func periodDaysPreCutoverPeakNil() {
         let events = [

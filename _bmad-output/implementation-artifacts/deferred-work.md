@@ -15,8 +15,11 @@
 ## Deferred from: code review of spec-26-5-value-headroom-per-weekly-cycle (2026-11-01)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-per-weekly-cycle.md`
-  summary: The first weekly cycle after the 2026-10-31 cutover overlaps the last days of legacy 5h events, so month/all ranges spanning the cutover count those days' capacity and usage twice.
-  evidence: `SubscriptionValueCalculator.periodDays` adds the legacy span plus 7 days per weekly cycle, and `HeadroomAnalysisService.aggregateBreakdown` sums both; nothing trims legacy events inside the first weekly cycle. Affects only ranges containing the transition week.
+  summary: `CycleUtilizationCalculator` groups events by calendar month or billing cycle before aggregating, so legacy events and the first weekly cycle that land in different groups are not de-duplicated, and a weekly cycle is assigned wholly to the month of its reset.
+  evidence: overlap exclusion (`ResetEvent` array `excludingWeeklyOverlap`) runs per call on the events it is given; the cycle chart passes per-month groups.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-per-weekly-cycle.md`
+  summary: A weekly cycle whose event tier does not resolve is skipped by `aggregateBreakdown` but still counted in `periodDays`, understating utilisation. A `.month` range can hold 5 weekly cycles (35 days of capacity and price); the weekly count is not capped by the range.
+  evidence: `periodDays` has no tier information; `SubscriptionValueCalculator.calculate` divides summed used credits by `periodDays`. Needs a tier-aware capacity input or a single shared "countable events" rule.
 - source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-per-weekly-cycle.md`
   summary: 5h reset detection branches and `getRecentPeakUtilization` in `cc-hdrm/Services/HistoricalDataService.swift` are dead since `five_hour` is null; remove per the "remove, don't hide" principle.
   evidence: Detection still checks `fiveHourResetsAt`/`fiveHourUtil` and queries `MAX(five_hour_util)`; many `HistoricalDataServiceTests` cover them, so removal belongs in a cleanup story (26.9 or follow-up).

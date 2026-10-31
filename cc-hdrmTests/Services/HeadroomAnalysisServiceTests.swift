@@ -213,19 +213,66 @@ struct HeadroomAnalysisServiceTests {
         #expect(isClose(summary.usedCredits, 396_000))
     }
 
-    @Test("aggregateBreakdown: legacy event without stored credits is skipped")
-    func aggregateLegacyNoStoredCredits() {
+    @Test("aggregateBreakdown: legacy event without stored credits is rebuilt from the historical 5h limit")
+    func aggregateLegacyNoStoredCreditsRebuilt() {
+        // Pro 5h limit 550,000: 72% peak -> used 396,000; 7d remaining 750,000 > 5h remaining -> unused 154,000
+        let events = [
+            makeLegacyEvent(id: 1, usedCredits: nil, constrainedCredits: nil, unusedCredits: nil),
+            makeLegacyEvent(id: 2, usedCredits: 100, constrainedCredits: nil, unusedCredits: nil),
+        ]
+
+        let summary = service.aggregateBreakdown(events: events)
+
+        #expect(summary.resetCount == 2)
+        #expect(isClose(summary.usedCredits, 2 * 396_000))
+        #expect(isClose(summary.constrainedCredits, 0))
+        #expect(isClose(summary.unusedCredits, 2 * 154_000))
+        #expect(isClose(summary.avgPeakUtilization, 72.0))
+    }
+
+    @Test("aggregateBreakdown: rebuilt legacy event reports the 7d-constrained band")
+    func aggregateLegacyNoStoredCreditsConstrained() {
+        // Pro: 10% peak -> used 55,000, 5h remaining 495,000; 7d at 99.5% -> remaining 25,000
+        let event = makeLegacyEvent(fiveHourPeak: 10.0, sevenDayUtil: 99.5, usedCredits: nil, constrainedCredits: nil, unusedCredits: nil)
+
+        let summary = service.aggregateBreakdown(events: [event])
+
+        #expect(isClose(summary.usedCredits, 55_000))
+        #expect(isClose(summary.constrainedCredits, 470_000))
+        #expect(isClose(summary.unusedCredits, 25_000))
+    }
+
+    @Test("aggregateBreakdown: legacy event without stored credits and unknown tier is skipped")
+    func aggregateLegacyNoStoredCreditsUnknownTier() {
         let events = [
             makeLegacyEvent(id: 1),
-            makeLegacyEvent(id: 2, usedCredits: nil, constrainedCredits: nil, unusedCredits: nil),
-            makeLegacyEvent(id: 3, usedCredits: 100, unusedCredits: nil),
+            makeLegacyEvent(id: 2, tier: nil, usedCredits: nil, constrainedCredits: nil, unusedCredits: nil),
+            makeLegacyEvent(id: 3, sevenDayUtil: nil, usedCredits: nil, constrainedCredits: nil, unusedCredits: nil),
         ]
 
         let summary = service.aggregateBreakdown(events: events)
 
         #expect(summary.resetCount == 1)
         #expect(isClose(summary.usedCredits, 396_000))
-        #expect(isClose(summary.avgPeakUtilization, 72.0))
+    }
+
+    @Test("aggregateBreakdown: legacy events inside the first weekly cycle are not counted twice")
+    func aggregateExcludesWeeklyOverlap() {
+        let weekly = makeWeeklyEvent(id: 3, timestamp: ResetEvent.fiveHourLimitRetiredAtMs + 2 * 86_400_000, sevenDayUtil: 70.0)
+        let overlapping = makeLegacyEvent(id: 2, timestamp: weekly.timestamp - 6 * 86_400_000)
+        let older = makeLegacyEvent(id: 1, timestamp: weekly.timestamp - 8 * 86_400_000)
+
+        let summary = service.aggregateBreakdown(events: [older, overlapping, weekly])
+
+        #expect(summary.resetCount == 2)
+        #expect(isClose(summary.usedCredits, 396_000 + 3_500_000))
+    }
+
+    @Test("analyzeResetEvent: non-finite peak is treated as 0")
+    func analyzeNonFinitePeak() {
+        let breakdown = service.analyzeResetEvent(sevenDayPeak: .nan, creditLimits: proLimits)
+        #expect(breakdown.usedPercent == 0)
+        #expect(breakdown.unusedCredits == 5_000_000)
     }
 
     @Test("aggregateBreakdown: pre-cutover peak-nil event is not a weekly cycle and is skipped")

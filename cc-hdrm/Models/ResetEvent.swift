@@ -8,6 +8,9 @@ struct ResetEvent: Sendable, Equatable {
     /// timestamp is needed to tell them apart from weekly cycles.
     static let fiveHourLimitRetiredAtMs: Int64 = 1_793_433_780_000
 
+    /// Length of the cycle a weekly reset event represents, in milliseconds.
+    static let weeklyCycleMs: Int64 = 7 * 24 * 60 * 60 * 1000
+
     /// Database row ID
     let id: Int64
     /// Unix milliseconds when the reset was detected
@@ -28,5 +31,16 @@ struct ResetEvent: Sendable, Equatable {
     /// Whether this event closes a weekly cycle (post-cutover, no 5h peak, has a weekly value).
     var isWeeklyCycle: Bool {
         timestamp >= Self.fiveHourLimitRetiredAtMs && fiveHourPeak == nil && sevenDayUtil != nil
+    }
+}
+
+extension Array where Element == ResetEvent {
+    /// Drops events whose usage is already part of the first weekly cycle in the list.
+    /// A weekly event covers the 7 days before it, so 5h events from that stretch (the
+    /// transition week after the 5-hour limit was retired) would be counted twice.
+    func excludingWeeklyOverlap() -> [ResetEvent] {
+        guard let firstWeekly = self.lazy.filter(\.isWeeklyCycle).map(\.timestamp).min() else { return self }
+        let cycleStart = firstWeekly - ResetEvent.weeklyCycleMs
+        return filter { $0.isWeeklyCycle || $0.timestamp < cycleStart }
     }
 }

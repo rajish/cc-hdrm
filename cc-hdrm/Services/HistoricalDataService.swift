@@ -665,6 +665,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
 
         // Weekly credit breakdown for peak-nil (weekly cycle) events; constrained is retired
         if fiveHourPeak == nil,
+           timestamp >= ResetEvent.fiveHourLimitRetiredAtMs,
            let util7d = sevenDayUtil,
            let analysisService = headroomAnalysisService,
            let limits = RateLimitTier.resolve(tierString: tier, preferencesManager: preferencesManager) {

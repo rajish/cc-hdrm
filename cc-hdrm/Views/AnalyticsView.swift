@@ -232,8 +232,9 @@ struct AnalyticsView: View {
     /// 5h events plus 168 hours per weekly cycle (mirrors `SubscriptionValueCalculator.periodDays`).
     /// Static for testability (same pattern as `fetchData`).
     static func computeDataSpanHours(resetEvents: [ResetEvent]) -> Double {
-        let weeklyCount = resetEvents.filter(\.isWeeklyCycle).count
-        let legacyEvents = resetEvents.filter { !$0.isWeeklyCycle }
+        let counted = resetEvents.excludingWeeklyOverlap()
+        let weeklyCount = counted.filter(\.isWeeklyCycle).count
+        let legacyEvents = counted.filter { !$0.isWeeklyCycle }
 
         var legacyHours: Double = 0
         if let first = legacyEvents.first, let last = legacyEvents.last {

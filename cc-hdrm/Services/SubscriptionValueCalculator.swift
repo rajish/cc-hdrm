@@ -80,8 +80,9 @@ enum SubscriptionValueCalculator {
         case .all: nominalDays = .greatestFiniteMagnitude
         }
 
-        let weeklyCount = events.filter(\.isWeeklyCycle).count
-        let legacyEvents = events.filter { !$0.isWeeklyCycle }
+        let counted = events.excludingWeeklyOverlap()
+        let weeklyCount = counted.filter(\.isWeeklyCycle).count
+        let legacyEvents = counted.filter { !$0.isWeeklyCycle }
 
         var legacyDays: Double = 0
         if let first = legacyEvents.first, let last = legacyEvents.last {

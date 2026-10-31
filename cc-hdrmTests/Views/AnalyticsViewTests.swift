@@ -710,6 +710,17 @@ struct AnalyticsViewConditionalDisplayTests {
         #expect(abs(hours - (6 + 2 * 168)) < 0.0001)
     }
 
+    @Test("computeDataSpanHours ignores legacy events inside the first weekly cycle")
+    func dataSpanHoursExcludesWeeklyOverlap() {
+        let weekly = weeklyCycleEvent(id: 3, weekIndex: 0)
+        let events = [
+            ResetEvent.legacyFixture(id: 1, timestamp: weekly.timestamp - 10 * 86_400_000, fiveHourPeak: 50, sevenDayUtil: 30),
+            ResetEvent.legacyFixture(id: 2, timestamp: weekly.timestamp - 3 * 86_400_000, fiveHourPeak: 60, sevenDayUtil: 35),
+            weekly,
+        ]
+        #expect(AnalyticsView.computeDataSpanHours(resetEvents: events) == 168)
+    }
+
     // MARK: - 4.4 fetchData call counts unchanged (no regression)
 
     @Test("fetchData call counts unchanged (no regression from conditional display)")

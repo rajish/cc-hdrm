@@ -31,7 +31,7 @@ context:
 |----------|--------------|---------------------------|----------------|
 | Weekly cycle | post-cutover event, peak nil, 7d 70%, Pro | used 70% / unused 30%; used credits 3.5M; `.week` value $ > 0 at 70% | N/A |
 | Legacy event | peak 72, stored used/constrained/unused | aggregate uses stored credits unchanged | N/A |
-| Legacy, no stored credits | peak set, credits nil | skipped | info log |
+| Legacy, no stored credits | peak set, credits nil, known tier | breakdown rebuilt from the historical 5h limit | unknown tier: skipped, info log |
 | Pre-cutover peak-nil event | 5h reset after sleep, ts < cutover | not a weekly cycle; skipped | info log |
 | Mixed range | legacy + weekly events | days = legacy span (capped) + 7 × weekly count | N/A |
 | Over 100% | 7d util 104 | used 100 / unused 0 | N/A |
@@ -67,6 +67,9 @@ context:
 - Given legacy events with stored credits, when aggregated, then results equal their stored breakdown.
 
 ## Spec Change Log
+
+- 2026-11-01 (code review): matrix row "Legacy, no stored credits" changed from "skipped" to "rebuilt from the historical 5h limit". 15 real Feb 2026 events have a peak but no stored credits; skipping them dropped old 5h history that the epic says is kept ("Old 5h-based events keep their breakdown", "No data loss"). The rebuild uses a private constant table, not `RateLimitTier.fiveHourCredits`.
+- 2026-11-01 (code review): legacy events inside the 7 days before the first weekly cycle are excluded from value, capacity and data span, since the weekly cycle already contains their usage.
 
 ## Design Notes
 
@@ -121,3 +124,11 @@ Cutover timestamp is needed because pre-cutover 5h resets after a long sleep als
 
 - Weekly analysis and matrix rows.
   [`HeadroomAnalysisServiceTests.swift:63`](../../cc-hdrmTests/Services/HeadroomAnalysisServiceTests.swift#L63)
+
+### Review Findings
+
+- [x] [Review][Patch] Legacy 5h events without stored credits were skipped, dropping Feb 2026 history — rebuilt from historical 5h limits [cc-hdrm/Services/HeadroomAnalysisService.swift]
+- [x] [Review][Patch] Legacy events inside the first weekly cycle were counted twice (usage, capacity, data span) — excluded [cc-hdrm/Models/ResetEvent.swift]
+- [x] [Review][Patch] Weekly credits were written for pre-cutover peak-nil rows — gated on the cutover timestamp [cc-hdrm/Services/HistoricalDataService.swift]
+- [x] [Review][Patch] Non-finite weekly peak propagated NaN — treated as 0 [cc-hdrm/Services/HeadroomAnalysisService.swift]
+- [x] [Review][Defer] Cycle chart groups by month before de-duplicating; unresolvable-tier weekly cycle still counted in capacity; month range can count 5 cycles — see deferred-work.md
