@@ -221,7 +221,7 @@ struct PassiveTPPEngineTests {
         // Start accumulation
         logParser.tokensToReturn = [makeTokens(model: "claude-sonnet-4-6", input: 500, output: 500)]
         let p1 = makePoll(timestamp: 1000, sevenDayUtil: 28.0)
-        let p2 = makePoll(timestamp: 2000, sevenDayUtil: 28.0)
+        let p2 = makePoll(timestamp: 1000 + 2 * oneHourMs, sevenDayUtil: 28.0)
         await engine.processPoll(current: p2, previous: p1)
 
         // More than 6 hours later: another flat poll — cap and restart at p2
@@ -239,7 +239,32 @@ struct PassiveTPPEngineTests {
 
         #expect(storage.storedMeasurements.count == 1)
         #expect(storage.storedMeasurements[0].totalRawTokens == 500)  // 200 (restarted) + 300 (current)
-        #expect(storage.storedMeasurements[0].windowStart == 2000)    // Restarted at the previous poll
+        #expect(storage.storedMeasurements[0].windowStart == p2.timestamp)  // Restarted at the previous poll
+    }
+
+    @Test("6h cap: a weekly step does not absorb tokens from a window older than the cap")
+    func staleWindowNotFlushedByStep() async {
+        let logParser = MockLogParser()
+        let storage = MockPassiveTPPStorage()
+        let engine = PassiveTPPEngine(logParser: logParser, tppStorage: storage)
+
+        logParser.tokensToReturn = [makeTokens(model: "claude-sonnet-4-6", input: 500, output: 500)]
+        let p1 = makePoll(timestamp: 1000, sevenDayUtil: 28.0)
+        let p2 = makePoll(timestamp: 2000, sevenDayUtil: 28.0)
+        await engine.processPoll(current: p2, previous: p1)
+
+        // 7 hours of idle polls, then a step: the stale window must not be flushed
+        logParser.tokensToReturn = []
+        let p3 = makePoll(timestamp: 1000 + 7 * oneHourMs, sevenDayUtil: 28.0)
+        await engine.processPoll(current: p3, previous: p2)
+
+        logParser.tokensToReturn = [makeTokens(model: "claude-sonnet-4-6", input: 150, output: 150)]
+        let p4 = makePoll(timestamp: p3.timestamp + 1000, sevenDayUtil: 29.0)
+        await engine.processPoll(current: p4, previous: p3)
+
+        #expect(storage.storedMeasurements.count == 1)
+        #expect(storage.storedMeasurements[0].totalRawTokens == 300)
+        #expect(storage.storedMeasurements[0].windowStart == p3.timestamp)
     }
 
     @Test("Weekly reset: any weekly decrease discards the window and stores nothing")

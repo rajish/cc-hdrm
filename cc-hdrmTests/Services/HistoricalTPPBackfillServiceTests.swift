@@ -738,4 +738,67 @@ struct HistoricalTPPBackfillServiceTests {
         #expect(count == 2)
         #expect(tppStorage.storedMeasurements.map(\.windowStart) == [5 * hourMs, 10 * hourMs] as [Int64?])
     }
+
+    @Test("A weekly step after a window older than 6h counts only tokens since the previous poll")
+    func testStepAfterStaleWindowRestarts() async {
+        let hourMs: Int64 = 3_600_000
+        let histService = MockHistoricalDataService()
+        histService.recentPollsToReturn = [
+            makePoll(id: 1, timestamp: 0, sevenDayUtil: 28),
+            makePoll(id: 2, timestamp: hourMs, sevenDayUtil: 28),
+            makePoll(id: 3, timestamp: 10 * hourMs, sevenDayUtil: 29),  // step after a 9h gap
+        ]
+
+        let logParser = MockBackfillLogParser()
+        logParser.tokensToReturn = [
+            TokenAggregate(model: "claude-opus-4-6", inputTokens: 500, outputTokens: 500, cacheCreateTokens: 0, cacheReadTokens: 0, messageCount: 1)
+        ]
+
+        let tppStorage = MockBackfillTPPStorage()
+        let service = HistoricalTPPBackfillService(
+            historicalDataService: histService,
+            logParser: logParser,
+            tppStorage: tppStorage,
+            preferencesManager: MockPreferencesManager()
+        )
+
+        let count = await service.runBackfill(force: false)
+        #expect(count == 1)
+        #expect(tppStorage.storedMeasurements[0].windowStart == hourMs)
+        #expect(tppStorage.storedMeasurements[0].sevenDayBefore == 28.0)
+    }
+
+    @Test("Rollup without token data stores a weekly delta-only row with no 5h fields")
+    func testRollupDeltaOnly() async {
+        let histService = MockHistoricalDataService()
+        histService.recentPollsToReturn = []
+        histService.rolledUpDataToReturn = [
+            makeRollup(id: 1, periodStart: 1000, periodEnd: 5000, sevenDayPeak: 30, sevenDayMin: 20),
+        ]
+
+        let logParser = MockBackfillLogParser()
+        logParser.tokensToReturn = []
+
+        let tppStorage = MockBackfillTPPStorage()
+        let service = HistoricalTPPBackfillService(
+            historicalDataService: histService,
+            logParser: logParser,
+            tppStorage: tppStorage,
+            preferencesManager: MockPreferencesManager()
+        )
+
+        let count = await service.runBackfill(force: false)
+        #expect(count == 1)
+
+        let m = tppStorage.storedMeasurements[0]
+        #expect(m.source == .rollupBackfill)
+        #expect(m.model == "unknown")
+        #expect(m.sevenDayBefore == 20.0)
+        #expect(m.sevenDayAfter == 30.0)
+        #expect(m.sevenDayDelta == 10.0)
+        #expect(m.tppSevenDay == nil)
+        #expect(m.fiveHourBefore == nil)
+        #expect(m.fiveHourDelta == nil)
+        #expect(m.tppFiveHour == nil)
+    }
 }

@@ -155,7 +155,7 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
                 windowStart = nil
                 continue
             }
-            guard let start = windowStart, let previousSevenDay = previous.sevenDayUtil else {
+            guard var start = windowStart, let previousSevenDay = previous.sevenDayUtil else {
                 windowStart = (current.timestamp, currentSevenDay)
                 continue
             }
@@ -167,14 +167,15 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
                 continue
             }
 
-            let sevenDayDelta = currentSevenDay - start.sevenDay
-            guard sevenDayDelta >= Self.minDelta else {
-                if current.timestamp - start.timestamp > Self.maxWindowMs {
-                    Self.logger.debug("Backfill: window from \(start.timestamp) exceeded 6h cap — restarting at \(previous.timestamp)")
-                    windowStart = (previous.timestamp, previousSevenDay)
-                }
-                continue
+            // Same as the live engine: a step never absorbs tokens from a window older than the cap
+            if current.timestamp - start.timestamp > Self.maxWindowMs {
+                Self.logger.debug("Backfill: window from \(start.timestamp) exceeded 6h cap — restarting at \(previous.timestamp)")
+                start = (previous.timestamp, previousSevenDay)
+                windowStart = start
             }
+
+            let sevenDayDelta = currentSevenDay - start.sevenDay
+            guard sevenDayDelta >= Self.minDelta else { continue }
             windowStart = (current.timestamp, currentSevenDay)
 
             // Query log parser for tokens in [window start, current.timestamp)

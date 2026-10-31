@@ -137,3 +137,10 @@ context: ['{project-root}/_bmad-output/implementation-artifacts/epic-26-context.
 
 - Chart same-basis insight tests.
   [`TPPChartDataServiceTests.swift:437`](../../cc-hdrmTests/Services/TPPChartDataServiceTests.swift#L437)
+
+### Review Findings
+
+- [x] [Review][Patch] 6h cap was skipped when a weekly step arrived; a step could absorb tokens from a window older than the cap (engine and backfill) [cc-hdrm/Services/PassiveTPPEngine.swift, cc-hdrm/Services/HistoricalTPPBackfillService.swift]
+- [x] [Review][Patch] Engine read the window in two separate lock sections; now one snapshot per poll [cc-hdrm/Services/PassiveTPPEngine.swift]
+- [x] [Review][Patch] No test for the rollup delta-only branch or for a step after a stale window [cc-hdrmTests/Services/HistoricalTPPBackfillServiceTests.swift, cc-hdrmTests/Services/PassiveTPPEngineTests.swift]
+- [x] [Review][Defer] Insight/ratio basis rule, first-row anchoring, integer-percent precision, shared Y axis — see deferred-work.md

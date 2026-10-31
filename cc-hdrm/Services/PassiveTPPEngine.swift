@@ -54,8 +54,18 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
             return
         }
 
-        let windowStartSevenDay = lock.withLock { accumulationWindow?.startSevenDayUtil }
-        let cumulativeDelta = currentSevenDay - (windowStartSevenDay ?? previousSevenDay)
+        // One snapshot per poll; a window older than the cap is dropped even if this poll
+        // carries a weekly step, so a step never absorbs tokens from a stale window.
+        let openWindow = lock.withLock { () -> AccumulationWindow? in
+            guard let window = accumulationWindow else { return nil }
+            if current.timestamp - window.startTimestamp > Self.maxAccumulationMs {
+                accumulationWindow = nil
+                Self.logger.info("Accumulation window from \(window.startTimestamp) exceeded 6h cap — discarding, restarting at \(previous.timestamp)")
+                return nil
+            }
+            return window
+        }
+        let cumulativeDelta = currentSevenDay - (openWindow?.startSevenDayUtil ?? previousSevenDay)
 
         // Query log parser for tokens in [previous.timestamp, current.timestamp)
         let tokenAggregates = logParser.getTokens(from: previous.timestamp, to: current.timestamp)
@@ -66,11 +76,8 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
         if cumulativeDelta >= Self.minDelta {
             lock.withLock { totalUtilizationChanges += 1 }
 
-            let window = lock.withLock { () -> AccumulationWindow? in
-                let w = accumulationWindow
-                accumulationWindow = nil
-                return w
-            }
+            lock.withLock { accumulationWindow = nil }
+            let window = openWindow
 
             var tokensByModel = window?.tokensByModel ?? [:]
             for aggregate in tokenAggregates {
@@ -107,49 +114,28 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
             }
         } else if totalTokensAcrossModels > 0 {
             // No meaningful delta but tokens consumed — accumulate
-            enum AccumulationAction { case capExceeded, accumulated, started }
-            let action: AccumulationAction = lock.withLock {
-                if var window = accumulationWindow {
-                    if current.timestamp - window.startTimestamp > Self.maxAccumulationMs {
-                        var tokensByModel: [String: TokenAggregate] = [:]
-                        for aggregate in tokenAggregates {
-                            tokensByModel[aggregate.model] = aggregate
-                        }
-                        accumulationWindow = AccumulationWindow(
-                            startTimestamp: previous.timestamp,
-                            startSevenDayUtil: previousSevenDay,
-                            tokensByModel: tokensByModel,
-                            lastPollTimestamp: current.timestamp
-                        )
-                        return .capExceeded
-                    }
-
+            let accumulated = lock.withLock { () -> Bool in
+                if var window = openWindow {
                     for aggregate in tokenAggregates {
                         window.tokensByModel[aggregate.model] = Self.merge(window.tokensByModel[aggregate.model], aggregate)
                     }
                     window.lastPollTimestamp = current.timestamp
                     accumulationWindow = window
-                    return .accumulated
-                } else {
-                    var tokensByModel: [String: TokenAggregate] = [:]
-                    for aggregate in tokenAggregates {
-                        tokensByModel[aggregate.model] = aggregate
-                    }
-                    accumulationWindow = AccumulationWindow(
-                        startTimestamp: previous.timestamp,
-                        startSevenDayUtil: previousSevenDay,
-                        tokensByModel: tokensByModel,
-                        lastPollTimestamp: current.timestamp
-                    )
-                    return .started
+                    return true
                 }
+                var tokensByModel: [String: TokenAggregate] = [:]
+                for aggregate in tokenAggregates {
+                    tokensByModel[aggregate.model] = aggregate
+                }
+                accumulationWindow = AccumulationWindow(
+                    startTimestamp: previous.timestamp,
+                    startSevenDayUtil: previousSevenDay,
+                    tokensByModel: tokensByModel,
+                    lastPollTimestamp: current.timestamp
+                )
+                return false
             }
-            switch action {
-            case .capExceeded:
-                Self.logger.info("Accumulation window exceeded 6h cap — discarding and restarting at \(previous.timestamp)")
-            case .accumulated, .started:
-                Self.logger.debug("Tokens accumulated — no weekly utilization delta yet (7d=\(currentSevenDay))")
-            }
+            Self.logger.debug("Tokens \(accumulated ? "accumulated" : "window started") — no weekly utilization delta yet (7d=\(currentSevenDay))")
         }
         // If no delta AND no tokens, nothing to do
     }
