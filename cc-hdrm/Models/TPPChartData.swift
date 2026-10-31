@@ -14,6 +14,9 @@ struct TPPChartPoint: Sendable, Identifiable {
     let source: MeasurementSource
     let confidence: MeasurementConfidence
     let isAverage: Bool
+    /// True when the value comes from a 5h delta (rows recorded before the 5h limit was retired).
+    /// Never averaged or trended together with weekly-based values.
+    var isFiveHourBased = false
 }
 
 /// Annotation marking a detected shift in TPP trend.
