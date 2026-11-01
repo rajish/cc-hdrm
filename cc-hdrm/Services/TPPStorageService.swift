@@ -214,10 +214,7 @@ final class TPPStorageService: TPPStorageServiceProtocol, @unchecked Sendable {
 
         let connection = try databaseManager.getConnection()
 
-        let sql = """
-            DELETE FROM tpp_measurements
-            WHERE source IN ('passive-backfill', 'rollup-backfill') AND five_hour_delta IS NULL
-            """
+        let sql = "DELETE FROM tpp_measurements WHERE source IN ('passive-backfill', 'rollup-backfill')"
 
         var statement: OpaquePointer?
         defer {
@@ -239,7 +236,7 @@ final class TPPStorageService: TPPStorageServiceProtocol, @unchecked Sendable {
         }
 
         let deletedCount = sqlite3_changes(connection)
-        Self.logger.info("Deleted \(deletedCount) weekly backfill records (5h-based backfill rows kept)")
+        Self.logger.info("Deleted \(deletedCount) backfill records")
     }
 
     // MARK: - Private Helpers

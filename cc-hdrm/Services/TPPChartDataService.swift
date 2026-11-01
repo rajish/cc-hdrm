@@ -63,7 +63,10 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
             passivePoints = computeWeeklyAverages(from: sortedPassive)
         }
 
+        // Compute trend line from passive data
         let trendLine = computeMovingAverage(points: passivePoints)
+
+        // Detect shifts
         let shiftAnnotations = detectShifts(points: passivePoints, trendLine: trendLine)
 
         // Compute insight text
@@ -83,8 +86,7 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
 
         let models = try await availableModels()
 
-        let fiveHourBasedCount = passivePoints.filter(\.isFiveHourBased).count
-        Self.logger.info("TPP chart data loaded: \(passivePoints.count) passive (\(fiveHourBasedCount) 5h-based), \(benchmarkPoints.count) benchmark, \(trendLine.count) trend, \(shiftAnnotations.count) shifts")
+        Self.logger.info("TPP chart data loaded: \(passivePoints.count) passive, \(benchmarkPoints.count) benchmark, \(trendLine.count) trend, \(shiftAnnotations.count) shifts")
 
         return TPPChartData(
             passivePoints: passivePoints,
@@ -122,24 +124,14 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
 
     // MARK: - Chart Point Conversion
 
-    /// A row is 5h-based iff it has a 5h delta (same rule as `TPPStorageService.deleteBackfillRecords`):
-    /// its weekly value, if any, came from a 5h-era window and must not join the weekly series.
-    private static func chartValue(_ measurement: TPPMeasurement) -> (value: Double, isFiveHourBased: Bool)? {
-        if measurement.fiveHourDelta != nil {
-            return measurement.tppFiveHour.map { ($0, true) }
-        }
-        return measurement.tppSevenDay.map { ($0, false) }
-    }
-
     private func toChartPoint(_ measurement: TPPMeasurement) -> TPPChartPoint? {
-        guard let chartValue = Self.chartValue(measurement) else { return nil }
+        guard let tppValue = measurement.tppFiveHour else { return nil }
         return TPPChartPoint(
             timestamp: Date(timeIntervalSince1970: Double(measurement.timestamp) / 1000.0),
-            tppValue: chartValue.value,
+            tppValue: tppValue,
             source: measurement.source,
             confidence: measurement.confidence,
-            isAverage: false,
-            isFiveHourBased: chartValue.isFiveHourBased
+            isAverage: false
         )
     }
 
@@ -161,42 +153,36 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
         })
     }
 
-    private struct BucketKey: Hashable {
-        let date: Date
-        let isFiveHourBased: Bool
-    }
-
-    /// Averages each time bucket separately per basis, so a bucket holding both
-    /// 5h-based and weekly-based rows yields two points.
     private func computeAverages(from measurements: [TPPMeasurement], groupBy: (Date) -> Date) -> [TPPChartPoint] {
-        var buckets: [BucketKey: [(value: Double, confidence: MeasurementConfidence)]] = [:]
-        for m in measurements {
-            guard let chartValue = Self.chartValue(m) else { continue }
-            let date = Date(timeIntervalSince1970: Double(m.timestamp) / 1000.0)
-            let key = BucketKey(date: groupBy(date), isFiveHourBased: chartValue.isFiveHourBased)
-            buckets[key, default: []].append((chartValue.value, m.confidence))
-        }
-        guard !buckets.isEmpty else { return [] }
+        // Filter to measurements with valid TPP
+        let valid = measurements.filter { $0.tppFiveHour != nil }
+        guard !valid.isEmpty else { return [] }
 
-        let sortedKeys = buckets.keys.sorted {
-            $0.date != $1.date ? $0.date < $1.date : !$0.isFiveHourBased && $1.isFiveHourBased
+        // Group by time bucket
+        var buckets: [Date: [TPPMeasurement]] = [:]
+        for m in valid {
+            let date = Date(timeIntervalSince1970: Double(m.timestamp) / 1000.0)
+            let bucket = groupBy(date)
+            buckets[bucket, default: []].append(m)
         }
-        return sortedKeys.map { key in
-            let entries = buckets[key] ?? []
-            let avg = entries.map(\.value).reduce(0, +) / Double(entries.count)
+
+        // Compute average for each bucket
+        return buckets.sorted { $0.key < $1.key }.compactMap { (bucket, measurements) -> TPPChartPoint? in
+            let tppValues = measurements.compactMap(\.tppFiveHour)
+            guard !tppValues.isEmpty else { return nil }
+            let avg = tppValues.reduce(0, +) / Double(tppValues.count)
 
             // Use the worst confidence in the bucket
-            let worstConfidence: MeasurementConfidence = entries.contains(where: { $0.confidence == .low }) ? .low
-                : entries.contains(where: { $0.confidence == .medium }) ? .medium
+            let worstConfidence: MeasurementConfidence = measurements.contains(where: { $0.confidence == .low }) ? .low
+                : measurements.contains(where: { $0.confidence == .medium }) ? .medium
                 : .high
 
             return TPPChartPoint(
-                timestamp: key.date,
+                timestamp: bucket,
                 tppValue: avg,
                 source: .passive,
                 confidence: worstConfidence,
-                isAverage: true,
-                isFiveHourBased: key.isFiveHourBased
+                isAverage: true
             )
         }
     }
@@ -204,14 +190,7 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
     // MARK: - Trend Line
 
     /// Computes a 7-point moving average from the given points.
-    /// Weekly-based and 5h-based points form separate series; the result holds the
-    /// weekly series first, then the 5h-based series.
     func computeMovingAverage(points: [TPPChartPoint], windowSize: Int = 7) -> [TPPChartPoint] {
-        movingAverage(of: points.filter { !$0.isFiveHourBased }, windowSize: windowSize, isFiveHourBased: false)
-            + movingAverage(of: points.filter(\.isFiveHourBased), windowSize: windowSize, isFiveHourBased: true)
-    }
-
-    private func movingAverage(of points: [TPPChartPoint], windowSize: Int, isFiveHourBased: Bool) -> [TPPChartPoint] {
         guard points.count >= windowSize else { return [] }
         var result: [TPPChartPoint] = []
         for i in (windowSize - 1)..<points.count {
@@ -222,8 +201,7 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
                 tppValue: avg,
                 source: .passive,
                 confidence: .medium,
-                isAverage: true,
-                isFiveHourBased: isFiveHourBased
+                isAverage: true
             ))
         }
         return result
@@ -235,26 +213,7 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
     ///
     /// A shift is detected when the ratio `point / MA` deviates by >20% for 3+
     /// consecutive points. Only the first point in each sustained run is reported.
-    /// Runs are detected per basis: weekly points only against the weekly trend,
-    /// 5h-based points only against the 5h-based trend.
     func detectShifts(points: [TPPChartPoint], trendLine: [TPPChartPoint]) -> [TPPShiftAnnotation] {
-        let largestFirst: (TPPShiftAnnotation, TPPShiftAnnotation) -> Bool = {
-            abs($0.percentChange) > abs($1.percentChange)
-        }
-        let weekly = shiftRuns(
-            points: points.filter { !$0.isFiveHourBased },
-            trendLine: trendLine.filter { !$0.isFiveHourBased }
-        ).sorted(by: largestFirst)
-        let fiveHour = shiftRuns(
-            points: points.filter(\.isFiveHourBased),
-            trendLine: trendLine.filter(\.isFiveHourBased)
-        ).sorted(by: largestFirst)
-
-        // Cap annotations to avoid visual clutter; current weekly shifts take priority over old 5h-based ones
-        return Array((weekly + fiveHour).prefix(3))
-    }
-
-    private func shiftRuns(points: [TPPChartPoint], trendLine: [TPPChartPoint]) -> [TPPShiftAnnotation] {
         guard !trendLine.isEmpty, points.count >= trendLine.count else { return [] }
 
         // Align: trendLine[i] corresponds to points[offset + i] where offset = points.count - trendLine.count
@@ -323,7 +282,9 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
             }
         }
 
-        return annotations
+        // Cap annotations to avoid visual clutter — keep only the largest shifts
+        let sorted = annotations.sorted { abs($0.percentChange) > abs($1.percentChange) }
+        return Array(sorted.prefix(3))
     }
 
     // MARK: - Insight Text
@@ -342,17 +303,11 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
             let avgResult = try await tppStorage.getAverageTPP(
                 from: thirtyDaysAgoMs, to: nowMs, model: model, source: .benchmark
             )
-            let latest = benchmarkMeasurements.max(by: { $0.timestamp < $1.timestamp })
 
-            // Compare on one basis only, weekly preferred
-            let comparison: (latest: Double, average: Double)? = {
-                if let latestTPP = latest?.tppSevenDay, let avgTPP = avgResult.sevenDay { return (latestTPP, avgTPP) }
-                if let latestTPP = latest?.tppFiveHour, let avgTPP = avgResult.fiveHour { return (latestTPP, avgTPP) }
-                return nil
-            }()
-
-            if let comparison, comparison.average > 0 {
-                let changePercent = ((comparison.latest - comparison.average) / comparison.average) * 100
+            if let avgTPP = avgResult.fiveHour,
+               let latestTPP = benchmarkMeasurements.max(by: { $0.timestamp < $1.timestamp })?.tppFiveHour,
+               avgTPP > 0 {
+                let changePercent = ((latestTPP - avgTPP) / avgTPP) * 100
 
                 if changePercent < -20 {
                     return "Your token efficiency dropped ~\(Int(abs(changePercent)))% recently -- the same work now costs more headroom."
@@ -366,10 +321,7 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
 
         // Priority 2: Passive data only — analyze trend direction
         if !passivePoints.isEmpty {
-            // Compare on one basis only, weekly preferred
-            let weeklyPoints = passivePoints.filter { !$0.isFiveHourBased }
-            let sameBasisPoints = weeklyPoints.count >= 2 ? weeklyPoints : passivePoints.filter(\.isFiveHourBased)
-            let recentPoints = sameBasisPoints.suffix(7)
+            let recentPoints = passivePoints.suffix(7)
             if recentPoints.count >= 2 {
                 let firstHalf = recentPoints.prefix(recentPoints.count / 2)
                 let secondHalf = recentPoints.suffix(recentPoints.count / 2)
@@ -410,8 +362,19 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
         guard variantsPresent >= 2 else { return nil }
 
         // Compute ratios: inputTPP / outputTPP (lower TPP = more expensive)
-        let outputToInputRatio = Self.sameBasisRatio(inputHeavy, over: outputHeavy)
-        let cacheToInputRatio = Self.sameBasisRatio(cacheHeavy, over: inputHeavy)
+        let outputToInputRatio: Double?
+        if let outTPP = outputHeavy?.tppFiveHour, let inTPP = inputHeavy?.tppFiveHour, outTPP > 0 {
+            outputToInputRatio = inTPP / outTPP
+        } else {
+            outputToInputRatio = nil
+        }
+
+        let cacheToInputRatio: Double?
+        if let inTPP = inputHeavy?.tppFiveHour, let caTPP = cacheHeavy?.tppFiveHour, inTPP > 0 {
+            cacheToInputRatio = caTPP / inTPP
+        } else {
+            cacheToInputRatio = nil
+        }
 
         // Use the most recent measurement date
         let dates = [outputHeavy, inputHeavy, cacheHeavy].compactMap { $0 }.map { $0.timestamp }
@@ -423,12 +386,5 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
             cacheToInputRatio: cacheToInputRatio,
             lastMeasuredDate: Date(timeIntervalSince1970: Double(latestTs) / 1000.0)
         )
-    }
-
-    /// `numerator / denominator` TPP on one basis, weekly preferred.
-    private static func sameBasisRatio(_ numerator: TPPMeasurement?, over denominator: TPPMeasurement?) -> Double? {
-        if let num = numerator?.tppSevenDay, let den = denominator?.tppSevenDay, den > 0 { return num / den }
-        if let num = numerator?.tppFiveHour, let den = denominator?.tppFiveHour, den > 0 { return num / den }
-        return nil
     }
 }

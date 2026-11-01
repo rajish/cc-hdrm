@@ -6,7 +6,8 @@ import Foundation
 final class MockHeadroomAnalysisService: HeadroomAnalysisServiceProtocol, @unchecked Sendable {
     var analyzeResetEventCallCount = 0
     var aggregateBreakdownCallCount = 0
-    var lastSevenDayPeak: Double?
+    var lastFiveHourPeak: Double?
+    var lastSevenDayUtil: Double?
     var lastCreditLimits: CreditLimits?
     var lastEvents: [ResetEvent]?
 
@@ -21,11 +22,13 @@ final class MockHeadroomAnalysisService: HeadroomAnalysisServiceProtocol, @unche
     var aggregateBreakdownHandler: (([ResetEvent]) -> PeriodSummary)?
 
     func analyzeResetEvent(
-        sevenDayPeak: Double,
+        fiveHourPeak: Double,
+        sevenDayUtil: Double,
         creditLimits: CreditLimits
     ) -> HeadroomBreakdown {
         analyzeResetEventCallCount += 1
-        lastSevenDayPeak = sevenDayPeak
+        lastFiveHourPeak = fiveHourPeak
+        lastSevenDayUtil = sevenDayUtil
         lastCreditLimits = creditLimits
 
         guard let mock = mockBreakdown else {
