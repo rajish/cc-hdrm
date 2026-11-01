@@ -716,9 +716,9 @@ Phase 3 introduces SQLite storage. On first launch after upgrade:
 
 Applies only when there is no 5-hour number. The Phase 3 design above stays valid for every other account.
 
-- **Sparkline:** the current weekly cycle, from the last weekly reset to now, with an even-pace line from 0% to 100% at reset.
+- **Sparkline:** the current weekly cycle, from the last weekly reset to now, with an even-pace line from 0% to 100% at reset. VoiceOver label: "Weekly usage chart. Double-tap to open analytics."
 - **Analytics:** the 5-hour series is off and hidden when the selected range has no 5-hour data. A longer range can still show old 5-hour data.
-- **Headroom breakdown:** two bands per weekly cycle, used and unused. Old 5-hour events keep their three-band breakdown.
+- **Headroom breakdown:** two bands per weekly cycle, used and unused, with no constrained value. VoiceOver: "Headroom breakdown: 70% used, 30% unused capacity." Old 5-hour events keep their three-band breakdown.
 
 ---
 

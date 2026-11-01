@@ -60,3 +60,10 @@ These findings came from the reverted code. Apply them when the stories are rebu
 - Story 26.7: `cc-hdrm/Services/HistoricalTPPBackfillService.swift:217` overlaps with passive measurements. `cc-hdrm/Services/PassiveTPPEngine.swift:49` and `:86` can use stale windows.
 - Story 26.7, also in released 1.6.0: `cc-hdrm/Services/TPPStorageService.swift:217` force re-run deletes all backfill rows but rebuilds only recent ones.
 - Not tied to a story: `cc-hdrm/Services/ValueInsightEngine.swift:92` says "today" on a rolling 24 hours. `cc-hdrm/State/AppState.swift:138` treats a missing weekly value as 0%.
+
+## Deferred from: review of the Epic 26 plan correction (2026-11-01)
+
+Both are older drift in text restored unchanged. Neither blocks Epic 26.
+
+- `_bmad-output/planning-artifacts/architecture.md` API Response Mapping example lists `sevenDaySonnet` and omits `limits`. `cc-hdrm/Models/UsageResponse.swift` is the source of truth.
+- `_bmad-output/planning-artifacts/ux-design-specification.md` "Popover structure" says the gauges sit side by side, while the chosen direction in the same file stacks them vertically.

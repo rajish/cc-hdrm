@@ -1645,6 +1645,7 @@ Anthropic removed the 5-hour limit for verified Ultra accounts only. See `_bmad-
   - `paceDelta = utilization - elapsed * 100`
   - `rate = utilization / (now - weekStart)`; `runOut = now + (100 - utilization) / rate`
   - Run-out applies only before the reset, and after at least 4 hours of the week.
+- **Sparkline data:** with no 5-hour number, the current weekly cycle from `weekStart` to now. `getRecentPolls(hours:)` alone cannot supply it, because raw polls are rolled up after 24 hours. Story 26.3 combines rollups with recent raw polls. Accounts with a number keep the 24-hour fetch.
 - **Weekly cycle:** a weekly reset **and** no 5-hour number on the polls around it. An empty peak alone is not enough, because a Mac sleeping over 5 hours also produces one.
 - **Tokens-per-percent:** polls with a number use 5-hour steps. Polls without one use weekly steps with a 6-hour window. The two bases are never averaged together.
 - **Data:** no `DELETE` or `DROP`. `five_hour_*` columns stay in active use. Additive nullable columns are allowed.
