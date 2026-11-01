@@ -8,50 +8,23 @@ struct HeadroomBreakdownTests {
     @Test("HeadroomBreakdown stores all values correctly")
     func storesAllValues() {
         let breakdown = HeadroomBreakdown(
-            usedPercent: 72.0,
-            constrainedPercent: 0.0,
-            unusedPercent: 28.0,
-            usedCredits: 396_000,
-            constrainedCredits: 0,
-            unusedCredits: 154_000
+            usedPercent: 70.0,
+            unusedPercent: 30.0,
+            usedCredits: 3_500_000,
+            unusedCredits: 1_500_000
         )
 
-        #expect(breakdown.usedPercent == 72.0)
-        #expect(breakdown.constrainedPercent == 0.0)
-        #expect(breakdown.unusedPercent == 28.0)
-        #expect(breakdown.usedCredits == 396_000)
-        #expect(breakdown.constrainedCredits == 0)
-        #expect(breakdown.unusedCredits == 154_000)
+        #expect(breakdown.usedPercent == 70.0)
+        #expect(breakdown.unusedPercent == 30.0)
+        #expect(breakdown.usedCredits == 3_500_000)
+        #expect(breakdown.unusedCredits == 1_500_000)
     }
 
     @Test("HeadroomBreakdown equality works correctly")
     func equalityWorks() {
-        let b1 = HeadroomBreakdown(
-            usedPercent: 72.0,
-            constrainedPercent: 0.0,
-            unusedPercent: 28.0,
-            usedCredits: 396_000,
-            constrainedCredits: 0,
-            unusedCredits: 154_000
-        )
-
-        let b2 = HeadroomBreakdown(
-            usedPercent: 72.0,
-            constrainedPercent: 0.0,
-            unusedPercent: 28.0,
-            usedCredits: 396_000,
-            constrainedCredits: 0,
-            unusedCredits: 154_000
-        )
-
-        let b3 = HeadroomBreakdown(
-            usedPercent: 50.0,
-            constrainedPercent: 31.82,
-            unusedPercent: 18.18,
-            usedCredits: 275_000,
-            constrainedCredits: 175_000,
-            unusedCredits: 100_000
-        )
+        let b1 = HeadroomBreakdown(usedPercent: 70.0, unusedPercent: 30.0, usedCredits: 3_500_000, unusedCredits: 1_500_000)
+        let b2 = HeadroomBreakdown(usedPercent: 70.0, unusedPercent: 30.0, usedCredits: 3_500_000, unusedCredits: 1_500_000)
+        let b3 = HeadroomBreakdown(usedPercent: 50.0, unusedPercent: 50.0, usedCredits: 2_500_000, unusedCredits: 2_500_000)
 
         #expect(b1 == b2)
         #expect(b1 != b3)

@@ -108,4 +108,41 @@ struct ResetEventTests {
             _ = event
         }
     }
+
+    // MARK: - isWeeklyCycle
+
+    private func makeEvent(timestamp: Int64, fiveHourPeak: Double?, sevenDayUtil: Double?) -> ResetEvent {
+        ResetEvent(
+            id: 1, timestamp: timestamp, fiveHourPeak: fiveHourPeak, sevenDayUtil: sevenDayUtil,
+            tier: "default_claude_pro", usedCredits: nil, constrainedCredits: nil, unusedCredits: nil
+        )
+    }
+
+    @Test("Cutover constant is 2026-10-31 08:03 UTC")
+    func cutoverTimestamp() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let date = calendar.date(from: DateComponents(year: 2026, month: 10, day: 31, hour: 8, minute: 3))!
+        #expect(ResetEvent.fiveHourLimitRetiredAtMs == Int64(date.timeIntervalSince1970 * 1000))
+    }
+
+    @Test("Post-cutover event without 5h peak and with 7d util is a weekly cycle")
+    func weeklyCyclePostCutover() {
+        let cutover = ResetEvent.fiveHourLimitRetiredAtMs
+        #expect(makeEvent(timestamp: cutover, fiveHourPeak: nil, sevenDayUtil: 70).isWeeklyCycle)
+        #expect(makeEvent(timestamp: cutover + 86_400_000, fiveHourPeak: nil, sevenDayUtil: 0).isWeeklyCycle)
+    }
+
+    @Test("Pre-cutover peak-nil event is not a weekly cycle")
+    func preCutoverPeakNilIsNotWeekly() {
+        let event = makeEvent(timestamp: ResetEvent.fiveHourLimitRetiredAtMs - 1, fiveHourPeak: nil, sevenDayUtil: 70)
+        #expect(!event.isWeeklyCycle)
+    }
+
+    @Test("Event with a 5h peak or without 7d util is not a weekly cycle")
+    func peakOrMissingWeeklyIsNotWeekly() {
+        let after = ResetEvent.fiveHourLimitRetiredAtMs + 1
+        #expect(!makeEvent(timestamp: after, fiveHourPeak: 72, sevenDayUtil: 70).isWeeklyCycle)
+        #expect(!makeEvent(timestamp: after, fiveHourPeak: nil, sevenDayUtil: nil).isWeeklyCycle)
+    }
 }

@@ -663,20 +663,22 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             sqlite3_bind_null(statement, 4)
         }
 
-        // Calculate credit breakdown if tier and utilization data are available
-        if let peak = fiveHourPeak,
+        // Weekly credit breakdown for peak-nil (weekly cycle) events; constrained is retired
+        if fiveHourPeak == nil,
+           timestamp >= ResetEvent.fiveHourLimitRetiredAtMs,
            let util7d = sevenDayUtil,
            let analysisService = headroomAnalysisService,
            let limits = RateLimitTier.resolve(tierString: tier, preferencesManager: preferencesManager) {
             let breakdown = analysisService.analyzeResetEvent(
-                fiveHourPeak: peak,
-                sevenDayUtil: util7d,
+                sevenDayPeak: util7d,
                 creditLimits: limits
             )
             sqlite3_bind_double(statement, 5, breakdown.usedCredits)
-            sqlite3_bind_double(statement, 6, breakdown.constrainedCredits)
+            sqlite3_bind_null(statement, 6)  // constrained_credits
             sqlite3_bind_double(statement, 7, breakdown.unusedCredits)
+            Self.logger.info("Weekly reset credits: used=\(breakdown.usedCredits, format: .fixed(precision: 0)) unused=\(breakdown.unusedCredits, format: .fixed(precision: 0)) (7d peak \(util7d, format: .fixed(precision: 1))%)")
         } else {
+            Self.logger.info("Reset event credits not computed: peak=\(fiveHourPeak ?? -1, privacy: .public), 7d=\(sevenDayUtil ?? -1, privacy: .public), tier=\(tier ?? "unknown", privacy: .public), analysisService=\(self.headroomAnalysisService != nil, privacy: .public)")
             sqlite3_bind_null(statement, 5)  // used_credits
             sqlite3_bind_null(statement, 6)  // constrained_credits
             sqlite3_bind_null(statement, 7)  // waste_credits (SQL column name, maps to unusedCredits)

@@ -4,7 +4,7 @@
 
 ## Goal
 
-Anthropic retired Claude's 5-hour limit on 2026-10-31. Since 08:03 UTC that day the usage API returns `five_hour: null`. The weekly allowance (`seven_day`) is now the only plan-wide limit. Model-scoped weekly caps (Fable, `limits[]` entries with `kind: "weekly_scoped"`) remain. The app was built around the 5-hour window. Today the menu bar shows "—" and a grey icon while connected. Most analytics show nothing, or silently wrong values (0% used, $0 value, a bias toward downgrade advice). This epic makes the weekly allowance the primary monitored value everywhere: menu bar, popover, pace signal, analytics, value and tier analysis, tokens-per-percent, benchmark, notifications and settings. The whole epic ships as one `[minor]` release (1.5.1 → 1.6.0).
+Anthropic retired Claude's 5-hour limit on 2026-10-31. Since 08:03 UTC that day the usage API returns `five_hour: null`. The weekly allowance (`seven_day`) is now the only plan-wide limit. Model-scoped weekly caps (Fable, `limits[]` entries with `kind: "weekly_scoped"`) remain. The app was built around the 5-hour window. Today the menu bar shows "—" and a grey icon while connected. Most analytics show nothing, or silently wrong values (0% used, $0 value, a bias toward downgrade advice). This epic makes the weekly allowance the primary monitored value everywhere: menu bar, popover, pace signal, analytics, value and tier analysis, tokens-per-percent, benchmark, notifications and settings. The whole epic ships as one `[minor]` release (1.6.0 → 1.7.0).
 
 ## Stories
 

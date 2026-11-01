@@ -89,23 +89,23 @@ enum ValueInsightEngine {
             let precise = "\(used) of \(total) (\(formatPercent(util)) utilization)"
 
             if util > 80 {
-                return ValueInsight(text: "Close to today's limit — \(used) of \(total) used", isQuiet: false, preciseDetail: precise)
+                return ValueInsight(text: "Close to last cycle's limit — \(used) of \(total) used", isQuiet: false, preciseDetail: precise)
             } else if util < 20 {
-                return ValueInsight(text: "Plenty of room — \(used) of \(total) used today", isQuiet: false, preciseDetail: precise)
+                return ValueInsight(text: "Plenty of room — \(used) of \(total) used last cycle", isQuiet: false, preciseDetail: precise)
             }
-            return ValueInsight(text: "Used \(used) of \(total) today", isQuiet: isQuietUtilization(util), preciseDetail: precise)
+            return ValueInsight(text: "Used \(used) of \(total) last cycle", isQuiet: isQuietUtilization(util), preciseDetail: precise)
         }
 
         let util = computeUtilization(resetEvents: resetEvents, creditLimits: creditLimits, timeRange: .day, headroomAnalysisService: headroomAnalysisService)
         if let pct = util {
-            let precise = "\(formatPercent(pct)) utilization today"
+            let precise = "\(formatPercent(pct)) utilization last cycle"
             if pct > 80 {
-                return ValueInsight(text: "Running close to today's limit", isQuiet: false, preciseDetail: precise)
+                return ValueInsight(text: "Running close to last cycle's limit", isQuiet: false, preciseDetail: precise)
             } else if pct < 20 {
-                return ValueInsight(text: "Light usage today", isQuiet: false, preciseDetail: precise)
+                return ValueInsight(text: "Light usage last cycle", isQuiet: false, preciseDetail: precise)
             }
             let nl = NaturalLanguageFormatter.formatPercentNatural(pct)
-            return ValueInsight(text: "\(capitalizeFirst(nl)) of today's capacity", isQuiet: isQuietUtilization(pct), preciseDetail: precise)
+            return ValueInsight(text: "\(capitalizeFirst(nl)) of last cycle's capacity", isQuiet: isQuietUtilization(pct), preciseDetail: precise)
         }
 
         return ValueInsight(text: "Usage data available", isQuiet: true)
@@ -121,8 +121,8 @@ enum ValueInsightEngine {
         headroomAnalysisService: any HeadroomAnalysisServiceProtocol
     ) -> ValueInsight {
         // Check if we have sufficient history for comparison (>= 14 days of data)
-        if let firstAll = allTimeResetEvents.first, let lastAll = allTimeResetEvents.last {
-            let spanDays = Double(lastAll.timestamp - firstAll.timestamp) / (24.0 * 60.0 * 60.0 * 1000.0)
+        if !allTimeResetEvents.isEmpty {
+            let spanDays = SubscriptionValueCalculator.periodDays(for: .all, events: allTimeResetEvents)
 
             if spanDays >= 14, let limits = creditLimits {
                 let allTimeValue = SubscriptionValueCalculator.calculate(
@@ -356,8 +356,8 @@ enum ValueInsightEngine {
                 return value.utilizationPercent
             }
         }
-        // Fall back to aggregate breakdown's usedPercent (relative to total 5h capacity,
-        // not 7d-prorated — different denominator than SubscriptionValueCalculator)
+        // Fall back to aggregate breakdown's usedPercent (relative to the summed capacity of the
+        // counted events, not 7d-prorated — different denominator than SubscriptionValueCalculator)
         guard !resetEvents.isEmpty else { return nil }
         let summary = headroomAnalysisService.aggregateBreakdown(events: resetEvents)
         return summary.usedPercent

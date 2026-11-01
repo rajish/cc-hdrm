@@ -34,15 +34,11 @@ struct ValueInsightEngineTests {
         var events: [ResetEvent] = []
         for i in 0..<count {
             let ts: Int64 = nowMs - totalSpanMs + Int64(i) * stepMs
-            events.append(ResetEvent(
+            events.append(ResetEvent.legacyFixture(
                 id: Int64(i + 1),
                 timestamp: ts,
                 fiveHourPeak: 50.0 + Double(i),
-                sevenDayUtil: 40.0 + Double(i),
-                tier: "default_claude_pro",
-                usedCredits: nil,
-                constrainedCredits: nil,
-                unusedCredits: nil
+                sevenDayUtil: 40.0 + Double(i)
             ))
         }
         return events
@@ -73,7 +69,7 @@ struct ValueInsightEngineTests {
         )
 
         // High utilization (100% — usedCredits exceed daily prorated limit) → cautious tone
-        #expect(insight.text.contains("Close to today's limit"))
+        #expect(insight.text.contains("Close to last cycle's limit"))
         #expect(insight.text.contains("$"))
         #expect(insight.isQuiet == false)
         #expect(insight.preciseDetail != nil)
@@ -98,8 +94,8 @@ struct ValueInsightEngineTests {
         )
 
         // Falls back to aggregateBreakdown (52% usedPercent) → neutral NL text
-        #expect(insight.text.contains("of today's capacity"))
-        #expect(insight.preciseDetail?.contains("utilization today") == true)
+        #expect(insight.text.contains("of last cycle's capacity"))
+        #expect(insight.preciseDetail?.contains("utilization last cycle") == true)
     }
 
     // MARK: - 9.4: 7d insight above average
@@ -305,15 +301,11 @@ struct ValueInsightEngineTests {
         for (monthIdx, peak) in peaks.enumerated() {
             for j in 0..<3 {
                 let ts: Int64 = nowMs - Int64(4 - monthIdx) * monthMs + Int64(j) * 86_400_000
-                events.append(ResetEvent(
+                events.append(ResetEvent.legacyFixture(
                     id: Int64(monthIdx * 3 + j + 1),
                     timestamp: ts,
                     fiveHourPeak: peak,
-                    sevenDayUtil: peak * 0.6,
-                    tier: "default_claude_pro",
-                    usedCredits: nil,
-                    constrainedCredits: nil,
-                    unusedCredits: nil
+                    sevenDayUtil: peak * 0.6
                 ))
             }
         }
@@ -359,15 +351,11 @@ struct ValueInsightEngineTests {
         for (monthIdx, peak) in peaks.enumerated() {
             for j in 0..<3 {
                 let ts: Int64 = nowMs - Int64(4 - monthIdx) * monthMs + Int64(j) * 86_400_000
-                events.append(ResetEvent(
+                events.append(ResetEvent.legacyFixture(
                     id: Int64(monthIdx * 3 + j + 1),
                     timestamp: ts,
                     fiveHourPeak: peak,
-                    sevenDayUtil: peak * 0.6,
-                    tier: "default_claude_pro",
-                    usedCredits: nil,
-                    constrainedCredits: nil,
-                    unusedCredits: nil
+                    sevenDayUtil: peak * 0.6
                 ))
             }
         }
@@ -918,7 +906,7 @@ struct ValueInsightEngineTests {
         )
 
         // Neutral tone: NL text, no raw percentage in main text
-        #expect(insight.text.contains("of today's capacity"))
+        #expect(insight.text.contains("of last cycle's capacity"))
         #expect(!insight.text.contains("52%"))
         #expect(insight.isQuiet == true)
         #expect(insight.preciseDetail?.contains("52%") == true)
@@ -1125,5 +1113,118 @@ struct ValueInsightEngineTests {
         )
 
         #expect(utilizations.isEmpty)
+    }
+
+    // MARK: - Weekly cycles (real analysis service)
+
+    private func weeklyEvents(_ peaks: [Double]) -> [ResetEvent] {
+        peaks.enumerated().map { i, peak in
+            ResetEvent(
+                id: Int64(i + 1),
+                timestamp: ResetEvent.fiveHourLimitRetiredAtMs + Int64(i + 1) * 7 * 86_400_000,
+                fiveHourPeak: nil, sevenDayUtil: peak, tier: "default_claude_pro",
+                usedCredits: nil, constrainedCredits: nil, unusedCredits: nil
+            )
+        }
+    }
+
+    @Test("24h insight for a weekly cycle names the cycle and shows non-zero dollars")
+    func dayInsightWeeklyCycle() {
+        let service = HeadroomAnalysisService()
+        let events = weeklyEvents([70])
+        let value = SubscriptionValueCalculator.calculate(
+            resetEvents: events, creditLimits: proLimits, timeRange: .day, headroomAnalysisService: service
+        )
+        #expect(value != nil)
+        #expect(value!.usedDollars > 0)
+
+        let insight = ValueInsightEngine.computeInsight(
+            timeRange: .day,
+            subscriptionValue: value,
+            resetEvents: events,
+            allTimeResetEvents: events,
+            creditLimits: proLimits,
+            headroomAnalysisService: service
+        )
+
+        let used = SubscriptionValueCalculator.formatDollars(value!.usedDollars)
+        #expect(insight.text == "Used \(used) of \(SubscriptionValueCalculator.formatDollars(value!.periodPrice)) last cycle")
+        #expect(insight.preciseDetail?.contains("70%") == true)
+    }
+
+    @Test("24h percentage-only insight for a weekly cycle reports its peak, not 0%")
+    func dayInsightWeeklyCyclePercentageOnly() {
+        let customLimits = CreditLimits(fiveHourCredits: 550_000, sevenDayCredits: 5_000_000)
+        let insight = ValueInsightEngine.computeInsight(
+            timeRange: .day,
+            subscriptionValue: nil,
+            resetEvents: weeklyEvents([70]),
+            allTimeResetEvents: weeklyEvents([70]),
+            creditLimits: customLimits,
+            headroomAnalysisService: HeadroomAnalysisService()
+        )
+
+        #expect(insight.text.contains("of last cycle's capacity"))
+        #expect(insight.preciseDetail == "70% utilization last cycle")
+    }
+
+    @Test("7d insight for a weekly cycle without history shows non-zero dollars")
+    func weekInsightWeeklyCycle() {
+        let service = HeadroomAnalysisService()
+        let events = weeklyEvents([70])
+        let value = SubscriptionValueCalculator.calculate(
+            resetEvents: events, creditLimits: proLimits, timeRange: .week, headroomAnalysisService: service
+        )
+
+        let insight = ValueInsightEngine.computeInsight(
+            timeRange: .week,
+            subscriptionValue: value,
+            resetEvents: events,
+            allTimeResetEvents: events,
+            creditLimits: proLimits,
+            headroomAnalysisService: service
+        )
+
+        #expect(insight.text.hasSuffix("this week"))
+        #expect(!insight.text.contains("$0.00"))
+        #expect(insight.preciseDetail?.contains("70%") == true)
+    }
+
+    @Test("Monthly utilizations from weekly cycles reflect their peaks")
+    func monthlyUtilizationsWeeklyCycles() {
+        // Resets on Nov 7, 14, 21, 28 and Dec 5 2026 → Nov avg (40+60+80+40)/4 = 55, Dec = 90
+        let utilizations = ValueInsightEngine.computeMonthlyUtilizations(
+            events: weeklyEvents([40, 60, 80, 40, 90]),
+            creditLimits: proLimits,
+            headroomAnalysisService: HeadroomAnalysisService()
+        )
+
+        #expect(utilizations.count == 2)
+        #expect(abs(utilizations[0] - 55.0) < 0.01)
+        #expect(abs(utilizations[1] - 90.0) < 0.01)
+    }
+
+    @Test("7d insight: two weekly cycles of history are enough for the deviation comparison")
+    func weekInsightWeeklyCycleDeviation() {
+        let service = HeadroomAnalysisService()
+        let allTime = weeklyEvents([30, 90])
+        let current = [allTime[1]]
+        let value = SubscriptionValueCalculator.calculate(
+            resetEvents: current, creditLimits: proLimits, timeRange: .week, headroomAnalysisService: service
+        )
+
+        let insight = ValueInsightEngine.computeInsight(
+            timeRange: .week,
+            subscriptionValue: value,
+            resetEvents: current,
+            allTimeResetEvents: allTime,
+            creditLimits: proLimits,
+            headroomAnalysisService: service
+        )
+
+        // All-time average 60%, this week 90% → 30 points above
+        #expect(insight.text.hasPrefix("This week:"))
+        #expect(insight.priority == .usageDeviation)
+        #expect(insight.preciseDetail == "30% above average weekly utilization")
     }
 }

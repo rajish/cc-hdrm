@@ -2,21 +2,21 @@ import Foundation
 
 /// Protocol for headroom analysis operations on reset events.
 protocol HeadroomAnalysisServiceProtocol: Sendable {
-    /// Analyzes a single reset event to produce a headroom breakdown.
+    /// Analyzes a single weekly cycle to produce a two-band headroom breakdown.
     /// - Parameters:
-    ///   - fiveHourPeak: Peak 5h utilization before reset (percentage 0-100)
-    ///   - sevenDayUtil: 7d utilization at reset time (percentage 0-100)
+    ///   - sevenDayPeak: Weekly utilization reached before the reset (percentage, clamped to 0-100)
     ///   - creditLimits: Credit limits for the user's tier
-    /// - Returns: Breakdown of used, constrained, and unused credits
+    /// - Returns: Breakdown of used and unused weekly credits
     func analyzeResetEvent(
-        fiveHourPeak: Double,
-        sevenDayUtil: Double,
+        sevenDayPeak: Double,
         creditLimits: CreditLimits
     ) -> HeadroomBreakdown
 
     /// Aggregates headroom breakdown across multiple reset events.
-    /// Each event's tier is resolved individually, supporting mixed-tier aggregation.
-    /// Events with nil fiveHourPeak, sevenDayUtil, or unresolvable tier are skipped.
+    /// Weekly cycles are computed from `sevenDayUtil` × weekly credits of each event's tier;
+    /// legacy 5h events contribute their stored credits unchanged.
+    /// Skipped: weekly cycles with unresolvable tier, non-weekly events without a 5h peak,
+    /// and legacy events without stored credits.
     /// - Parameter events: Array of reset events to aggregate
     /// - Returns: Aggregated period summary
     func aggregateBreakdown(

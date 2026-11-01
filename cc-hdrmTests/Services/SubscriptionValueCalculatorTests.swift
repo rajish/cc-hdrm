@@ -31,15 +31,11 @@ struct SubscriptionValueCalculatorTests {
         let totalSpanMs = Int64(spanDays) * 24 * 3_600_000
         let stepMs = count > 1 ? totalSpanMs / Int64(count - 1) : 0
         return (0..<count).map { i in
-            ResetEvent(
+            ResetEvent.legacyFixture(
                 id: Int64(i + 1),
                 timestamp: nowMs - totalSpanMs + Int64(i) * stepMs,
                 fiveHourPeak: 85.0 + Double(i),
-                sevenDayUtil: 40.0 + Double(i),
-                tier: "default_claude_pro",
-                usedCredits: nil,
-                constrainedCredits: nil,
-                unusedCredits: nil
+                sevenDayUtil: 40.0 + Double(i)
             )
         }
     }
@@ -114,15 +110,13 @@ struct SubscriptionValueCalculatorTests {
     func allRangeUsesActualSpan() {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         let ninetyDaysMs: Int64 = 90 * 24 * 3_600_000
-        let event1 = ResetEvent(
+        let event1 = ResetEvent.legacyFixture(
             id: 1, timestamp: nowMs - ninetyDaysMs,
-            fiveHourPeak: 50, sevenDayUtil: 30, tier: "default_claude_pro",
-            usedCredits: nil, constrainedCredits: nil, unusedCredits: nil
+            fiveHourPeak: 50, sevenDayUtil: 30
         )
-        let event2 = ResetEvent(
+        let event2 = ResetEvent.legacyFixture(
             id: 2, timestamp: nowMs,
-            fiveHourPeak: 60, sevenDayUtil: 40, tier: "default_claude_pro",
-            usedCredits: nil, constrainedCredits: nil, unusedCredits: nil
+            fiveHourPeak: 60, sevenDayUtil: 40
         )
         let days = SubscriptionValueCalculator.periodDays(for: .all, events: [event1, event2])
         #expect(abs(days - 90.0) < 1.0, "Should be approximately 90 days")
@@ -288,10 +282,9 @@ struct SubscriptionValueCalculatorTests {
 
     @Test(".all with single event returns minimum 1 day")
     func allRangeSingleEventMinimumOneDay() {
-        let event = ResetEvent(
+        let event = ResetEvent.legacyFixture(
             id: 1, timestamp: 1000,
-            fiveHourPeak: 50, sevenDayUtil: 30, tier: "default_claude_pro",
-            usedCredits: nil, constrainedCredits: nil, unusedCredits: nil
+            fiveHourPeak: 50, sevenDayUtil: 30
         )
         let days = SubscriptionValueCalculator.periodDays(for: .all, events: [event, event])
         #expect(days == 1.0, "Same-timestamp events should return minimum 1 day")
@@ -321,5 +314,164 @@ struct SubscriptionValueCalculatorTests {
         let limits = RateLimitTier.resolve(tierString: "unknown_tier", preferencesManager: prefs)
         #expect(limits != nil)
         #expect(limits!.monthlyPrice == nil)
+    }
+
+    // MARK: - Weekly cycles
+
+    private static let dayMs: Int64 = 86_400_000
+    private static let cutoverMs = ResetEvent.fiveHourLimitRetiredAtMs
+
+    private func weeklyEvent(id: Int64, weekIndex: Int, sevenDayUtil: Double, tier: String = "default_claude_pro") -> ResetEvent {
+        ResetEvent(
+            id: id, timestamp: Self.cutoverMs + Int64(weekIndex + 1) * 7 * Self.dayMs,
+            fiveHourPeak: nil, sevenDayUtil: sevenDayUtil, tier: tier,
+            usedCredits: nil, constrainedCredits: nil, unusedCredits: nil
+        )
+    }
+
+    private func legacyEvent(id: Int64, timestamp: Int64, fiveHourPeak: Double = 60) -> ResetEvent {
+        ResetEvent.legacyFixture(id: id, timestamp: timestamp, fiveHourPeak: fiveHourPeak, sevenDayUtil: 40)
+    }
+
+    /// Pre-cutover 5h reset recorded after a long sleep: no peak, so no stored credits.
+    private func peakNilEvent(id: Int64, timestamp: Int64) -> ResetEvent {
+        ResetEvent(
+            id: id, timestamp: timestamp,
+            fiveHourPeak: nil, sevenDayUtil: 40, tier: "default_claude_pro",
+            usedCredits: nil, constrainedCredits: nil, unusedCredits: nil
+        )
+    }
+
+    @Test("periodDays: one weekly cycle counts as 7 days in every range")
+    func periodDaysSingleWeeklyCycle() {
+        let events = [weeklyEvent(id: 1, weekIndex: 0, sevenDayUtil: 70)]
+        for range in [TimeRange.day, .week, .month, .all] {
+            #expect(SubscriptionValueCalculator.periodDays(for: range, events: events) == 7.0)
+        }
+    }
+
+    @Test("periodDays: each weekly cycle adds 7 days")
+    func periodDaysMultipleWeeklyCycles() {
+        let events = (0..<4).map { weeklyEvent(id: Int64($0 + 1), weekIndex: $0, sevenDayUtil: 50) }
+        #expect(SubscriptionValueCalculator.periodDays(for: .month, events: events) == 28.0)
+        #expect(SubscriptionValueCalculator.periodDays(for: .all, events: events) == 28.0)
+    }
+
+    @Test("periodDays: mixed range is legacy span (capped) plus 7 per weekly cycle")
+    func periodDaysMixed() {
+        let events = [
+            legacyEvent(id: 1, timestamp: Self.cutoverMs - 10 * Self.dayMs),
+            legacyEvent(id: 2, timestamp: Self.cutoverMs - 3 * Self.dayMs),
+            weeklyEvent(id: 3, weekIndex: 0, sevenDayUtil: 70),
+            weeklyEvent(id: 4, weekIndex: 1, sevenDayUtil: 70),
+        ]
+        // Legacy span = 7 days
+        #expect(SubscriptionValueCalculator.periodDays(for: .day, events: events) == 1.0 + 14.0)
+        #expect(SubscriptionValueCalculator.periodDays(for: .week, events: events) == 7.0 + 14.0)
+        #expect(SubscriptionValueCalculator.periodDays(for: .month, events: events) == 7.0 + 14.0)
+    }
+
+    @Test("periodDays: legacy events inside the first weekly cycle add no capacity")
+    func periodDaysExcludesWeeklyOverlap() {
+        let weekly = weeklyEvent(id: 3, weekIndex: 0, sevenDayUtil: 70)
+        let events = [
+            legacyEvent(id: 1, timestamp: weekly.timestamp - 12 * Self.dayMs),
+            legacyEvent(id: 2, timestamp: weekly.timestamp - 10 * Self.dayMs),
+            legacyEvent(id: 4, timestamp: weekly.timestamp - 5 * Self.dayMs),
+            weekly,
+        ]
+        // Legacy span 2 days (events 1-2) + one weekly cycle
+        #expect(SubscriptionValueCalculator.periodDays(for: .all, events: events) == 2.0 + 7.0)
+    }
+
+    @Test("periodDays: pre-cutover peak-nil events count toward legacy span, not as weekly cycles")
+    func periodDaysPreCutoverPeakNil() {
+        let events = [
+            peakNilEvent(id: 1, timestamp: Self.cutoverMs - 5 * Self.dayMs),
+            peakNilEvent(id: 2, timestamp: Self.cutoverMs - 2 * Self.dayMs),
+        ]
+        #expect(SubscriptionValueCalculator.periodDays(for: .all, events: events) == 3.0)
+    }
+
+    @Test("Weekly cycle at 70% on Pro: .week value is 70% and non-zero dollars")
+    func weeklyCycleWeekValue() {
+        let value = SubscriptionValueCalculator.calculate(
+            resetEvents: [weeklyEvent(id: 1, weekIndex: 0, sevenDayUtil: 70)],
+            creditLimits: RateLimitTier.pro.creditLimits,
+            timeRange: .week,
+            headroomAnalysisService: HeadroomAnalysisService()
+        )
+        #expect(value != nil)
+        let periodPrice = 20.0 * 7.0 / 30.44
+        #expect(abs(value!.utilizationPercent - 70.0) < 0.01)
+        #expect(abs(value!.usedCredits - 3_500_000) < 1)
+        #expect(abs(value!.totalAvailableCredits - 5_000_000) < 1)
+        #expect(abs(value!.periodPrice - periodPrice) < 0.01)
+        #expect(abs(value!.usedDollars - 0.7 * periodPrice) < 0.01)
+        #expect(value!.usedDollars > 0)
+    }
+
+    @Test("Weekly cycle in .day range shows the full cycle that ended")
+    func weeklyCycleDayValue() {
+        let value = SubscriptionValueCalculator.calculate(
+            resetEvents: [weeklyEvent(id: 1, weekIndex: 0, sevenDayUtil: 70)],
+            creditLimits: RateLimitTier.pro.creditLimits,
+            timeRange: .day,
+            headroomAnalysisService: HeadroomAnalysisService()
+        )
+        #expect(value != nil)
+        // One weekly cycle = 7 days of capacity: $20 × 7/30.44 ≈ $4.60, 70% used ≈ $3.22
+        let periodPrice = 20.0 * 7.0 / 30.44
+        #expect(abs(value!.utilizationPercent - 70.0) < 0.01)
+        #expect(abs(value!.periodPrice - periodPrice) < 0.0001)
+        #expect(abs(value!.usedDollars - 0.7 * periodPrice) < 0.0001)
+        #expect(abs(value!.usedDollars - 3.2194) < 0.001)
+    }
+
+    @Test("Multiple weekly cycles: utilization averages the cycle peaks")
+    func multipleWeeklyCyclesValue() {
+        let events = [
+            weeklyEvent(id: 1, weekIndex: 0, sevenDayUtil: 50, tier: "default_claude_max_5x"),
+            weeklyEvent(id: 2, weekIndex: 1, sevenDayUtil: 70, tier: "default_claude_max_5x"),
+            weeklyEvent(id: 3, weekIndex: 2, sevenDayUtil: 90, tier: "default_claude_max_5x"),
+        ]
+        let value = SubscriptionValueCalculator.calculate(
+            resetEvents: events,
+            creditLimits: RateLimitTier.max5x.creditLimits,
+            timeRange: .month,
+            headroomAnalysisService: HeadroomAnalysisService()
+        )
+        #expect(value != nil)
+        #expect(abs(value!.utilizationPercent - 70.0) < 0.01)
+        #expect(abs(value!.periodPrice - 100.0 * 21.0 / 30.44) < 0.01)
+    }
+
+    @Test("Weekly cycle with 0% peak yields $0 used")
+    func weeklyCycleZeroPeak() {
+        let value = SubscriptionValueCalculator.calculate(
+            resetEvents: [weeklyEvent(id: 1, weekIndex: 0, sevenDayUtil: 0)],
+            creditLimits: RateLimitTier.pro.creditLimits,
+            timeRange: .week,
+            headroomAnalysisService: HeadroomAnalysisService()
+        )
+        #expect(value != nil)
+        #expect(value!.usedDollars == 0)
+    }
+
+    @Test("Legacy events with stored credits: value uses stored used credits")
+    func legacyStoredCreditsValue() {
+        let events = [
+            legacyEvent(id: 1, timestamp: Self.cutoverMs - 8 * Self.dayMs),
+            legacyEvent(id: 2, timestamp: Self.cutoverMs - 1 * Self.dayMs),
+        ]
+        let value = SubscriptionValueCalculator.calculate(
+            resetEvents: events,
+            creditLimits: RateLimitTier.pro.creditLimits,
+            timeRange: .week,
+            headroomAnalysisService: HeadroomAnalysisService()
+        )
+        #expect(value != nil)
+        #expect(abs(value!.usedCredits - 660_000) < 1)
+        #expect(abs(value!.totalAvailableCredits - 5_000_000) < 1)
     }
 }

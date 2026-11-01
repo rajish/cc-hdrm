@@ -40,15 +40,11 @@ struct CycleUtilizationCalculatorTests {
             for dayOffset in 0..<eventsPerMonth {
                 guard let eventDate = calendar.date(byAdding: .day, value: dayOffset * 2 + 1, to: startOfMonth) else { continue }
                 let ts = Int64(eventDate.timeIntervalSince1970 * 1000)
-                events.append(ResetEvent(
+                events.append(ResetEvent.legacyFixture(
                     id: id,
                     timestamp: ts,
                     fiveHourPeak: 50.0 + Double(monthOffset),
-                    sevenDayUtil: 40.0 + Double(monthOffset),
-                    tier: "default_claude_pro",
-                    usedCredits: nil,
-                    constrainedCredits: nil,
-                    unusedCredits: nil
+                    sevenDayUtil: 40.0 + Double(monthOffset)
                 ))
                 id += 1
             }
@@ -111,15 +107,11 @@ struct CycleUtilizationCalculatorTests {
             for dayOffset in [16, 20, 25] {
                 guard let eventDate = calendar.date(byAdding: .day, value: dayOffset - 1, to: startOfMonth) else { continue }
                 let ts = Int64(eventDate.timeIntervalSince1970 * 1000)
-                events.append(ResetEvent(
+                events.append(ResetEvent.legacyFixture(
                     id: id,
                     timestamp: ts,
                     fiveHourPeak: 50.0,
-                    sevenDayUtil: 40.0,
-                    tier: "default_claude_pro",
-                    usedCredits: nil,
-                    constrainedCredits: nil,
-                    unusedCredits: nil
+                    sevenDayUtil: 40.0
                 ))
                 id += 1
             }
@@ -388,5 +380,53 @@ struct CycleUtilizationCalculatorTests {
 
         let consecutiveAnchor = anchors.first { $0.text.contains("consecutive") }
         #expect(consecutiveAnchor == nil)
+    }
+
+    // MARK: - Weekly cycles (real analysis service)
+
+    private func weeklyCycleEvents(peak: Double) -> [ResetEvent] {
+        (1...22).map { week in
+            ResetEvent(
+                id: Int64(week),
+                timestamp: ResetEvent.fiveHourLimitRetiredAtMs + Int64(week) * 7 * 86_400_000,
+                fiveHourPeak: nil, sevenDayUtil: peak, tier: "default_claude_pro",
+                usedCredits: nil, constrainedCredits: nil, unusedCredits: nil
+            )
+        }
+    }
+
+    @Test("Weekly-cycle-only history yields per-month utilization equal to the cycle peaks")
+    func weeklyCyclesUtilization() {
+        let cycles = CycleUtilizationCalculator.computeCycles(
+            resetEvents: weeklyCycleEvents(peak: 60),
+            creditLimits: proLimits,
+            billingCycleDay: nil,
+            headroomAnalysisService: HeadroomAnalysisService()
+        )
+
+        // Weekly resets Nov 7 2026 … Apr 3 2027 → six calendar months (Nov–Apr) in local time
+        #expect(cycles.count == 6)
+        let pricePerWeek = 20.0 * 7.0 / 30.44
+        for cycle in cycles {
+            #expect(abs(cycle.utilizationPercent - 60.0) < 0.01, "\(cycle.label) utilization \(cycle.utilizationPercent)")
+            let expectedDollars = 0.6 * pricePerWeek * Double(cycle.resetCount)
+            #expect(abs((cycle.dollarValue ?? -1) - expectedDollars) < 0.001, "\(cycle.label) dollars \(cycle.dollarValue ?? -1)")
+        }
+        #expect(cycles.map(\.resetCount).reduce(0, +) == 22)
+    }
+
+    @Test("Weekly-cycle-only history in percentage-only mode is non-zero")
+    func weeklyCyclesPercentageOnly() {
+        let cycles = CycleUtilizationCalculator.computeCycles(
+            resetEvents: weeklyCycleEvents(peak: 45),
+            creditLimits: nil,
+            billingCycleDay: nil,
+            headroomAnalysisService: HeadroomAnalysisService()
+        )
+
+        #expect(cycles.count == 6)
+        for cycle in cycles {
+            #expect(abs(cycle.utilizationPercent - 45.0) < 0.01)
+        }
     }
 }

@@ -31,3 +31,15 @@
 - First backfill row of each 24-hour run starts at the first poll, not at a weekly step, so its token window is partial and TPP is understated. Row is `low` confidence unless delta is 2% or more. Fix would skip the first unanchored step.
 - Integer weekly percents: a single 1% step carries up to ±100% quantisation error and a 2% step ±50%. Daily and weekly chart averages smooth this; the day view shows raw points. If medium confidence at 2% proves too optimistic, raise `mediumConfidenceDelta` to 3 in `PassiveTPPEngine` and `HistoricalTPPBackfillService`.
 - Chart plots 5h-based and weekly values on one Y axis although their magnitudes differ about 10x; old 5h-based points sit near the bottom. Separate axis or a toggle is a UX decision.
+
+## Deferred from: code review of spec-26-5-value-headroom-per-weekly-cycle (2026-11-01)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-per-weekly-cycle.md`
+  summary: `CycleUtilizationCalculator` groups events by calendar month or billing cycle before aggregating, so legacy events and the first weekly cycle that land in different groups are not de-duplicated, and a weekly cycle is assigned wholly to the month of its reset.
+  evidence: overlap exclusion (`ResetEvent` array `excludingWeeklyOverlap`) runs per call on the events it is given; the cycle chart passes per-month groups.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-per-weekly-cycle.md`
+  summary: A weekly cycle whose event tier does not resolve is skipped by `aggregateBreakdown` but still counted in `periodDays`, understating utilisation. A `.month` range can hold 5 weekly cycles (35 days of capacity and price); the weekly count is not capped by the range.
+  evidence: `periodDays` has no tier information; `SubscriptionValueCalculator.calculate` divides summed used credits by `periodDays`. Needs a tier-aware capacity input or a single shared "countable events" rule.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-per-weekly-cycle.md`
+  summary: 5h reset detection branches and `getRecentPeakUtilization` in `cc-hdrm/Services/HistoricalDataService.swift` are dead since `five_hour` is null; remove per the "remove, don't hide" principle.
+  evidence: Detection still checks `fiveHourResetsAt`/`fiveHourUtil` and queries `MAX(five_hour_util)`; many `HistoricalDataServiceTests` cover them, so removal belongs in a cleanup story (26.9 or follow-up).
