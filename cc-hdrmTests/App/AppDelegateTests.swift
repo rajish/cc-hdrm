@@ -498,4 +498,182 @@ struct AppDelegateMenuBarTests {
         #expect(label?.contains("exhausted") == true, "Accessibility should contain 'exhausted'")
         #expect(label?.contains("steep") == false, "Accessibility should NOT include slope when exhausted")
     }
+
+    // MARK: - No 5-Hour Number
+
+    @MainActor
+    private func launchedDelegate() async -> (AppDelegate, AppState)? {
+        let delegate = AppDelegate(pollingEngine: MockPollingEngine(), notificationService: MockNotificationService())
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+        try? await Task.sleep(for: .milliseconds(50))
+        guard let appState = delegate.appState else {
+            #expect(Bool(false), "AppState should exist")
+            return nil
+        }
+        appState.updateConnectionStatus(.connected)
+        return (delegate, appState)
+    }
+
+    @MainActor
+    private func sameImage(_ lhs: NSImage?, _ rhs: NSImage) -> Bool {
+        lhs?.tiffRepresentation == rhs.tiffRepresentation
+    }
+
+    @Test("no 5-hour number → weekly text, gauge with the 7d label, VoiceOver says weekly")
+    @MainActor
+    func noFiveHourShowsWeeklyWithPromotedLabel() async {
+        guard let (delegate, appState) = await launchedDelegate() else { return }
+
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 17.0, resetsAt: nil))
+        delegate.updateMenuBarDisplay()
+
+        let image = delegate.statusItem?.button?.image
+        #expect(delegate.statusItem?.button?.attributedTitle.string == "83%")
+        #expect(sameImage(image, GaugeIcon.make(headroomPercentage: 83, state: .normal, sevenDayOverlay: .promoted)))
+        #expect(delegate.statusItem?.button?.accessibilityLabel() == "cc-hdrm: Claude weekly headroom 83 percent, normal")
+    }
+
+    @Test("no 5-hour number, weekly exhausted → VoiceOver says weekly and spoken days and hours, not minutes")
+    @MainActor
+    func noFiveHourExhaustedAccessibility() async {
+        guard let (delegate, appState) = await launchedDelegate() else { return }
+
+        let resetsAt = Date().addingTimeInterval(3 * 86400 + 4 * 3600 + 120)
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 100.0, resetsAt: resetsAt))
+        delegate.updateMenuBarDisplay()
+
+        #expect(delegate.statusItem?.button?.attributedTitle.string == "\u{21BB} 3d 4h")
+        #expect(delegate.statusItem?.button?.accessibilityLabel() == "cc-hdrm: Claude weekly headroom exhausted, resets in 3 days 4 hours")
+    }
+
+    @Test("no 5-hour number, extra usage active → dollar text and extra-usage icon")
+    @MainActor
+    func noFiveHourExtraUsage() async {
+        guard let (delegate, appState) = await launchedDelegate() else { return }
+
+        appState.updateExtraUsage(enabled: true, monthlyLimit: 1000, usedCredits: 439, utilization: 43.9)
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 100.0, resetsAt: nil))
+        delegate.updateMenuBarDisplay()
+
+        #expect(delegate.statusItem?.button?.attributedTitle.string == "$5.61")
+        #expect(sameImage(delegate.statusItem?.button?.image, GaugeIcon.makeExtraUsage(remainingFraction: 0.561, utilization: 43.9)))
+    }
+
+    @Test("both windows nil while connected → em dash and disconnected VoiceOver")
+    @MainActor
+    func bothNilStaysDisconnected() async {
+        guard let (delegate, appState) = await launchedDelegate() else { return }
+
+        appState.updateWindows(fiveHour: nil, sevenDay: nil)
+        delegate.updateMenuBarDisplay()
+
+        #expect(delegate.statusItem?.button?.attributedTitle.string == "\u{2014}")
+        #expect(delegate.statusItem?.button?.accessibilityLabel() == "cc-hdrm: Claude headroom disconnected")
+    }
+
+    @Test("with a 5-hour number: 5-hour wording, dot and promoted label unchanged; promoted weekly is named")
+    @MainActor
+    func fiveHourPresentUnchanged() async {
+        guard let (delegate, appState) = await launchedDelegate() else { return }
+
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 17.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 70.0, resetsAt: nil)
+        )
+        delegate.updateMenuBarDisplay()
+        #expect(delegate.statusItem?.button?.accessibilityLabel() == "cc-hdrm: Claude headroom 83 percent, normal")
+        #expect(sameImage(delegate.statusItem?.button?.image, GaugeIcon.make(headroomPercentage: 83, state: .normal, sevenDayOverlay: .dot(.caution))))
+
+        let resetsAt = Date().addingTimeInterval(30 * 60)
+        appState.updateWindows(fiveHour: WindowState(utilization: 100.0, resetsAt: resetsAt), sevenDay: nil)
+        delegate.updateMenuBarDisplay()
+        let label = delegate.statusItem?.button?.accessibilityLabel() ?? ""
+        #expect(label.hasPrefix("cc-hdrm: Claude headroom exhausted, resets in "))
+        #expect(label.hasSuffix(" minutes"))
+
+        appState.updateCreditLimits(RateLimitTier.pro.creditLimits)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 95.0, resetsAt: nil)
+        )
+        delegate.updateMenuBarDisplay()
+        #expect(appState.displayedWindow == .sevenDay)
+        #expect(sameImage(delegate.statusItem?.button?.image, GaugeIcon.make(headroomPercentage: 5, state: .warning, sevenDayOverlay: .promoted)))
+        #expect(delegate.statusItem?.button?.accessibilityLabel() == "cc-hdrm: Claude weekly headroom 5 percent, warning")
+
+        let weeklyReset = Date().addingTimeInterval(3 * 86400)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 28.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 100.0, resetsAt: weeklyReset)
+        )
+        delegate.updateMenuBarDisplay()
+        let promotedLabel = delegate.statusItem?.button?.accessibilityLabel() ?? ""
+        #expect(promotedLabel.hasPrefix("cc-hdrm: Claude weekly headroom exhausted, resets in "))
+        #expect(promotedLabel.hasSuffix(" minutes"))
+    }
+
+    @Test("no 5-hour number → VoiceOver names weekly with a rising slope and with no reset time")
+    @MainActor
+    func noFiveHourAccessibilityBranches() async {
+        guard let (delegate, appState) = await launchedDelegate() else { return }
+
+        appState.updateSlopes(fiveHour: .flat, sevenDay: .rising)
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 42.0, resetsAt: nil))
+        delegate.updateMenuBarDisplay()
+        #expect(delegate.statusItem?.button?.accessibilityLabel() == "cc-hdrm: Claude weekly headroom 58 percent, normal, \(SlopeLevel.rising.accessibilityLabel)")
+
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 100.0, resetsAt: nil))
+        delegate.updateMenuBarDisplay()
+        #expect(delegate.statusItem?.button?.accessibilityLabel() == "cc-hdrm: Claude weekly headroom exhausted")
+    }
+
+    @Test("old weekly data while disconnected → em dash and disconnected icon")
+    @MainActor
+    func noFiveHourDisconnected() async {
+        guard let (delegate, appState) = await launchedDelegate() else { return }
+
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 17.0, resetsAt: nil))
+        appState.updateConnectionStatus(.disconnected)
+        delegate.updateMenuBarDisplay()
+
+        #expect(delegate.statusItem?.button?.attributedTitle.string == "\u{2014}")
+        #expect(sameImage(delegate.statusItem?.button?.image, GaugeIcon.makeDisconnected()))
+        #expect(delegate.statusItem?.button?.accessibilityLabel() == "cc-hdrm: Claude headroom disconnected")
+    }
+
+    @Test("flip back to a 5-hour number → the weekly label gives way to the dot")
+    @MainActor
+    func flipBackRestoresOverlay() async {
+        guard let (delegate, appState) = await launchedDelegate() else { return }
+        let weekly = WindowState(utilization: 70.0, resetsAt: nil)
+
+        appState.updateWindows(fiveHour: nil, sevenDay: weekly)
+        delegate.updateMenuBarDisplay()
+        #expect(sameImage(delegate.statusItem?.button?.image, GaugeIcon.make(headroomPercentage: 30, state: .caution, sevenDayOverlay: .promoted)))
+
+        appState.updateWindows(fiveHour: WindowState(utilization: 17.0, resetsAt: nil), sevenDay: weekly)
+        delegate.updateMenuBarDisplay()
+        #expect(sameImage(delegate.statusItem?.button?.image, GaugeIcon.make(headroomPercentage: 83, state: .normal, sevenDayOverlay: .dot(.caution))))
+    }
+
+    @Test("change tracker behind the log line moves only on a real change; both nil is no change")
+    @MainActor
+    func fiveHourChangeTracker() async {
+        guard let (delegate, appState) = await launchedDelegate() else { return }
+        let weekly = WindowState(utilization: 50.0, resetsAt: nil)
+        let fiveHour = WindowState(utilization: 20.0, resetsAt: nil)
+
+        func update(_ five: WindowState?, _ seven: WindowState?) -> Bool {
+            appState.updateWindows(fiveHour: five, sevenDay: seven)
+            delegate.updateMenuBarDisplay()
+            return delegate.previousHasNoFiveHourNumber
+        }
+
+        #expect(update(fiveHour, weekly) == false)
+        #expect(update(nil, weekly) == true)
+        #expect(update(nil, weekly) == true)
+        #expect(update(nil, nil) == true)
+        #expect(update(nil, weekly) == true)
+        #expect(update(fiveHour, weekly) == false)
+    }
 }

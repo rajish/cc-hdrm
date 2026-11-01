@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var previousDisplayedWindow: DisplayedWindow?
     private var previousShowingCountdown: Bool = false
     private var previousExtraUsageActive: Bool = false
+    private(set) var previousHasNoFiveHourNumber: Bool = false
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -516,6 +517,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// VoiceOver wording for a reset time: "3 days 4 hours" (over a day) or "2 hours 13 minutes".
+    private static func spokenCountdown(until date: Date) -> String {
+        func unit(_ value: Int, _ name: String) -> String { "\(value) \(name)\(value == 1 ? "" : "s")" }
+        let totalMinutes = max(0, Int(date.timeIntervalSinceNow / 60))
+        let days = totalMinutes / 1440
+        let hours = totalMinutes % 1440 / 60
+        let minutes = totalMinutes % 60
+        if days > 0 { return "\(unit(days, "day")) \(unit(hours, "hour"))" }
+        if hours > 0 { return "\(unit(hours, "hour")) \(unit(minutes, "minute"))" }
+        return unit(minutes, "minute")
+    }
+
     /// Updates the NSStatusItem's image, attributed title, color, weight, and accessibility
     /// based on the current AppState.
     internal func updateMenuBarDisplay() {
@@ -577,6 +590,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem?.button?.attributedTitle = NSAttributedString(string: text, attributes: attributes)
 
         // Accessibility (AC #6, #7, Story 17.1 AC #8)
+        let windowName = appState.displayedWindow == .sevenDay ? "weekly " : ""
         let accessibilityValue: String
         if state == .disconnected {
             accessibilityValue = "cc-hdrm: Claude headroom disconnected"
@@ -591,18 +605,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let window: WindowState? = appState.displayedWindow == .fiveHour ? appState.fiveHour : appState.sevenDay
             if let resetsAt = window?.resetsAt {
                 let minutes = max(0, Int(resetsAt.timeIntervalSince(Date()) / 60))
-                accessibilityValue = "cc-hdrm: Claude headroom exhausted, resets in \(minutes) minutes"
+                let resetTime = appState.hasNoFiveHourNumber ? Self.spokenCountdown(until: resetsAt) : "\(minutes) minutes"
+                accessibilityValue = "cc-hdrm: Claude \(windowName)headroom exhausted, resets in \(resetTime)"
             } else {
-                accessibilityValue = "cc-hdrm: Claude headroom exhausted"
+                accessibilityValue = "cc-hdrm: Claude \(windowName)headroom exhausted"
             }
         } else {
             let window: WindowState? = appState.displayedWindow == .fiveHour ? appState.fiveHour : appState.sevenDay
             let headroom = max(0, Int(100.0 - (window?.utilization ?? 0)))
             let slope = appState.displayedSlope
             if slope.isActionable {
-                accessibilityValue = "cc-hdrm: Claude headroom \(headroom) percent, \(state.rawValue), \(slope.accessibilityLabel)"
+                accessibilityValue = "cc-hdrm: Claude \(windowName)headroom \(headroom) percent, \(state.rawValue), \(slope.accessibilityLabel)"
             } else {
-                accessibilityValue = "cc-hdrm: Claude headroom \(headroom) percent, \(state.rawValue)"
+                accessibilityValue = "cc-hdrm: Claude \(windowName)headroom \(headroom) percent, \(state.rawValue)"
             }
         }
 
@@ -625,6 +640,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if previousShowingCountdown != currentShowingCountdown {
             let mode = currentShowingCountdown ? "countdown" : "percentage"
             Self.logger.info("Display mode switched to \(mode, privacy: .public)")
+        }
+        // Both windows nil (signed out, not yet polled) says nothing about the account
+        let hasNoFiveHourNumber = appState.hasNoFiveHourNumber
+        if (appState.fiveHour != nil || appState.sevenDay != nil) && previousHasNoFiveHourNumber != hasNoFiveHourNumber {
+            let change = hasNoFiveHourNumber ? "reports no 5-hour number" : "reports a 5-hour number"
+            Self.logger.info("Account \(change, privacy: .public)")
+            previousHasNoFiveHourNumber = hasNoFiveHourNumber
         }
         previousDisplayedWindow = currentWindow
         previousShowingCountdown = currentShowingCountdown

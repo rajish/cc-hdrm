@@ -538,3 +538,88 @@ struct PopoverView7dGaugeTests {
         #expect(detected, "Observation should detect sevenDay update read by PopoverView.body")
     }
 }
+
+// MARK: - No 5-Hour Number
+
+@Suite("PopoverView No 5-Hour Number Tests")
+@MainActor
+struct PopoverViewNoFiveHourTests {
+
+    private func makeView(fiveHour: WindowState?, sevenDay: WindowState?, withAnalytics: Bool = true) -> PopoverView {
+        let appState = AppState()
+        appState.updateOAuthState(.authenticated)
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(fiveHour: fiveHour, sevenDay: sevenDay)
+        return PopoverView(
+            appState: appState,
+            preferencesManager: MockPreferencesManager(),
+            launchAtLoginService: MockLaunchAtLoginService(),
+            historicalDataService: withAnalytics ? MockHistoricalDataService() : nil
+        )
+    }
+
+    private let weekly = WindowState(utilization: 35.0, resetsAt: Date().addingTimeInterval(86400))
+    private let fiveHour = WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(3600))
+
+    private func height(_ view: PopoverView) -> CGFloat {
+        NSHostingController(rootView: view).view.fittingSize.height
+    }
+
+    @Test("no 5-hour number → ring and sparkline hidden, analytics button shown")
+    func noFiveHourHidesRing() {
+        let view = makeView(fiveHour: nil, sevenDay: weekly)
+        #expect(!view.showsFiveHourSection)
+        #expect(view.showsAnalyticsButton)
+    }
+
+    @Test("drawn height: ring gone, button drawn only with analytics, and smaller than the sparkline")
+    func noFiveHourDrawnHeights() {
+        let ringHeight: CGFloat = 96
+        let sparklineBlockHeight: CGFloat = 56
+        let withRing = height(makeView(fiveHour: fiveHour, sevenDay: weekly))
+        let withButton = height(makeView(fiveHour: nil, sevenDay: weekly))
+        let withoutButton = height(makeView(fiveHour: nil, sevenDay: weekly, withAnalytics: false))
+
+        #expect(withRing - withoutButton > ringHeight)
+        #expect(withButton > withoutButton)
+        #expect(withButton - withoutButton < sparklineBlockHeight)
+    }
+
+    @Test("no 5-hour number and no analytics service → no dead analytics button")
+    func noFiveHourNoAnalyticsService() {
+        let view = makeView(fiveHour: nil, sevenDay: weekly, withAnalytics: false)
+        #expect(!view.showsFiveHourSection)
+        #expect(!view.showsAnalyticsButton)
+    }
+
+    @Test("5-hour number present → ring and sparkline stay, no analytics button")
+    func fiveHourPresentKeepsRing() {
+        let view = makeView(fiveHour: fiveHour, sevenDay: weekly)
+        #expect(view.showsFiveHourSection)
+        #expect(!view.showsAnalyticsButton)
+    }
+
+    @Test("both windows nil → ring stays as today")
+    func bothNilKeepsRing() {
+        let view = makeView(fiveHour: nil, sevenDay: nil)
+        #expect(view.showsFiveHourSection)
+        #expect(!view.showsAnalyticsButton)
+    }
+
+    @Test("old weekly data while disconnected → ring stays hidden through a network blip")
+    func disconnectedKeepsRingHidden() {
+        let view = makeView(fiveHour: nil, sevenDay: weekly)
+        view.appState.updateConnectionStatus(.disconnected)
+        #expect(!view.showsFiveHourSection)
+    }
+
+    @Test("state flips → ring follows the data at the next update")
+    func flipFollowsData() {
+        let view = makeView(fiveHour: fiveHour, sevenDay: weekly)
+        #expect(view.showsFiveHourSection)
+        view.appState.updateWindows(fiveHour: nil, sevenDay: weekly)
+        #expect(!view.showsFiveHourSection)
+        view.appState.updateWindows(fiveHour: fiveHour, sevenDay: weekly)
+        #expect(view.showsFiveHourSection)
+    }
+}

@@ -125,16 +125,20 @@ struct PopoverView: View {
 
     @ViewBuilder
     private var authenticatedView: some View {
-        FiveHourGaugeSection(
-            appState: appState,
-            onTap: historicalDataService != nil ? { AnalyticsWindow.shared.show(timeRange: .day) } : nil
-        )
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+        if showsFiveHourSection {
+            FiveHourGaugeSection(
+                appState: appState,
+                onTap: historicalDataService != nil ? { AnalyticsWindow.shared.show(timeRange: .day) } : nil
+            )
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+        }
 
         // 7-day gauge section (hidden entirely when sevenDay is nil per AC #6)
         if appState.sevenDay != nil {
-            Divider()
+            if showsFiveHourSection {
+                Divider()
+            }
 
             SevenDayGaugeSection(
                 appState: appState,
@@ -162,14 +166,23 @@ struct PopoverView: View {
         }
 
         // Sparkline section (Story 12.4): 24h usage trend visualization
-        Divider()
-        Sparkline(
-            data: appState.sparklineData,
-            onTap: { AnalyticsWindow.shared.toggle() },
-            isAnalyticsOpen: appState.isAnalyticsWindowOpen
-        )
-        .padding(.horizontal)
-        .padding(.vertical, 8)
+        if showsFiveHourSection {
+            Divider()
+            Sparkline(
+                data: appState.sparklineData,
+                onTap: { AnalyticsWindow.shared.toggle() },
+                isAnalyticsOpen: appState.isAnalyticsWindowOpen
+            )
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+        } else if showsAnalyticsButton {
+            // The sparkline only draws 5-hour data, so it would be a blank box here
+            Divider()
+            Button("Open analytics") { AnalyticsWindow.shared.toggle() }
+                .buttonStyle(.link)
+                .font(.caption)
+                .padding(.vertical, 8)
+        }
 
         if let statusMessage = resolvedStatusMessage {
             Divider()
@@ -193,6 +206,18 @@ struct PopoverView: View {
         PopoverFooterView(appState: appState, preferencesManager: preferencesManager, launchAtLoginService: launchAtLoginService, historicalDataService: historicalDataService, backfillService: backfillService, onThresholdChange: onThresholdChange, onPollIntervalChange: onPollIntervalChange, onClearHistory: onClearHistory, onSignOut: onSignOut)
             .padding(.horizontal)
             .padding(.vertical, 8)
+    }
+
+    /// Whether the 5-hour ring and sparkline are shown.
+    /// Internal (not private) to allow @testable import verification.
+    var showsFiveHourSection: Bool {
+        !appState.hasNoFiveHourNumber
+    }
+
+    /// Whether the analytics button replaces the sparkline.
+    /// Internal (not private) to allow @testable import verification.
+    var showsAnalyticsButton: Bool {
+        !showsFiveHourSection && historicalDataService != nil
     }
 
     /// Whether the scoped-limit gauge section is shown.

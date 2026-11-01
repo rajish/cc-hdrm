@@ -344,6 +344,35 @@ struct PollingEngineTests {
         #expect(appState.statusMessage == nil)
     }
 
+    @Test("five_hour null from the API → weekly on the menu bar, follows the data when it comes back")
+    @MainActor
+    func fiveHourNullThenPresent() async throws {
+        let json = #"{"five_hour": null, "seven_day": {"utilization": 17.0, "resets_at": null}}"#
+        let nullResponse = try JSONDecoder().decode(UsageResponse.self, from: Data(json.utf8))
+        let mockAPI = PEMockAPIClient(results: [.success(nullResponse), .success(successResponse()), .success(nullResponse)])
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: PEMockKeychainService(credentials: validCredentials()),
+            tokenRefreshService: PEMockTokenRefreshService(),
+            apiClient: mockAPI,
+            appState: appState
+        )
+
+        await engine.performPollCycle()
+        #expect(appState.connectionStatus == .connected)
+        #expect(appState.displayedWindow == .sevenDay)
+        #expect(appState.menuBarText == "83%")
+
+        await engine.performPollCycle()
+        #expect(appState.displayedWindow == .fiveHour)
+        #expect(appState.menuBarText == "82%")
+
+        await engine.performPollCycle()
+        #expect(appState.displayedWindow == .sevenDay)
+        #expect(appState.menuBarText == "83%")
+    }
+
     @Test("poll with weekly_scoped limit populates scopedLimits; next poll without clears it")
     @MainActor
     func scopedLimitPopulatedThenCleared() async {
