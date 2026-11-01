@@ -78,10 +78,10 @@ struct TierRecommendationCardTests {
         #expect(title == "Consider Pro")
     }
 
-    @Test("buildTitle returns 'Consider Max 5x' for upgrade to Max 5x")
+    @Test("buildTitle returns 'Consider Max' for upgrade to Max")
     func titleUpgrade() {
         let title = TierRecommendationCard.buildTitle(for: makeUpgrade())
-        #expect(title == "Consider Max 5x")
+        #expect(title == "Consider Max")
     }
 
     @Test("buildTitle returns 'Pro is a good fit' for goodFit on Pro")
@@ -101,7 +101,7 @@ struct TierRecommendationCardTests {
 
     @Test("buildSummary for upgrade with cost comparison returns the comparison text")
     func summaryUpgradeWithCostComparison() {
-        let comparison = "Pro ($20/mo) + $25 extra usage ($45 total) vs Max 5x ($100/mo)"
+        let comparison = "Pro ($20/mo) + $25 extra usage ($45 total) vs Max ($100/mo)"
         let recommendation = makeUpgrade(costComparison: comparison)
         let summary = TierRecommendationCard.buildSummary(for: recommendation)
         #expect(summary == comparison)

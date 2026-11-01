@@ -57,6 +57,11 @@ extension Array where Element == ResetEvent {
         return Swift.max(0, last.timestamp - first.timestamp - coveredMs)
     }
 
+    /// Whether the latest event that counts is a weekly cycle, so the account last reported no 5-hour number.
+    var endsInWeeklyCycle: Bool {
+        excludingWeeklyOverlap().last?.isWeeklyCycle == true
+    }
+
     /// Whether the events that count are all weekly cycles, so the range has no 5-hour bands to show.
     var isOnlyWeeklyCycles: Bool {
         let counted = excludingWeeklyOverlap()

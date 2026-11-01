@@ -15,13 +15,13 @@ struct PatternFindingTests {
 
     @Test("chronicOverpaying title")
     func chronicOverpayingTitle() {
-        let finding = PatternFinding.chronicOverpaying(currentTier: "Max 5x", recommendedTier: "Pro", monthlySavings: 80.0)
+        let finding = PatternFinding.chronicOverpaying(currentTier: "Max", recommendedTier: "Pro", monthlySavings: 80.0)
         #expect(finding.title == "Tier recommendation")
     }
 
     @Test("chronicUnderpowering title")
     func chronicUnderpoweringTitle() {
-        let finding = PatternFinding.chronicUnderpowering(rateLimitCount: 5, currentTier: "Pro", suggestedTier: "Max 5x")
+        let finding = PatternFinding.chronicUnderpowering(rateLimitCount: 5, currentTier: "Pro", suggestedTier: "Max")
         #expect(finding.title == "Tier recommendation")
     }
 
@@ -33,13 +33,13 @@ struct PatternFindingTests {
 
     @Test("extraUsageOverflow title")
     func extraUsageOverflowTitle() {
-        let finding = PatternFinding.extraUsageOverflow(avgExtraSpend: 47.0, recommendedTier: "Max 5x", estimatedSavings: 67.0)
+        let finding = PatternFinding.extraUsageOverflow(avgExtraSpend: 47.0, recommendedTier: "Max", estimatedSavings: 67.0)
         #expect(finding.title == "Extra usage alert")
     }
 
     @Test("persistentExtraUsage title")
     func persistentExtraUsageTitle() {
-        let finding = PatternFinding.persistentExtraUsage(avgMonthlyExtra: 15.0, basePrice: 20.0, recommendedTier: "Max 5x")
+        let finding = PatternFinding.persistentExtraUsage(avgMonthlyExtra: 15.0, basePrice: 20.0, recommendedTier: "Max")
         #expect(finding.title == "Extra usage alert")
     }
 
@@ -53,9 +53,16 @@ struct PatternFindingTests {
         #expect(summary.contains("$20/mo"))
     }
 
+    @Test("forgottenSubscription summary states no price when the plan cost is unknown")
+    func forgottenSubscriptionSummaryWithoutCost() {
+        let summary = PatternFinding.forgottenSubscription(weeks: 3, avgUtilization: 3.0, monthlyCost: 0).summary
+        #expect(summary == "You've used less than 5% of your Claude capacity for 3 weeks. That's ~3% utilization. Worth reviewing?")
+        #expect(!summary.contains("$"))
+    }
+
     @Test("chronicOverpaying summary includes recommended tier and savings")
     func chronicOverpayingSummary() {
-        let finding = PatternFinding.chronicOverpaying(currentTier: "Max 5x", recommendedTier: "Pro", monthlySavings: 80.0)
+        let finding = PatternFinding.chronicOverpaying(currentTier: "Max", recommendedTier: "Pro", monthlySavings: 80.0)
         let summary = finding.summary
         #expect(summary.contains("Pro"))
         #expect(summary.contains("$80/mo"))
@@ -63,10 +70,10 @@ struct PatternFindingTests {
 
     @Test("chronicUnderpowering summary includes rate-limit count and suggested tier")
     func chronicUnderpoweringSummary() {
-        let finding = PatternFinding.chronicUnderpowering(rateLimitCount: 5, currentTier: "Pro", suggestedTier: "Max 5x")
+        let finding = PatternFinding.chronicUnderpowering(rateLimitCount: 5, currentTier: "Pro", suggestedTier: "Max")
         let summary = finding.summary
         #expect(summary.contains("5 times"))
-        #expect(summary.contains("Max 5x"))
+        #expect(summary.contains("Max"))
     }
 
     @Test("usageDecay summary includes utilization change")
@@ -80,16 +87,16 @@ struct PatternFindingTests {
 
     @Test("extraUsageOverflow summary includes spend and savings")
     func extraUsageOverflowSummary() {
-        let finding = PatternFinding.extraUsageOverflow(avgExtraSpend: 47.0, recommendedTier: "Max 5x", estimatedSavings: 67.0)
+        let finding = PatternFinding.extraUsageOverflow(avgExtraSpend: 47.0, recommendedTier: "Max", estimatedSavings: 67.0)
         let summary = finding.summary
         #expect(summary.contains("$47/mo"))
-        #expect(summary.contains("Max 5x"))
+        #expect(summary.contains("Max"))
         #expect(summary.contains("$67/mo"))
     }
 
     @Test("persistentExtraUsage summary includes percentage of base")
     func persistentExtraUsageSummary() {
-        let finding = PatternFinding.persistentExtraUsage(avgMonthlyExtra: 15.0, basePrice: 20.0, recommendedTier: "Max 5x")
+        let finding = PatternFinding.persistentExtraUsage(avgMonthlyExtra: 15.0, basePrice: 20.0, recommendedTier: "Max")
         let summary = finding.summary
         #expect(summary.contains("75%"))
         #expect(summary.contains("$15"))
@@ -120,11 +127,11 @@ struct PatternFindingTests {
     func cooldownKeyUniqueness() {
         let findings: [PatternFinding] = [
             .forgottenSubscription(weeks: 3, avgUtilization: 2.5, monthlyCost: 20.0),
-            .chronicOverpaying(currentTier: "Max 5x", recommendedTier: "Pro", monthlySavings: 80.0),
-            .chronicUnderpowering(rateLimitCount: 5, currentTier: "Pro", suggestedTier: "Max 5x"),
+            .chronicOverpaying(currentTier: "Max", recommendedTier: "Pro", monthlySavings: 80.0),
+            .chronicUnderpowering(rateLimitCount: 5, currentTier: "Pro", suggestedTier: "Max"),
             .usageDecay(currentUtil: 30.0, threeMonthAgoUtil: 70.0),
-            .extraUsageOverflow(avgExtraSpend: 47.0, recommendedTier: "Max 5x", estimatedSavings: 67.0),
-            .persistentExtraUsage(avgMonthlyExtra: 15.0, basePrice: 20.0, recommendedTier: "Max 5x"),
+            .extraUsageOverflow(avgExtraSpend: 47.0, recommendedTier: "Max", estimatedSavings: 67.0),
+            .persistentExtraUsage(avgMonthlyExtra: 15.0, basePrice: 20.0, recommendedTier: "Max"),
         ]
         let keys = Set(findings.map(\.cooldownKey))
         #expect(keys.count == findings.count)

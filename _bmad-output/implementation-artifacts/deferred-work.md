@@ -179,3 +179,34 @@ All need a weekly cycle on an unmapped tier, or an account that changed state or
 - `SubscriptionValueCalculator.calculate` divides stored weekly credits by the current tier's capacity, so a weekly cycle recorded before a plan change is scaled. 5-hour aggregation already uses the current tier's capacity.
 - `HistoricalDataService` classification ignores a poll inside the 5-hour lookback that has a 5-hour reset time but no utilization. This shape has not been observed.
 
+
+## Deferred from: Story 26.6 (2026-11-01)
+
+The real tier string for verified Ultra accounts is still not confirmed, so the "Re-check" note on the Story 26.5 list above still stands.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-6-tier-advice-patterns-plan-names.md`
+  summary: A forgotten-subscription finding on an unknown tier with no custom price reads "That's $0/mo".
+  evidence: `SubscriptionPatternDetector.detectForgottenSubscription` falls back to a cost of 0, and `PatternFinding.summary` prints it. It is 1.6.0 behaviour, but accounts with no 5-hour number can now reach it.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-6-tier-advice-patterns-plan-names.md`
+  summary: An unknown `organization_type` is dropped without being logged.
+  evidence: `ProfileResponse.Organization.subscriptionTypeDisplay` returns nil for anything other than pro, max, enterprise or team. The value Ultra accounts report is unconfirmed, and the footer falls back to the stored type.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-6-tier-advice-patterns-plan-names.md`
+  summary: Advice and patterns scale old percentages by the current plan's credits, so a plan change distorts peaks and decay.
+  evidence: `TierRecommendationService.calculatePeakCredits` and `SubscriptionPatternDetector.detectChronicOverpaying` use only the current tier. 1.6.0 does the same for 5-hour peaks. A Pro account at 90% that moves to Max reads as 90% of Max.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-6-tier-advice-patterns-plan-names.md`
+  summary: Usage decay treats months with no weekly cycle as if they were not there.
+  evidence: `SubscriptionPatternDetector.monthlyWeeklyCyclePeaks` averages recorded cycles only, and an idle account may record none. Months either side of a gap compare as adjacent. 1.6.0 rollups have the same gap behaviour.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-6-tier-advice-patterns-plan-names.md`
+  summary: The week an account loses its number can read as low for the forgotten-subscription finding.
+  evidence: `detectForgottenSubscription` uses the 5-hour average for any week holding a 5-hour value, which keeps 1.6.0 results when one poll is missing its number. A few low polls followed by heavy weekly use in that same week read as low, until the next week.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-6-tier-advice-patterns-plan-names.md`
+  summary: An Ultra account that still has a 5-hour number is compared against an 11M limit, which may not match its temporary limit.
+  evidence: `RateLimitTier.max20x.fiveHourCredits` applies on the 1.6.0 path, which must not change. The size of the temporary limit is not published.
+
+## Deferred from: code review of spec-26-6-tier-advice-patterns-plan-names (2026-11-01)
+
+The `$0/mo` forgotten-subscription item above was fixed in this review: the summary now omits the price when it is unknown.
+
+- **Maintainer decision.** The whole-week downgrade bound is safe but almost never lets a downgrade through. It compares one 7-day total with a single 5-hour limit, so only an Ultra account at about 3.3% of its weekly allowance (about 0.55% for Pro) earns "Consider Max". That is already the forgotten-subscription range. Accounts at 5% to 40% of Ultra's weekly allowance fit Max's weekly allowance and get "Ultra is a good fit", which asserts more than the data can show. Options: (1) take the largest rise in weekly use across any 5-hour stretch of stored polls and compare it with the cheaper plan's 5-hour credits; (2) judge by weekly use only and word the card as "Max's 5-hour limit cannot be checked"; (3) keep the strict bound. Option 1 uses data already stored.
+- A numbered account whose history holds one weekly cycle (for example a short gap in the 5-hour number) has every cheaper plan blocked by that cycle for the whole selected range, even though 5-hour peaks now exist. 1.6.0 would have judged it from the 5-hour peaks. Safe, but stricter than 1.6.0 for that account.
+- The footer shows the raw lowercase `max` for a consumer account whose tier string is unknown. That is likely the state of a verified Ultra account until its real string is confirmed.

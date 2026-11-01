@@ -38,7 +38,7 @@ struct PatternNotificationServiceTests {
     @Test("chronicOverpaying delivers notification with correct text")
     func chronicOverpayingNotification() async {
         let sut = makeSUT()
-        let finding = PatternFinding.chronicOverpaying(currentTier: "Max 5x", recommendedTier: "Pro", monthlySavings: 80.0)
+        let finding = PatternFinding.chronicOverpaying(currentTier: "Max", recommendedTier: "Pro", monthlySavings: 80.0)
 
         await sut.processFindings([finding])
 
@@ -52,7 +52,7 @@ struct PatternNotificationServiceTests {
     @Test("chronicUnderpowering delivers notification with correct text")
     func chronicUnderpoweringNotification() async {
         let sut = makeSUT()
-        let finding = PatternFinding.chronicUnderpowering(rateLimitCount: 8, currentTier: "Pro", suggestedTier: "Max 5x")
+        let finding = PatternFinding.chronicUnderpowering(rateLimitCount: 8, currentTier: "Pro", suggestedTier: "Max")
 
         await sut.processFindings([finding])
 
@@ -60,7 +60,7 @@ struct PatternNotificationServiceTests {
         let content = spy.addedRequests[0].content
         #expect(content.title == "Tier recommendation")
         #expect(content.body.contains("8 times"))
-        #expect(content.body.contains("Max 5x"))
+        #expect(content.body.contains("Max"))
     }
 
     // MARK: - Cooldown (AC: 4)
@@ -95,7 +95,7 @@ struct PatternNotificationServiceTests {
     @Test("cooldown timestamp updated after notification")
     func cooldownUpdatedAfterNotification() async {
         let sut = makeSUT()
-        let finding = PatternFinding.chronicOverpaying(currentTier: "Max 5x", recommendedTier: "Pro", monthlySavings: 80.0)
+        let finding = PatternFinding.chronicOverpaying(currentTier: "Max", recommendedTier: "Pro", monthlySavings: 80.0)
 
         await sut.processFindings([finding])
 
@@ -138,33 +138,33 @@ struct PatternNotificationServiceTests {
     @Test("extraUsageOverflow triggers notification with correct text")
     func extraUsageOverflowNotification() async {
         let sut = makeSUT()
-        let finding = PatternFinding.extraUsageOverflow(avgExtraSpend: 50.0, recommendedTier: "Max 5x", estimatedSavings: 30.0)
+        let finding = PatternFinding.extraUsageOverflow(avgExtraSpend: 50.0, recommendedTier: "Max", estimatedSavings: 30.0)
 
         await sut.processFindings([finding])
         #expect(spy.addedRequests.count == 1)
         let content = spy.addedRequests[0].content
         #expect(content.title == "Extra usage alert")
         #expect(content.body.contains("$50"))
-        #expect(content.body.contains("Max 5x"))
+        #expect(content.body.contains("Max"))
     }
 
     @Test("persistentExtraUsage triggers notification with correct text")
     func persistentExtraUsageNotification() async {
         let sut = makeSUT()
-        let finding = PatternFinding.persistentExtraUsage(avgMonthlyExtra: 40.0, basePrice: 100.0, recommendedTier: "Max 5x")
+        let finding = PatternFinding.persistentExtraUsage(avgMonthlyExtra: 40.0, basePrice: 100.0, recommendedTier: "Max")
 
         await sut.processFindings([finding])
         #expect(spy.addedRequests.count == 1)
         let content = spy.addedRequests[0].content
         #expect(content.title == "Extra usage alert")
         #expect(content.body.contains("40%"))
-        #expect(content.body.contains("Max 5x"))
+        #expect(content.body.contains("Max"))
     }
 
     @Test("extraUsageOverflow cooldown prevents duplicate within 30 days")
     func extraUsageOverflowCooldown() async {
         let sut = makeSUT()
-        let finding = PatternFinding.extraUsageOverflow(avgExtraSpend: 50.0, recommendedTier: "Max 5x", estimatedSavings: 30.0)
+        let finding = PatternFinding.extraUsageOverflow(avgExtraSpend: 50.0, recommendedTier: "Max", estimatedSavings: 30.0)
 
         await sut.processFindings([finding])
         #expect(spy.addedRequests.count == 1)
