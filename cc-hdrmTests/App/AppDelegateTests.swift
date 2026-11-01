@@ -612,7 +612,7 @@ struct AppDelegateMenuBarTests {
         #expect(promotedLabel.hasSuffix(" minutes"))
     }
 
-    @Test("no 5-hour number → VoiceOver names weekly with a rising slope and with no reset time")
+    @Test("no 5-hour number → VoiceOver names weekly, ignores a rising slope, and handles no reset time")
     @MainActor
     func noFiveHourAccessibilityBranches() async {
         guard let (delegate, appState) = await launchedDelegate() else { return }
@@ -620,11 +620,76 @@ struct AppDelegateMenuBarTests {
         appState.updateSlopes(fiveHour: .flat, sevenDay: .rising)
         appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 42.0, resetsAt: nil))
         delegate.updateMenuBarDisplay()
-        #expect(delegate.statusItem?.button?.accessibilityLabel() == "cc-hdrm: Claude weekly headroom 58 percent, normal, \(SlopeLevel.rising.accessibilityLabel)")
+        #expect(delegate.statusItem?.button?.accessibilityLabel() == "cc-hdrm: Claude weekly headroom 58 percent, normal")
 
         appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 100.0, resetsAt: nil))
         delegate.updateMenuBarDisplay()
         #expect(delegate.statusItem?.button?.accessibilityLabel() == "cc-hdrm: Claude weekly headroom exhausted")
+    }
+
+    @Test("no 5-hour number → menu bar VoiceOver says ahead of pace only with the arrow, without a clock time")
+    @MainActor
+    func noFiveHourPaceAccessibility() async {
+        guard let (delegate, appState) = await launchedDelegate() else { return }
+
+        appState.updateSlopes(fiveHour: .flat, sevenDay: .rising)
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 60.0, resetsAt: Date().addingTimeInterval(4 * 86400)))
+        delegate.updateMenuBarDisplay()
+        #expect(delegate.statusItem?.button?.attributedTitle.string == "40% \u{2197}")
+        #expect(delegate.statusItem?.button?.accessibilityLabel() == "cc-hdrm: Claude weekly headroom 40 percent, caution, ahead of pace")
+
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(2 * 86400)))
+        delegate.updateMenuBarDisplay()
+        #expect(delegate.statusItem?.button?.attributedTitle.string == "80%")
+        #expect(delegate.statusItem?.button?.accessibilityLabel() == "cc-hdrm: Claude weekly headroom 80 percent, normal")
+    }
+
+    @Test("promoted weekly with a 5-hour number → slope in text and VoiceOver, no pace wording")
+    @MainActor
+    func promotedWeeklyKeepsSlopeAccessibility() async {
+        guard let (delegate, appState) = await launchedDelegate() else { return }
+
+        appState.updateSlopes(fiveHour: .flat, sevenDay: .rising)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20.0, resetsAt: nil),
+            sevenDay: WindowState(utilization: 85.0, resetsAt: Date().addingTimeInterval(4 * 86400))
+        )
+        delegate.updateMenuBarDisplay()
+
+        #expect(appState.displayedWindow == .sevenDay)
+        #expect(delegate.statusItem?.button?.attributedTitle.string == "15% \(SlopeLevel.rising.arrow)")
+        #expect(delegate.statusItem?.button?.accessibilityLabel() == "cc-hdrm: Claude weekly headroom 15 percent, warning, \(SlopeLevel.rising.accessibilityLabel)")
+        #expect(!delegate.previousShowingPaceArrow)
+    }
+
+    @Test("pace arrow tracker changes only with the pace arrow, never for a slope arrow")
+    @MainActor
+    func paceArrowChangeTracker() async {
+        guard let (delegate, appState) = await launchedDelegate() else { return }
+        let ahead = WindowState(utilization: 60.0, resetsAt: Date().addingTimeInterval(4 * 86400))
+        let under = WindowState(utilization: 20.0, resetsAt: Date().addingTimeInterval(2 * 86400))
+        let fiveHour = WindowState(utilization: 20.0, resetsAt: nil)
+        appState.updateSlopes(fiveHour: .rising, sevenDay: .rising)
+
+        func update(_ five: WindowState?, _ seven: WindowState?) -> Bool {
+            appState.updateWindows(fiveHour: five, sevenDay: seven)
+            delegate.updateMenuBarDisplay()
+            return delegate.previousShowingPaceArrow
+        }
+
+        #expect(update(fiveHour, ahead) == false)
+        #expect(update(nil, under) == false)
+        #expect(update(nil, ahead) == true)
+        #expect(update(nil, ahead) == true)
+
+        appState.updateConnectionStatus(.disconnected)
+        delegate.updateMenuBarDisplay()
+        #expect(delegate.previousShowingPaceArrow == false)
+
+        appState.updateConnectionStatus(.connected)
+        delegate.updateMenuBarDisplay()
+        #expect(delegate.previousShowingPaceArrow == true)
+        #expect(update(fiveHour, ahead) == false)
     }
 
     @Test("old weekly data while disconnected → em dash and disconnected icon")

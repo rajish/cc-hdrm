@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var previousShowingCountdown: Bool = false
     private var previousExtraUsageActive: Bool = false
     private(set) var previousHasNoFiveHourNumber: Bool = false
+    private(set) var previousShowingPaceArrow: Bool = false
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -614,7 +615,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let window: WindowState? = appState.displayedWindow == .fiveHour ? appState.fiveHour : appState.sevenDay
             let headroom = max(0, Int(100.0 - (window?.utilization ?? 0)))
             let slope = appState.displayedSlope
-            if slope.isActionable {
+            if appState.hasNoFiveHourNumber {
+                // No run-out time: it moves with the clock and would re-announce on nearly every poll
+                let pace = appState.weeklyPace?.runOut != nil ? ", ahead of pace" : ""
+                accessibilityValue = "cc-hdrm: Claude \(windowName)headroom \(headroom) percent, \(state.rawValue)\(pace)"
+            } else if slope.isActionable {
                 accessibilityValue = "cc-hdrm: Claude \(windowName)headroom \(headroom) percent, \(state.rawValue), \(slope.accessibilityLabel)"
             } else {
                 accessibilityValue = "cc-hdrm: Claude \(windowName)headroom \(headroom) percent, \(state.rawValue)"
@@ -647,6 +652,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let change = hasNoFiveHourNumber ? "reports no 5-hour number" : "reports a 5-hour number"
             Self.logger.info("Account \(change, privacy: .public)")
             previousHasNoFiveHourNumber = hasNoFiveHourNumber
+        }
+        let pace = appState.weeklyPace
+        let showingPaceArrow = pace?.runOut != nil
+        if previousShowingPaceArrow != showingPaceArrow {
+            if let pace, let runOut = pace.runOut {
+                let paceDelta = String(format: "%.1f", pace.paceDelta)
+                Self.logger.info("Weekly pace arrow shown: paceDelta=\(paceDelta, privacy: .public) runOut=\(runOut.ISO8601Format(), privacy: .public)")
+            } else {
+                Self.logger.info("Weekly pace arrow hidden")
+            }
+            previousShowingPaceArrow = showingPaceArrow
         }
         previousDisplayedWindow = currentWindow
         previousShowingCountdown = currentShowingCountdown

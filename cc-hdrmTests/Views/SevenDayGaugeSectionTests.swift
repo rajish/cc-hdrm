@@ -252,7 +252,7 @@ struct SevenDayGaugeSectionTests {
     @Test("no 5-hour number → quotas line and its VoiceOver text are gone, section is shorter")
     @MainActor
     func noFiveHourHidesQuotas() {
-        let sevenDay = WindowState(utilization: 70.0, resetsAt: Date().addingTimeInterval(86400))
+        let sevenDay = WindowState(utilization: 70.0, resetsAt: nil)
         let appState = AppState()
         appState.updateConnectionStatus(.connected)
         appState.updateCreditLimits(RateLimitTier.pro.creditLimits)
@@ -265,5 +265,107 @@ struct SevenDayGaugeSectionTests {
         let heightWithoutQuotas = NSHostingController(rootView: SevenDayGaugeSection(appState: appState)).view.fittingSize.height
         #expect(!SevenDayGaugeSection(appState: appState).combinedAccessibilityLabel.contains("quotas"))
         #expect(heightWithoutQuotas < heightWithQuotas)
+    }
+}
+
+@Suite("SevenDayGaugeSection Pace Line")
+@MainActor
+struct SevenDayGaugeSectionPaceTests {
+
+    private let day: TimeInterval = 86400
+
+    private func section(utilization: Double, resetsIn: TimeInterval?, slope: SlopeLevel = .rising) -> SevenDayGaugeSection {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        appState.updateSlopes(fiveHour: .flat, sevenDay: slope)
+        appState.updateWindows(
+            fiveHour: nil,
+            sevenDay: WindowState(utilization: utilization, resetsAt: resetsIn.map { Date().addingTimeInterval($0) })
+        )
+        return SevenDayGaugeSection(appState: appState)
+    }
+
+    private func height(_ section: SevenDayGaugeSection) -> CGFloat {
+        NSHostingController(rootView: section).view.fittingSize.height
+    }
+
+    @Test("ahead of pace → line with run-out, VoiceOver reads it, slope gone")
+    func aheadOfPaceLine() throws {
+        let section = section(utilization: 60, resetsIn: 4 * day)
+        let pace = try #require(section.appState.weeklyPace)
+        #expect(section.paceLineText?.hasPrefix("Ahead of pace \u{2014} runs out ~") == true)
+        #expect(section.combinedAccessibilityLabel.hasPrefix("7-day headroom: 40 percent, \(pace.accessibilityText), resets in "))
+        #expect(section.combinedAccessibilityLabel.contains("ahead of pace, runs out around "))
+        #expect(!section.combinedAccessibilityLabel.contains(SlopeLevel.rising.accessibilityLabel))
+        #expect(section.ringSlopeLevel == nil)
+    }
+
+    @Test("under an even pace → \"On pace\", VoiceOver reads it")
+    func onPaceLine() {
+        let section = section(utilization: 40, resetsIn: 3.5 * day)
+        #expect(section.paceLineText == "On pace")
+        #expect(section.combinedAccessibilityLabel.hasPrefix("7-day headroom: 60 percent, on pace, resets in "))
+        #expect(section.ringSlopeLevel == nil)
+    }
+
+    @Test("missing resets_at → no line, no pace or slope in VoiceOver")
+    func missingResetsAtHasNoPaceLine() {
+        let section = section(utilization: 60, resetsIn: nil)
+        #expect(section.paceLineText == nil)
+        #expect(section.combinedAccessibilityLabel == "7-day headroom: 40 percent")
+        #expect(section.ringSlopeLevel == nil)
+    }
+
+    @Test("exhausted → no line")
+    func exhaustedHasNoPaceLine() {
+        let section = section(utilization: 100, resetsIn: day)
+        #expect(section.paceLineText == nil)
+        #expect(!section.combinedAccessibilityLabel.contains("pace"))
+    }
+
+    @Test("outage with old weekly data → no line and no slope, section gets shorter")
+    func outageHasNoPaceOrSlope() {
+        let section = section(utilization: 40, resetsIn: 3.5 * day)
+        let heightWithLine = height(section)
+
+        section.appState.updateConnectionStatus(.disconnected)
+        #expect(section.paceLineText == nil)
+        #expect(section.ringSlopeLevel == nil)
+        #expect(section.combinedAccessibilityLabel.hasPrefix("7-day headroom: 60 percent, resets in "))
+        #expect(height(section) < heightWithLine)
+    }
+
+    @Test("with a 5-hour number, including promoted weekly → slope stays, no line")
+    func fiveHourNumberKeepsSlope() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        appState.updateSlopes(fiveHour: .flat, sevenDay: .rising)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 20, resetsAt: nil),
+            sevenDay: WindowState(utilization: 85, resetsAt: Date().addingTimeInterval(4 * day))
+        )
+        let section = SevenDayGaugeSection(appState: appState)
+
+        #expect(appState.displayedWindow == .sevenDay)
+        #expect(section.paceLineText == nil)
+        #expect(section.ringSlopeLevel == .rising)
+        #expect(section.combinedAccessibilityLabel.hasPrefix("7-day headroom: 15 percent, \(SlopeLevel.rising.accessibilityLabel), resets in "))
+    }
+
+    @Test("number → none → number at the next update: line and slope swap each time")
+    func flipSwapsLineAndSlope() {
+        let section = section(utilization: 60, resetsIn: 4 * day)
+        let appState = section.appState
+        let weekly = appState.sevenDay
+        let fiveHour = WindowState(utilization: 20, resetsAt: nil)
+        #expect(section.paceLineText != nil)
+
+        appState.updateWindows(fiveHour: fiveHour, sevenDay: weekly)
+        #expect(section.paceLineText == nil)
+        #expect(section.ringSlopeLevel == .rising)
+
+        appState.updateWindows(fiveHour: nil, sevenDay: weekly)
+        #expect(section.paceLineText != nil)
+        #expect(section.ringSlopeLevel == nil)
     }
 }

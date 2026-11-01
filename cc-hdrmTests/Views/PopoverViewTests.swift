@@ -585,6 +585,19 @@ struct PopoverViewNoFiveHourTests {
         #expect(withButton - withoutButton < sparklineBlockHeight)
     }
 
+    @Test("the long ahead-of-pace line wraps instead of widening the popover")
+    func aheadOfPaceKeepsPopoverWidth() {
+        let ahead = makeView(fiveHour: nil, sevenDay: WindowState(utilization: 60.0, resetsAt: Date().addingTimeInterval(4 * 86400)))
+        let onPace = makeView(fiveHour: nil, sevenDay: weekly)
+        #expect(ahead.appState.weeklyPace?.runOut != nil)
+        #expect(onPace.appState.weeklyPace?.runOut == nil)
+
+        let aheadSize = NSHostingController(rootView: ahead).view.fittingSize
+        let onPaceSize = NSHostingController(rootView: onPace).view.fittingSize
+        #expect(aheadSize.width == onPaceSize.width)
+        #expect(aheadSize.height > onPaceSize.height)
+    }
+
     @Test("no 5-hour number and no analytics service → no dead analytics button")
     func noFiveHourNoAnalyticsService() {
         let view = makeView(fiveHour: nil, sevenDay: weekly, withAnalytics: false)

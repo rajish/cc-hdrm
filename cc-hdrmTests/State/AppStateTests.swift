@@ -271,7 +271,7 @@ struct AppStateTests {
         #expect(state.menuBarText == "50%")
     }
 
-    @Test("nil fiveHour → arrow comes from weekly slope, none when exhausted")
+    @Test("nil fiveHour → weekly slope draws no arrow, with or without exhaustion")
     @MainActor
     func slopeWithNilFiveHour() {
         let state = AppState()
@@ -279,7 +279,7 @@ struct AppStateTests {
         state.updateSlopes(fiveHour: .flat, sevenDay: .rising)
         state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 42.0, resetsAt: nil))
         #expect(state.displayedSlope == .rising)
-        #expect(state.menuBarText == "58% \(SlopeLevel.rising.arrow)")
+        #expect(state.menuBarText == "58%")
 
         state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 100.0, resetsAt: nil))
         #expect(state.menuBarText == "0%")

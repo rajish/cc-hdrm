@@ -135,6 +135,15 @@ final class AppState {
         fiveHour == nil && sevenDay != nil
     }
 
+    /// Weekly pace for a connected account with no 5-hour number, recomputed on every read.
+    /// Nil otherwise, and when the reset time is unknown or the allowance is exhausted.
+    var weeklyPace: WeeklyPace? {
+        guard connectionStatus == .connected, hasNoFiveHourNumber, let sevenDay else { return nil }
+        // Pace moves with the clock, so register with withObservationTracking
+        _ = countdownTick
+        return WeeklyPace(utilization: sevenDay.utilization, resetsAt: sevenDay.resetsAt, now: Date())
+    }
+
     /// How many full 5h quotas remain in the 7d budget. Nil when credit limits are unavailable,
     /// when `fiveHourCredits` is zero (defensive guard — prevents inf propagation),
     /// or when the account has no 5-hour number.
@@ -246,6 +255,7 @@ final class AppState {
 
     /// Derived menu bar text: headroom percentage, countdown, or em dash when disconnected.
     /// Appends slope arrow when slope is actionable (rising/steep) and not in exhausted state.
+    /// With no 5-hour number, the arrow means run-out is projected before the weekly reset.
     /// Note: Sparkle icon removed — gauge icon now provides the visual indicator.
     var menuBarText: String {
         if menuBarHeadroomState == .disconnected {
@@ -266,6 +276,11 @@ final class AppState {
         }
 
         let headroom = max(0, Int(100.0 - (window?.utilization ?? 0)))
+
+        if hasNoFiveHourNumber {
+            return weeklyPace?.runOut != nil ? "\(headroom)% \u{2197}" : "\(headroom)%" // ↗
+        }
+
         let slope = displayedSlope
 
         // Append slope arrow only when actionable (rising/steep) AND not exhausted

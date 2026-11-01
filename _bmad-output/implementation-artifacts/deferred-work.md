@@ -67,3 +67,18 @@ Both are older drift in text restored unchanged. Neither blocks Epic 26.
 
 - `_bmad-output/planning-artifacts/architecture.md` API Response Mapping example lists `sevenDaySonnet` and omits `limits`. `cc-hdrm/Models/UsageResponse.swift` is the source of truth.
 - `_bmad-output/planning-artifacts/ux-design-specification.md` "Popover structure" says the gauges sit side by side, while the chosen direction in the same file stacks them vertically.
+
+## Deferred from: build of Story 26.2 (2026-11-01)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-2-weekly-pace-no-five-hour.md`
+  summary: Decide whether the weekly arrow needs a margin around even pace.
+  evidence: After hour 4 the arrow shows exactly when usage is over even pace, so an even spender sees it after each 1% step and it clears about 1.7 hours later.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-2-weekly-pace-no-five-hour.md`
+  summary: Decide what the pace line says for heavy use in the first 4 hours of the week.
+  evidence: `cc-hdrm/Models/WeeklyPace.swift` gives no run-out before hour 4, so 90% used after 3 hours reads "On pace".
+
+## Deferred from: code review of spec-26-2-weekly-pace-no-five-hour (2026-11-01)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-2-weekly-pace-no-five-hour.md`
+  summary: Confirm that only a missing `five_hour` object means "no 5-hour number", on a real Pro, Max or unverified Ultra response.
+  evidence: `cc-hdrm/Services/PollingEngine.swift` turns `five_hour: {"utilization": null}` into a 0% window, so the account counts as having a number. An idle account that reports `five_hour: null` would flip to weekly pace until its next 5-hour window opens. Only one real response has been seen.

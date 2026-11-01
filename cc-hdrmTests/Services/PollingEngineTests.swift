@@ -373,6 +373,35 @@ struct PollingEngineTests {
         #expect(appState.menuBarText == "83%")
     }
 
+    @Test("five_hour null with a reset time → pace at each poll; a returning number turns it off")
+    @MainActor
+    func weeklyPaceFollowsThePolls() async throws {
+        let resetsAt = ISO8601DateFormatter().string(from: Date().addingTimeInterval(4 * 86400))
+        let json = #"{"five_hour": null, "seven_day": {"utilization": 60.0, "resets_at": "\#(resetsAt)"}}"#
+        let nullResponse = try JSONDecoder().decode(UsageResponse.self, from: Data(json.utf8))
+        let mockAPI = PEMockAPIClient(results: [.success(successResponse()), .success(nullResponse), .success(successResponse())])
+        let appState = AppState()
+
+        let engine = PollingEngine(
+            keychainService: PEMockKeychainService(credentials: validCredentials()),
+            tokenRefreshService: PEMockTokenRefreshService(),
+            apiClient: mockAPI,
+            appState: appState
+        )
+
+        await engine.performPollCycle()
+        #expect(appState.weeklyPace == nil)
+        #expect(appState.menuBarText == "82%")
+
+        await engine.performPollCycle()
+        #expect(appState.weeklyPace?.runOut != nil)
+        #expect(appState.menuBarText == "40% \u{2197}")
+
+        await engine.performPollCycle()
+        #expect(appState.weeklyPace == nil)
+        #expect(appState.menuBarText == "82%")
+    }
+
     @Test("poll with weekly_scoped limit populates scopedLimits; next poll without clears it")
     @MainActor
     func scopedLimitPopulatedThenCleared() async {
