@@ -86,9 +86,6 @@ Both are older drift in text restored unchanged. Neither blocks Epic 26.
 ## Deferred from: build of Story 26.3 (2026-11-01)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-26-3-weekly-first-popover-no-five-hour.md`
-  summary: Decide whether the 60-minute chart gap limit should allow for Low Power Mode at the 30-minute poll setting.
-  evidence: `PollingEngine.computeNextInterval` in `cc-hdrm/Services/PollingEngine.swift` doubles 1800 seconds to 3600, while `SparklinePathBuilder.gapThresholdMs` in `cc-hdrm/Views/Sparkline.swift` is 3,600,000 ms. Polls just over an hour apart then count as gaps on both the 24-hour and weekly charts, so the weekly chart falls back to the analytics link.
-- source_spec: `_bmad-output/implementation-artifacts/spec-26-3-weekly-first-popover-no-five-hour.md`
   summary: Check that VoiceOver's double-tap opens analytics from the 24-hour sparkline.
   evidence: `cc-hdrm/Views/Sparkline.swift` marks that chart as a button with no accessibility action, and its tap handling lives in `cc-hdrm/Views/InteractionOverlay.swift`. The weekly chart got an explicit action, while the 24-hour chart was left unchanged by rule. It has not been tried with VoiceOver.
 
@@ -98,8 +95,10 @@ Both are older drift in text restored unchanged. Neither blocks Epic 26.
   summary: Decide whether the weekly chart should need one unbroken hour of data, or one hour of data in total.
   evidence: `SparklinePathBuilder.hasDrawableWeeklyData` in `cc-hdrm/Views/Sparkline.swift` checks one unbroken run of at least 60 minutes. A laptop used in short sessions, each under an hour with sleep between, shows the "Open analytics" link all week despite days of history. This is what the spec asks for; the maintainer should confirm it suits real use.
 - source_spec: `_bmad-output/implementation-artifacts/spec-26-3-weekly-first-popover-no-five-hour.md`
-  summary: Add a back-off for a weekly chart load that keeps failing.
-  evidence: `PollingEngine.refreshWeeklySparkline` in `cc-hdrm/Services/PollingEngine.swift` retries a failed load at every poll, as the spec says. If the rollup read fails each time, every poll repeats the full raw read, up to about 60,000 rows when analytics has never opened.
-- source_spec: `_bmad-output/implementation-artifacts/spec-26-3-weekly-first-popover-no-five-hour.md`
   summary: Decide whether an unavailable database should count as a failed weekly chart load.
   evidence: `HistoricalDataService.getRecentPolls` and `getRolledUpData` return empty lists, not errors, when the database is unavailable. The engine then marks the cycle as loaded with only the current poll and builds the chart in memory. The database is only made available at launch, so it never recovers within a session.
+
+## Deferred from: CodeRabbit review of Story 26.3 (2026-11-01)
+
+- `usage_polls` and `usage_rollups` have no account key. After signing in to another account, history from the previous account can appear in the weekly chart. The 24-hour sparkline and analytics already share this limit, so a fix means a schema change across all history.
+- A poll finishing during a weekly history load is not added to the chart until the next poll. A run just over an hour can be measured slightly short after 5-minute thinning. Both correct themselves.

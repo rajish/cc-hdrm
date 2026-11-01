@@ -222,8 +222,8 @@ development_status:
   # Sprint Change Proposal 2026-11-01 — 5-hour limit removed for verified Ultra only; replaces the 2026-10-31 plan
   epic-26: in-progress  # Support Accounts Without a 5-Hour Limit
   26-1-no-five-hour-fallback: done  # released in 1.6.1
-  26-2-weekly-pace-no-five-hour: review
-  26-3-weekly-first-popover-no-five-hour: review
+  26-2-weekly-pace-no-five-hour: done
+  26-3-weekly-first-popover-no-five-hour: done
   26-4-analytics-adapt-to-data: backlog
   26-5-value-headroom-weekly-cycle-no-five-hour: backlog
   26-6-tier-advice-patterns-plan-names: backlog

@@ -24,6 +24,8 @@ final class PollingEngine: PollingEngineProtocol {
     private var weeklySparklineLoadedCycleStart: Int64?
     private var weeklySparklineLoadedClearCount: UInt = 0
     private var weeklySparklineLoadingCycleStart: Int64?
+    private var weeklySparklineLoadFailure: (cycleStart: Int64, retryAfter: Int64)?
+    private static let weeklySparklineRetryDelayMs: Int64 = 5 * 60 * 1000
     /// Guards against repeated profile backfill attempts when the profile genuinely has no tier.
     /// Reset on token refresh (natural retry point for tier changes).
     private var hasAttemptedProfileBackfill = false
@@ -437,6 +439,12 @@ final class PollingEngine: PollingEngineProtocol {
         // Restarting would throw away a read slower than the poll interval, every time
         if isSameWeeklyCycle(weeklySparklineLoadingCycleStart, cycle) { return }
 
+        if let failure = weeklySparklineLoadFailure,
+           isSameWeeklyCycle(failure.cycleStart, cycle),
+           timestamp < failure.retryAfter {
+            return
+        }
+
         sparklineRefreshTask?.cancel()
         if !isLoadedCycle {
             Self.logger.info("Weekly chart: loading cycle starting at \(cycle.lowerBound, privacy: .public)")
@@ -444,7 +452,8 @@ final class PollingEngine: PollingEngineProtocol {
         }
 
         guard let historicalDataService else { return }
-        let hours = Int((Double(timestamp - cycle.lowerBound) / 3_600_000).rounded(.up))
+        // The read's cutoff comes from a later clock than this timestamp, so rounding up alone can miss the cycle start
+        let hours = Int((Double(timestamp - cycle.lowerBound) / 3_600_000).rounded(.up)) + 1
         weeklySparklineLoadingCycleStart = cycle.lowerBound
         sparklineRefreshTask = Task { [weak self] in
             guard let self else { return }
@@ -473,10 +482,12 @@ final class PollingEngine: PollingEngineProtocol {
                 appState.updateWeeklySparklineData(points)
                 weeklySparklineLoadedCycleStart = cycle.lowerBound
                 weeklySparklineLoadedClearCount = clearCount
+                weeklySparklineLoadFailure = nil
                 Self.logger.info("Weekly chart: loaded \(points.count, privacy: .public) points from \(rawPolls.count, privacy: .public) polls and \(rollups.count, privacy: .public) rollups")
             } catch {
                 guard !Task.isCancelled else { return }
-                Self.logger.error("Failed to load weekly chart data: \(error.localizedDescription)")
+                Self.logger.error("Failed to load weekly chart data, retrying in 5 minutes: \(error.localizedDescription)")
+                weeklySparklineLoadFailure = (cycle.lowerBound, timestamp + Self.weeklySparklineRetryDelayMs)
             }
         }
     }
@@ -488,6 +499,7 @@ final class PollingEngine: PollingEngineProtocol {
 
     private func clearWeeklySparkline() {
         weeklySparklineLoadingCycleStart = nil
+        weeklySparklineLoadFailure = nil
         guard weeklySparklineLoadedCycleStart != nil || !appState.weeklySparklineData.isEmpty else { return }
         Self.logger.info("Weekly chart: cleared, the 5-hour number is back or the reset time is unknown")
         weeklySparklineLoadedCycleStart = nil

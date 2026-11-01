@@ -1016,6 +1016,10 @@ struct SparklineWeeklyChartTests {
         // Two hours apart spans enough time, but only a gap would draw
         #expect(!SparklinePathBuilder.hasDrawableWeeklyData([point(hour: 0, weekly: 10), point(hour: 2, weekly: 10)], cycle: cycle))
         #expect(SparklinePathBuilder.hasDrawableWeeklyData([point(hour: 0, weekly: 10), point(hour: 1, weekly: 10)], cycle: cycle))
+
+        // Low Power Mode at the 30-minute setting: an hour apart, plus request latency
+        let afterLatency = UsagePoll(id: 0, timestamp: hourMs + 5_000, fiveHourUtil: nil, fiveHourResetsAt: nil, sevenDayUtil: 10, sevenDayResetsAt: nil)
+        #expect(SparklinePathBuilder.hasDrawableWeeklyData([point(hour: 0, weekly: 10), afterLatency], cycle: cycle))
     }
 
     @Test("VoiceOver: weekly label for the weekly chart, 24-hour label and hint unchanged otherwise")

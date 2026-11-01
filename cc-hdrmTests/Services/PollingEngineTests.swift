@@ -2321,7 +2321,7 @@ struct PollingEngineWeeklyChartTests {
         try await waitUntil { !appState.weeklySparklineData.isEmpty }
         #expect(appState.weeklySparklineData.map(\.sevenDayUtil) == [20, 30, 31, 60])
         #expect(appState.weeklySparklineData.allSatisfy { $0.fiveHourUtil == nil })
-        #expect(historical.lastRecentPollsHours == 73)
+        #expect(historical.lastRecentPollsHours == 74)
         #expect(historical.getRolledUpDataCallCount == 1)
 
         await engine.performPollCycle()
@@ -2423,7 +2423,7 @@ struct PollingEngineWeeklyChartTests {
         #expect(historical.getRecentPollsCallCount == 2)
         // Only the current poll falls inside the new cycle, which began 30 minutes ago
         #expect(appState.weeklySparklineData.map(\.sevenDayUtil) == [60])
-        #expect(historical.lastRecentPollsHours == 1)
+        #expect(historical.lastRecentPollsHours == 2)
     }
 
     @Test("emptied data, as after clear history or sign out, is read again at the next poll")
@@ -2555,24 +2555,35 @@ struct PollingEngineWeeklyChartTests {
         #expect(historical.getRecentPollsCallCount == 1)
     }
 
-    @Test("a failed load keeps polling healthy and is retried at the next poll")
+    @Test("a failed load keeps polling healthy, waits before retrying, and a new cycle retries at once")
     @MainActor
-    func failedLoadRetries() async throws {
+    func failedLoadBacksOff() async throws {
         let historical = PEMockHistoricalDataService()
         historical.recentPollsToReturn = recentPolls()
         historical.shouldThrowOnGetRecentPolls = true
         let appState = AppState()
         let resetsAt = Date().addingTimeInterval(4 * 86400)
-        let engine = makeEngine([noNumberResponse(resetsAt: resetsAt), noNumberResponse(resetsAt: resetsAt)], historical: historical, appState: appState)
+        let movedReset = resetsAt.addingTimeInterval(-3600)
+        let engine = makeEngine(
+            [noNumberResponse(resetsAt: resetsAt), noNumberResponse(resetsAt: resetsAt), noNumberResponse(resetsAt: movedReset)],
+            historical: historical,
+            appState: appState
+        )
 
         await engine.performPollCycle()
         try await waitUntil { historical.getRecentPollsCallCount == 1 }
+        try await Task.sleep(for: .milliseconds(50))
         #expect(appState.connectionStatus == .connected)
         #expect(appState.weeklySparklineData.isEmpty)
 
         historical.shouldThrowOnGetRecentPolls = false
         await engine.performPollCycle()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(historical.getRecentPollsCallCount == 1)
+        #expect(appState.weeklySparklineData.isEmpty)
+
+        await engine.performPollCycle()
         try await waitUntil { !appState.weeklySparklineData.isEmpty }
-        #expect(appState.weeklySparklineData.map(\.sevenDayUtil) == [30, 31, 60])
+        #expect(historical.getRecentPollsCallCount == 2)
     }
 }

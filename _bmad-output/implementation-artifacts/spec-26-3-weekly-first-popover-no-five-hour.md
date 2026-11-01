@@ -34,11 +34,11 @@ context:
 | Too little data | no number, under 1 hour of unbroken data | large ring, link, no chart | N/A |
 | Not rolled up yet | raw polls older than 24 hours | still on the chart, no duplicates | N/A |
 | Already rolled up | 5-minute rollups for days 2–7 | on the chart, no duplicates | N/A |
-| Sleep gap | over 60 minutes without data | gap band; the flat line reaches the gap | N/A |
+| Sleep gap | over 65 minutes without data | gap band; the flat line reaches the gap | N/A |
 | Ordinary poll | same cycle, data loaded | new point added in memory, no database read | N/A |
 | New cycle | reset moves over 60 seconds | old points cleared, new cycle loaded | N/A |
 | Reset jitter | reset moves under 60 seconds | no reload | N/A |
-| Load fails | database error | link stays, retried next poll | error logged |
+| Load fails | database error | link stays, retried after 5 minutes or on a new cycle | error logged |
 | Number returns | none → number | small ring and 24-hour sparkline, weekly data cleared | N/A |
 | Number goes | number → none | large ring and weekly chart at that poll | N/A |
 | Number present | any | ring 56, 24-hour fetch every poll, no rollup read | N/A |
@@ -88,7 +88,7 @@ Defaults chosen, since no human is available:
 - **Thinning:** one point per 5 minutes, matching rollups, which caps the array near 2,016 points.
 - **Separate weekly segments:** `buildSegments` skips a flat run before a gap, which is rare for 5-hour data but normal for weekly. Fixing it there would change charts for accounts with a number.
 - **Mid-cycle drop:** drawn as an ordinary step down.
-- **Start of the week:** over 60 minutes with no data after the cycle start draws a gap band, like any other sleep gap. No band is drawn from the last poll to now.
+- **Start of the week:** over 65 minutes with no data after the cycle start draws a gap band, like any other sleep gap. No band is drawn from the last poll to now.
 - **Extra usage card:** stays between the Fable ring and the chart, as in the layout with a number.
 - **24-hour data with no number:** emptied, so a returning number never flashes old points.
 

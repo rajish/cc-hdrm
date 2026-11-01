@@ -319,6 +319,10 @@ struct SparklinePathBuilder {
         Int64(maxSupportedPollInterval * 1000 * 2)
     )
 
+    /// Low Power Mode at the 30-minute setting polls every 3,600 seconds plus request latency,
+    /// which must not turn every poll into its own run.
+    static let weeklyGapThresholdMs: Int64 = gapThresholdMs + 5 * 60 * 1000
+
     /// One point of chart width covers about 56 minutes of a week, so a shorter run draws nothing readable.
     static let minimumWeeklyRunMs: Int64 = 60 * 60 * 1000
 
@@ -333,7 +337,7 @@ struct SparklinePathBuilder {
 
         var segments: [PathSegment] = []
         // A Mac asleep when the week began leaves the same hole as one asleep mid-week
-        if let first = valid.first, first.timestamp - cycle.lowerBound > gapThresholdMs {
+        if let first = valid.first, first.timestamp - cycle.lowerBound > weeklyGapThresholdMs {
             segments.append(PathSegment(
                 points: [
                     (x: 0, y: size.height),
@@ -347,7 +351,7 @@ struct SparklinePathBuilder {
         var runStart = 0
         for index in valid.indices {
             let next = index + 1 < valid.count ? valid[index + 1] : nil
-            if let next, next.timestamp - valid[index].timestamp <= gapThresholdMs { continue }
+            if let next, next.timestamp - valid[index].timestamp <= weeklyGapThresholdMs { continue }
 
             segments.append(weeklyRun(valid[runStart...index], size: size, cycle: cycle))
             if let next {
