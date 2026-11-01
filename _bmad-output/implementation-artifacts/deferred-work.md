@@ -123,3 +123,30 @@ Both are older drift in text restored unchanged. Neither blocks Epic 26.
 - source_spec: `_bmad-output/implementation-artifacts/spec-26-4-analytics-adapt-to-data.md`
   summary: The 5-hour chip shows for a moment on window open for accounts with no number.
   evidence: The empty first frame keeps today's controls by design, so the chip appears until the first load ends, then the row shifts. Fix by hiding the whole chip row until the first load completes, if the shift is judged distracting.
+
+## Deferred from: build of Story 26.5 (2026-11-01)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: Test runs open the real `usage.db` and apply new migrations to it. Stop this before the next schema change.
+  evidence: `cc-hdrm/App/AppDelegate.swift:65` calls `DatabaseManager.shared.initialize()`, and `cc-hdrmTests/App/AppDelegateTests.swift:73` runs that method. Logs show test processes logging "Database opened at ~/Library/Application Support/cc-hdrm/usage.db", then "schema is current (version 9)". Story 26.5's test runs added `is_weekly_cycle` to the real database this way, with no rows rewritten. Fix by injecting the database manager, or by skipping startup under the test host.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: Confirm the tier string verified Ultra accounts report before Story 26.6 maps it.
+  evidence: `cc-hdrm/Models/RateLimitTier.swift` knows only Pro, Max 5x and Max 20x. If Ultra reports another string with no custom limits, its weekly rows are flagged with no credits, the aggregate skips them, and the bar says the tier is unknown. Mapping the string later makes those rows countable without rewriting them.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: A weekly cycle that cannot be analysed still removes the 5-hour events in its 7 days.
+  evidence: `excludingWeeklyOverlap()` in `cc-hdrm/Models/ResetEvent.swift` has no tier information. A Max account that verifies onto an unmapped string loses that week from percentage figures until the string is mapped. Also, an all-unanalysable list shows 0% when current limits resolve, and the 14-day gate in `ValueInsightEngine.weekInsight` still counts such cycles.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: Decide what the 24-hour range and the wait for the first weekly reset should say on an account with no number.
+  evidence: The 24-hour range reads "No reset events in this period" about 6 days in 7, because a cycle is only recorded when it ends. Every range reads the same until the first reset after upgrade, since rows from 1.6.1 stay unflagged.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: A light weekly cycle goes unrecorded if the weekly reset time becomes blank when usage returns to 0.
+  evidence: The fallback in `HistoricalDataService.detectAndRecordResetIfNeeded` needs a drop of 50 points, so 30% to blank records nothing. The shape is unobserved, and changing it unguarded would alter 1.6.0 detection.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: Migrations before version 9 can fail forever if the app stops between an `ALTER` and the version write.
+  evidence: `DatabaseManager.runMigrations` writes the version once at the end, with no transaction. The version 9 step checks for its column; earlier steps do not.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: Test cleanup helpers delete the whole system temporary directory, which can disturb other tests running at the same time.
+  evidence: `cleanup` in `cc-hdrmTests/Services/HistoricalDataServiceTests.swift` removes `path.deletingLastPathComponent()`, and that path is `FileManager.default.temporaryDirectory`.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: Re-check of the deferred items from the reverted spec. Grouping before overlap and uncapped 5-cycle pricing are fixed, and unanalysable cycles no longer add capacity in value figures. A cycle still belongs wholly to the month of its reset, by choice. The 5-hour detection branches are live again, so that removal item no longer applies.
+  evidence: See Design Notes in the source spec.

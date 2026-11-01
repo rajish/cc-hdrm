@@ -234,7 +234,7 @@ struct AnalyticsView: View {
                     selectedTimeRange: selectedTimeRange,
                     dataQualifier: "\(n) \(n == 1 ? "hour" : "hours") of data in this view"
                 )
-            } else if !usageInsight.isQuiet {
+            } else if Self.showsFullBar(usageInsight: usageInsight, resetEvents: resetEvents) {
                 // Normal: full bar (AC 1, 2)
                 HeadroomBreakdownBar(
                     resetEvents: resetEvents,
@@ -257,11 +257,19 @@ struct AnalyticsView: View {
         InsightStack(insights: ([usageInsight] + benchmarkAnchors + extraUsageInsights).sorted { $0.priority > $1.priority })
     }
 
-    /// Computes the time span in hours between the first and last reset events.
+    /// Computes the hours of data the reset events cover: the time span between the first
+    /// and last 5-hour events, plus a whole week for each weekly cycle.
     /// Static for testability (same pattern as `fetchData`).
     static func computeDataSpanHours(resetEvents: [ResetEvent]) -> Double {
-        guard let first = resetEvents.first, let last = resetEvents.last else { return 0 }
-        return Double(last.timestamp - first.timestamp) / 3_600_000.0
+        let weeklyHours = 168.0 * Double(resetEvents.filter(\.isWeeklyCycle).count)
+        guard let spanMs = resetEvents.fiveHourSpanMs else { return weeklyHours }
+        return Double(spanMs) / 3_600_000.0 + weeklyHours
+    }
+
+    /// A quiet insight hides the bar, except in a range of only weekly cycles, where the bar
+    /// is how the used and unused split of a finished cycle gets shown.
+    static func showsFullBar(usageInsight: ValueInsight, resetEvents: [ResetEvent]) -> Bool {
+        !usageInsight.isQuiet || resetEvents.isOnlyWeeklyCycles
     }
 
     /// Computes the usage insight for the current time range. Used by both

@@ -115,7 +115,11 @@ struct HeadroomBreakdownBar: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Subscription usage: \(SubscriptionValueCalculator.formatDollars(value.usedDollars)) used of \(SubscriptionValueCalculator.formatDollars(value.periodPrice)), \(Int(value.utilizationPercent.rounded()))% utilization")
+        .accessibilityLabel(Self.usageAccessibilityLabel(
+            events: resetEvents,
+            utilizationPercent: value.utilizationPercent,
+            dollars: (SubscriptionValueCalculator.formatDollars(value.usedDollars), SubscriptionValueCalculator.formatDollars(value.periodPrice))
+        ))
     }
 
     // MARK: - Percentage-Only Breakdown (custom limits, no price)
@@ -128,7 +132,7 @@ struct HeadroomBreakdownBar: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Subscription usage: \(Int(utilizationPercent.rounded()))% utilization")
+            .accessibilityLabel(Self.usageAccessibilityLabel(events: resetEvents, utilizationPercent: utilizationPercent))
     }
 
     // MARK: - Qualifier Content (insufficient data for dollar proration)
@@ -148,7 +152,7 @@ struct HeadroomBreakdownBar: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(qualifier). Subscription usage: \(Int(utilizationPercent.rounded()))% utilization")
+            .accessibilityLabel("\(qualifier). \(Self.usageAccessibilityLabel(events: resetEvents, utilizationPercent: utilizationPercent))")
         }
     }
 
@@ -189,9 +193,28 @@ struct HeadroomBreakdownBar: View {
     /// Computes utilization percentage for percentage-only display mode.
     private func percentageOnlyUtilization(limits: CreditLimits) -> Double {
         let summary = headroomAnalysisService.aggregateBreakdown(events: resetEvents)
-        let periodDays = SubscriptionValueCalculator.periodDays(for: selectedTimeRange, events: resetEvents)
+        let periodDays = SubscriptionValueCalculator.periodDays(for: selectedTimeRange, events: resetEvents, countedWeeklyCycles: summary.weeklyCycleCount)
         let totalAvailable = Double(limits.sevenDayCredits) * (periodDays / 7.0)
         return totalAvailable > 0 ? min(100.0, (summary.usedCredits / totalAvailable) * 100.0) : 0
+    }
+
+    // MARK: - VoiceOver
+
+    /// Label for the bar. A range of only weekly cycles speaks its two bands.
+    static func usageAccessibilityLabel(
+        events: [ResetEvent],
+        utilizationPercent: Double,
+        dollars: (used: String, total: String)? = nil
+    ) -> String {
+        let used = Int(utilizationPercent.rounded())
+        if events.isOnlyWeeklyCycles {
+            let bands = "Headroom breakdown: \(used)% used, \(100 - used)% unused capacity."
+            return dollars.map { "\(bands) \($0.used) used of \($0.total)." } ?? bands
+        }
+        if let dollars {
+            return "Subscription usage: \(dollars.used) used of \(dollars.total), \(used)% utilization"
+        }
+        return "Subscription usage: \(used)% utilization"
     }
 
     // MARK: - Legends

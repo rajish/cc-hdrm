@@ -15,8 +15,11 @@ protocol HeadroomAnalysisServiceProtocol: Sendable {
     ) -> HeadroomBreakdown
 
     /// Aggregates headroom breakdown across multiple reset events.
-    /// Each event's tier is resolved individually, supporting mixed-tier aggregation.
-    /// Events with nil fiveHourPeak, sevenDayUtil, or unresolvable tier are skipped.
+    /// Events keep their stored credits. Without them, each event's tier is resolved
+    /// individually, supporting mixed-tier aggregation.
+    /// Skipped: events with nil sevenDayUtil, events with nil fiveHourPeak that are not weekly
+    /// cycles, and events with neither stored credits nor a resolvable tier.
+    /// 5-hour events inside a weekly cycle's 7 days are left out.
     /// - Parameter events: Array of reset events to aggregate
     /// - Returns: Aggregated period summary
     func aggregateBreakdown(

@@ -3,7 +3,7 @@ import os
 import SQLite3
 
 /// Current database schema version. Increment when schema changes require migration.
-private let currentSchemaVersion: Int = 8
+private let currentSchemaVersion: Int = 9
 
 /// SQLITE_TRANSIENT tells SQLite to make its own copy of the string data.
 /// Required when binding strings from Swift's withCString which uses temporary buffers.
@@ -193,6 +193,15 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
             Self.logger.info("Migration v7->v8: added fable weekly columns to usage_polls and usage_rollups")
         }
 
+        if existingVersion < 9 {
+            let connection = try getConnection()
+            // The version is written after every migration, so a stop in between would otherwise repeat this ALTER and fail forever.
+            if sqlite3_table_column_metadata(connection, nil, "reset_events", "is_weekly_cycle", nil, nil, nil, nil, nil) != SQLITE_OK {
+                try executeSQL("ALTER TABLE reset_events ADD COLUMN is_weekly_cycle INTEGER", on: connection)
+            }
+            Self.logger.info("Migration v8->v9: added is_weekly_cycle column to reset_events")
+        }
+
         Self.logger.info("Migrations complete: \(existingVersion) -> \(currentSchemaVersion)")
         try setSchemaVersion(currentSchemaVersion)
     }
@@ -337,7 +346,8 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
                 tier TEXT,
                 used_credits REAL,
                 constrained_credits REAL,
-                waste_credits REAL
+                waste_credits REAL,
+                is_weekly_cycle INTEGER
             )
             """
         try executeSQL(createTable, on: connection)

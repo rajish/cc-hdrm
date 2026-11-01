@@ -42,17 +42,21 @@ enum SubscriptionValueCalculator {
             return nil
         }
 
-        let periodDays = Self.periodDays(for: timeRange, events: resetEvents)
+        guard !resetEvents.isEmpty else { return nil }
+
+        let summary = headroomAnalysisService.aggregateBreakdown(events: resetEvents)
+        let periodDays = Self.periodDays(for: timeRange, events: resetEvents, countedWeeklyCycles: summary.weeklyCycleCount)
         guard periodDays > 0 else { return nil }
 
         let totalAvailableCredits = Double(creditLimits.sevenDayCredits) * (periodDays / 7.0)
         guard totalAvailableCredits > 0 else { return nil }
 
-        let summary = headroomAnalysisService.aggregateBreakdown(events: resetEvents)
         let usedCredits = summary.usedCredits
 
         let utilizationPercent = min(100.0, (usedCredits / totalAvailableCredits) * 100.0)
-        let periodPrice = monthlyPrice * (periodDays / averageDaysPerMonth)
+        // A 30-day range can hold 5 weekly cycles; a 24-hour range still shows a whole cycle.
+        let pricedDays = min(periodDays, max(nominalDays(for: timeRange), 7.0))
+        let periodPrice = monthlyPrice * (pricedDays / averageDaysPerMonth)
         let usedDollars = (utilizationPercent / 100.0) * periodPrice
         let unusedDollars = periodPrice - usedDollars
 
@@ -67,24 +71,29 @@ enum SubscriptionValueCalculator {
         )
     }
 
-    /// Returns the number of days for a time range.
-    /// For fixed ranges (.day, .week, .month), caps at actual data span so the
+    /// Returns the number of days of capacity for a time range: the span of the 5-hour
+    /// events plus 7 days per weekly cycle, whose reset event stands for the whole cycle.
+    /// For fixed ranges (.day, .week, .month), caps the span at the actual data span so the
     /// denominator never exceeds the time the user has real data for.
     /// For `.all`, uses the actual span from the first to last event.
-    static func periodDays(for timeRange: TimeRange, events: [ResetEvent]) -> Double {
-        let nominalDays: Double
-        switch timeRange {
-        case .day: nominalDays = 1.0
-        case .week: nominalDays = 7.0
-        case .month: nominalDays = 30.0
-        case .all: nominalDays = .greatestFiniteMagnitude
-        }
+    /// - Parameter countedWeeklyCycles: Weekly cycles that were analysed. Defaults to all in `events`.
+    static func periodDays(for timeRange: TimeRange, events: [ResetEvent], countedWeeklyCycles: Int? = nil) -> Double {
+        let weeklyCycles = countedWeeklyCycles ?? events.filter(\.isWeeklyCycle).count
+        let weeklyDays = 7.0 * Double(weeklyCycles)
 
-        guard let first = events.first, let last = events.last else { return 0 }
-        let spanMs = last.timestamp - first.timestamp
+        guard let spanMs = events.fiveHourSpanMs else { return weeklyDays }
         let actualDays = max(1.0, Double(spanMs) / (24.0 * 60.0 * 60.0 * 1000.0))
 
-        return min(nominalDays, actualDays)
+        return min(nominalDays(for: timeRange), actualDays) + weeklyDays
+    }
+
+    private static func nominalDays(for timeRange: TimeRange) -> Double {
+        switch timeRange {
+        case .day: return 1.0
+        case .week: return 7.0
+        case .month: return 30.0
+        case .all: return .greatestFiniteMagnitude
+        }
     }
 
     /// Formats a dollar amount for display.

@@ -348,7 +348,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         let connection = try databaseManager.getConnection()
 
         let sql = """
-            SELECT id, timestamp, five_hour_peak, seven_day_util, tier, used_credits, constrained_credits, waste_credits
+            SELECT id, timestamp, five_hour_peak, seven_day_util, tier, used_credits, constrained_credits, waste_credits, is_weekly_cycle
             FROM reset_events
             WHERE timestamp >= COALESCE(?, 0)
               AND timestamp <= COALESCE(?, 9223372036854775807)
@@ -398,6 +398,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 ? nil : sqlite3_column_double(statement, 6)
             let unusedCredits: Double? = sqlite3_column_type(statement, 7) == SQLITE_NULL
                 ? nil : sqlite3_column_double(statement, 7)
+            let isWeeklyCycle = sqlite3_column_int(statement, 8) == 1
 
             events.append(ResetEvent(
                 id: id,
@@ -407,7 +408,8 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 tier: tier,
                 usedCredits: usedCredits,
                 constrainedCredits: constrainedCredits,
-                unusedCredits: unusedCredits
+                unusedCredits: unusedCredits,
+                isWeeklyCycle: isWeeklyCycle
             ))
         }
 
@@ -494,6 +496,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
     ) async throws {
         var resetDetected: Bool
         var detectionMethod: String
+        var weeklyResetDetected = false
 
         // Primary detection: 5h resets_at timestamp shift (with jitter tolerance)
         if let currentResetsAt = currentPoll.fiveHourResetsAt,
@@ -526,6 +529,9 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                let previousResetsAt = previousPoll.sevenDayResetsAt,
                abs(currentResetsAt - previousResetsAt) > resetsAtToleranceMs {
                 resetDetected = true
+                // A small move with no drop in usage is the reset time drifting, not a new cycle.
+                weeklyResetDetected = currentResetsAt - previousResetsAt >= 6 * Self.oneDayMs
+                    || (currentPoll.sevenDayUtil ?? 0) < (previousPoll.sevenDayUtil ?? 0)
                 detectionMethod = "7d resets_at shifted from \(previousResetsAt) to \(currentResetsAt)"
             }
             // 7d fallback: large utilization drop
@@ -535,6 +541,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 let drop = previousUtil - currentUtil
                 if drop >= utilizationDropThreshold {
                     resetDetected = true
+                    weeklyResetDetected = true
                     detectionMethod = "7d utilization dropped from \(previousUtil)% to \(currentUtil)%"
                 }
             }
@@ -553,6 +560,17 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         // Calculate peak utilization from recent polls (last 5 hours)
         let peakUtil = try await getRecentPeakUtilization(beforeTimestamp: currentPoll.timestamp, connection: connection)
 
+        // An empty peak alone proves nothing: a Mac asleep for over 5 hours also leaves one,
+        // so the polls either side of the reset must show no 5-hour window too.
+        let isWeeklyCycle = weeklyResetDetected
+            && peakUtil == nil
+            && Self.hasNoFiveHourWindow(previousPoll)
+            && Self.hasNoFiveHourWindow(currentPoll)
+            && previousPoll.sevenDayUtil != nil
+        if weeklyResetDetected && !isWeeklyCycle {
+            Self.logger.info("Weekly reset is not a weekly cycle: peak=\(peakUtil ?? -1, privacy: .public)%, previous 5h=\(previousPoll.fiveHourUtil ?? -1, privacy: .public)%, current 5h=\(currentPoll.fiveHourUtil ?? -1, privacy: .public)%, previous 7d=\(previousPoll.sevenDayUtil ?? -1, privacy: .public)%")
+        }
+
         // Record the reset event
         // Use previousPoll's 7d util - represents the constraint at window end (pre-reset)
         try recordResetEvent(
@@ -560,11 +578,16 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             fiveHourPeak: peakUtil,
             sevenDayUtil: previousPoll.sevenDayUtil,
             tier: tier,
+            isWeeklyCycle: isWeeklyCycle,
             connection: connection
         )
 
         Self.logger.info("Reset detected: \(detectionMethod, privacy: .public)")
-        Self.logger.info("Reset event recorded: peak=\(peakUtil ?? -1, privacy: .public)%, 7d=\(previousPoll.sevenDayUtil ?? -1, privacy: .public)%, tier=\(tier ?? "unknown", privacy: .public)")
+        Self.logger.info("Reset event recorded: peak=\(peakUtil ?? -1, privacy: .public)%, 7d=\(previousPoll.sevenDayUtil ?? -1, privacy: .public)%, tier=\(tier ?? "unknown", privacy: .public), weeklyCycle=\(isWeeklyCycle, privacy: .public)")
+    }
+
+    private static func hasNoFiveHourWindow(_ poll: UsagePoll) -> Bool {
+        poll.fiveHourUtil == nil && poll.fiveHourResetsAt == nil
     }
 
     /// Queries the maximum 5-hour utilization from polls within the last 5 hours.
@@ -612,6 +635,7 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
         fiveHourPeak: Double?,
         sevenDayUtil: Double?,
         tier: String?,
+        isWeeklyCycle: Bool,
         connection: OpaquePointer
     ) throws {
         let sql = """
@@ -622,8 +646,9 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
                 tier,
                 used_credits,
                 constrained_credits,
-                waste_credits
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                waste_credits,
+                is_weekly_cycle
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """
 
         var statement: OpaquePointer?
@@ -663,8 +688,17 @@ final class HistoricalDataService: HistoricalDataServiceProtocol, @unchecked Sen
             sqlite3_bind_null(statement, 4)
         }
 
+        sqlite3_bind_int(statement, 8, isWeeklyCycle ? 1 : 0)
+
         // Calculate credit breakdown if tier and utilization data are available
-        if let peak = fiveHourPeak,
+        if isWeeklyCycle,
+           let util7d = sevenDayUtil,
+           let limits = RateLimitTier.resolve(tierString: tier, preferencesManager: preferencesManager) {
+            let breakdown = HeadroomBreakdown.weeklyCycle(sevenDayPeak: util7d, creditLimits: limits)
+            sqlite3_bind_double(statement, 5, breakdown.usedCredits)
+            sqlite3_bind_null(statement, 6)  // a weekly cycle has no constrained band
+            sqlite3_bind_double(statement, 7, breakdown.unusedCredits)
+        } else if let peak = fiveHourPeak,
            let util7d = sevenDayUtil,
            let analysisService = headroomAnalysisService,
            let limits = RateLimitTier.resolve(tierString: tier, preferencesManager: preferencesManager) {

@@ -82,6 +82,8 @@ enum ValueInsightEngine {
         creditLimits: CreditLimits?,
         headroomAnalysisService: any HeadroomAnalysisServiceProtocol
     ) -> ValueInsight {
+        let period = periodName("today", events: resetEvents)
+
         if let value = subscriptionValue {
             let used = SubscriptionValueCalculator.formatDollars(value.usedDollars)
             let total = SubscriptionValueCalculator.formatDollars(value.periodPrice)
@@ -89,23 +91,23 @@ enum ValueInsightEngine {
             let precise = "\(used) of \(total) (\(formatPercent(util)) utilization)"
 
             if util > 80 {
-                return ValueInsight(text: "Close to today's limit — \(used) of \(total) used", isQuiet: false, preciseDetail: precise)
+                return ValueInsight(text: "Close to \(period)'s limit — \(used) of \(total) used", isQuiet: false, preciseDetail: precise)
             } else if util < 20 {
-                return ValueInsight(text: "Plenty of room — \(used) of \(total) used today", isQuiet: false, preciseDetail: precise)
+                return ValueInsight(text: "Plenty of room — \(used) of \(total) used \(period)", isQuiet: false, preciseDetail: precise)
             }
-            return ValueInsight(text: "Used \(used) of \(total) today", isQuiet: isQuietUtilization(util), preciseDetail: precise)
+            return ValueInsight(text: "Used \(used) of \(total) \(period)", isQuiet: isQuietUtilization(util), preciseDetail: precise)
         }
 
         let util = computeUtilization(resetEvents: resetEvents, creditLimits: creditLimits, timeRange: .day, headroomAnalysisService: headroomAnalysisService)
         if let pct = util {
-            let precise = "\(formatPercent(pct)) utilization today"
+            let precise = "\(formatPercent(pct)) utilization \(period)"
             if pct > 80 {
-                return ValueInsight(text: "Running close to today's limit", isQuiet: false, preciseDetail: precise)
+                return ValueInsight(text: "Running close to \(period)'s limit", isQuiet: false, preciseDetail: precise)
             } else if pct < 20 {
-                return ValueInsight(text: "Light usage today", isQuiet: false, preciseDetail: precise)
+                return ValueInsight(text: "Light usage \(period)", isQuiet: false, preciseDetail: precise)
             }
             let nl = NaturalLanguageFormatter.formatPercentNatural(pct)
-            return ValueInsight(text: "\(capitalizeFirst(nl)) of today's capacity", isQuiet: isQuietUtilization(pct), preciseDetail: precise)
+            return ValueInsight(text: "\(capitalizeFirst(nl)) of \(period)'s capacity", isQuiet: isQuietUtilization(pct), preciseDetail: precise)
         }
 
         return ValueInsight(text: "Usage data available", isQuiet: true)
@@ -120,9 +122,11 @@ enum ValueInsightEngine {
         creditLimits: CreditLimits?,
         headroomAnalysisService: any HeadroomAnalysisServiceProtocol
     ) -> ValueInsight {
+        let period = periodName("this week", events: resetEvents)
+
         // Check if we have sufficient history for comparison (>= 14 days of data)
-        if let firstAll = allTimeResetEvents.first, let lastAll = allTimeResetEvents.last {
-            let spanDays = Double(lastAll.timestamp - firstAll.timestamp) / (24.0 * 60.0 * 60.0 * 1000.0)
+        if !allTimeResetEvents.isEmpty {
+            let spanDays = SubscriptionValueCalculator.periodDays(for: .all, events: allTimeResetEvents)
 
             if spanDays >= 14, let limits = creditLimits {
                 let allTimeValue = SubscriptionValueCalculator.calculate(
@@ -139,9 +143,9 @@ enum ValueInsightEngine {
                         let comparison = NaturalLanguageFormatter.formatComparisonNatural(current: currentUtil, baseline: allTimeUtil)
                         let direction = diff > 0 ? "above" : "below"
                         let precise = "\(formatPercent(abs(diff))) \(direction) average weekly utilization"
-                        return ValueInsight(text: "This week: \(comparison)", isQuiet: false, priority: .usageDeviation, preciseDetail: precise)
+                        return ValueInsight(text: "\(capitalizeFirst(period)): \(comparison)", isQuiet: false, priority: .usageDeviation, preciseDetail: precise)
                     }
-                    return ValueInsight(text: "Normal usage", isQuiet: true, preciseDetail: "\(formatPercent(currentUtil)) utilization this week")
+                    return ValueInsight(text: "Normal usage", isQuiet: true, preciseDetail: "\(formatPercent(currentUtil)) utilization \(period)")
                 }
             }
         }
@@ -154,23 +158,23 @@ enum ValueInsightEngine {
             let precise = "\(used) of \(total) (\(formatPercent(util)) utilization)"
 
             if util > 80 {
-                return ValueInsight(text: "Close to this week's limit — \(used) of \(total) used", isQuiet: false, preciseDetail: precise)
+                return ValueInsight(text: "Close to \(period)'s limit — \(used) of \(total) used", isQuiet: false, preciseDetail: precise)
             } else if util < 20 {
-                return ValueInsight(text: "Plenty of room — \(used) of \(total) used this week", isQuiet: false, preciseDetail: precise)
+                return ValueInsight(text: "Plenty of room — \(used) of \(total) used \(period)", isQuiet: false, preciseDetail: precise)
             }
-            return ValueInsight(text: "Used \(used) of \(total) this week", isQuiet: isQuietUtilization(util), preciseDetail: precise)
+            return ValueInsight(text: "Used \(used) of \(total) \(period)", isQuiet: isQuietUtilization(util), preciseDetail: precise)
         }
 
         let util = computeUtilization(resetEvents: resetEvents, creditLimits: creditLimits, timeRange: .week, headroomAnalysisService: headroomAnalysisService)
         if let pct = util {
-            let precise = "\(formatPercent(pct)) utilization this week"
+            let precise = "\(formatPercent(pct)) utilization \(period)"
             if pct > 80 {
-                return ValueInsight(text: "Running close to this week's limit", isQuiet: false, preciseDetail: precise)
+                return ValueInsight(text: "Running close to \(period)'s limit", isQuiet: false, preciseDetail: precise)
             } else if pct < 20 {
-                return ValueInsight(text: "Light usage this week", isQuiet: false, preciseDetail: precise)
+                return ValueInsight(text: "Light usage \(period)", isQuiet: false, preciseDetail: precise)
             }
             let nl = NaturalLanguageFormatter.formatPercentNatural(pct)
-            return ValueInsight(text: "\(capitalizeFirst(nl)) of this week's capacity", isQuiet: isQuietUtilization(pct), preciseDetail: precise)
+            return ValueInsight(text: "\(capitalizeFirst(nl)) of \(period)'s capacity", isQuiet: isQuietUtilization(pct), preciseDetail: precise)
         }
 
         return ValueInsight(text: "Usage data available", isQuiet: true)
@@ -307,9 +311,9 @@ enum ValueInsightEngine {
     ) -> [Double] {
         let calendar = Calendar.current
 
-        // Group events by (year, month)
+        // Group events by (year, month), after the overlap rule: a weekly cycle's 7 days can start in the previous month
         var groups: [DateComponents: [ResetEvent]] = [:]
-        for event in events {
+        for event in events.excludingWeeklyOverlap() {
             let date = Date(timeIntervalSince1970: Double(event.timestamp) / 1000.0)
             let key = calendar.dateComponents([.year, .month], from: date)
             groups[key, default: []].append(event)
@@ -361,6 +365,12 @@ enum ValueInsightEngine {
         guard !resetEvents.isEmpty else { return nil }
         let summary = headroomAnalysisService.aggregateBreakdown(events: resetEvents)
         return summary.usedPercent
+    }
+
+    /// Names the period a range's value covers. When a range holds only weekly cycles, the
+    /// value is the whole cycle that ended, not "today" or "this week".
+    private static func periodName(_ rangeName: String, events: [ResetEvent]) -> String {
+        events.isOnlyWeeklyCycles ? "last cycle" : rangeName
     }
 
     /// Whether the utilization is in the "quiet" range (20-80%).
