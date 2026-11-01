@@ -1002,6 +1002,17 @@ struct AnalyticsViewFiveHourDataTests {
         #expect(stored.effective(fiveHourHidden: true, hasFableData: false).sevenDay)
     }
 
+    // MARK: - Chips on screen
+
+    @Test("the chip row drops 5h when hidden and is exactly the 1.6.0 row otherwise")
+    func chipRow() {
+        typealias View = AnalyticsView
+        #expect(View.visibleChips(fiveHourHidden: false, hasFableData: false) == [.fiveHour, .sevenDay])
+        #expect(View.visibleChips(fiveHourHidden: false, hasFableData: true) == [.fiveHour, .sevenDay, .fable])
+        #expect(View.visibleChips(fiveHourHidden: true, hasFableData: false) == [.sevenDay])
+        #expect(View.visibleChips(fiveHourHidden: true, hasFableData: true) == [.sevenDay, .fable])
+    }
+
     // MARK: - Where 5-hour data exists in a mixed range
 
     @Test("slope colouring also works when an account gains a number")

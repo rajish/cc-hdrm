@@ -546,40 +546,54 @@ struct AnalyticsView: View {
 
     // MARK: - Series Toggles
 
+    /// The chips shown, in order. The 5-hour chip is absent when the range has no 5-hour data;
+    /// the Fable chip needs Fable data.
+    enum SeriesChip: Hashable {
+        case fiveHour, sevenDay, fable
+    }
+
+    static func visibleChips(fiveHourHidden: Bool, hasFableData: Bool) -> [SeriesChip] {
+        (fiveHourHidden ? [] : [.fiveHour]) + [.sevenDay] + (hasFableData ? [.fable] : [])
+    }
+
     private var seriesToggles: some View {
-        HStack(spacing: 8) {
-            if !isFiveHourHidden {
-                seriesToggleButton(
-                    label: "5h",
-                    color: .headroomNormal,
-                    isActive: fiveHourBinding,
-                    accessibilityPrefix: "5-hour series"
-                )
-
-                Text("|")
-                    .font(.caption)
-                    .foregroundStyle(.quaternary)
+        let chips = Self.visibleChips(fiveHourHidden: isFiveHourHidden, hasFableData: hasFableData)
+        return HStack(spacing: 8) {
+            ForEach(Array(chips.enumerated()), id: \.element) { index, chip in
+                if index > 0 {
+                    Text("|")
+                        .font(.caption)
+                        .foregroundStyle(.quaternary)
+                }
+                chipButton(chip)
             }
+        }
+    }
 
+    @ViewBuilder
+    private func chipButton(_ chip: SeriesChip) -> some View {
+        switch chip {
+        case .fiveHour:
+            seriesToggleButton(
+                label: "5h",
+                color: .headroomNormal,
+                isActive: fiveHourBinding,
+                accessibilityPrefix: "5-hour series"
+            )
+        case .sevenDay:
             seriesToggleButton(
                 label: "7d",
                 color: StepAreaChartView.sevenDayColor,
                 isActive: sevenDayBinding,
                 accessibilityPrefix: "7-day series"
             )
-
-            if hasFableData {
-                Text("|")
-                    .font(.caption)
-                    .foregroundStyle(.quaternary)
-
-                seriesToggleButton(
-                    label: fableLabel,
-                    color: StepAreaChartView.fableColor,
-                    isActive: fableBinding,
-                    accessibilityPrefix: "\(fableLabel) series"
-                )
-            }
+        case .fable:
+            seriesToggleButton(
+                label: fableLabel,
+                color: StepAreaChartView.fableColor,
+                isActive: fableBinding,
+                accessibilityPrefix: "\(fableLabel) series"
+            )
         }
     }
 
