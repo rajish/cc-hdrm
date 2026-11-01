@@ -201,4 +201,22 @@ struct DateFormattingTests {
         let parts = withoutAt.split(separator: " ")
         #expect(parts.count >= 3, "Expected weekday + time + AM/PM, got: \(withoutAt)")
     }
+
+    @Test("absoluteTimeString is \"at \" + dayTimeString; only a different day carries the weekday")
+    func dayTimeStringSharedWithAbsoluteTime() {
+        let calendar = Calendar.current
+        var components = calendar.dateComponents([.year, .month, .day], from: Date())
+        components.hour = 16
+        components.minute = 52
+        let today = calendar.date(from: components)!
+        let later = calendar.date(byAdding: .day, value: 2, to: today)!
+
+        #expect(today.absoluteTimeString() == "at \(today.dayTimeString())")
+        #expect(later.absoluteTimeString() == "at \(later.dayTimeString())")
+
+        let formatter = DateFormatter()
+        let weekday = formatter.shortWeekdaySymbols[calendar.component(.weekday, from: later) - 1]
+        #expect(later.dayTimeString().hasPrefix("\(weekday) "))
+        #expect(!today.dayTimeString().hasPrefix("\(formatter.shortWeekdaySymbols[calendar.component(.weekday, from: today) - 1]) "))
+    }
 }

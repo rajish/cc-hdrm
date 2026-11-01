@@ -76,15 +76,22 @@ extension Date {
         return formatter
     }()
 
-    /// Returns an absolute time string for display below countdowns.
-    /// - Same day: `"at 4:52 PM"`
-    /// - Different day: `"at Mon 7:05 PM"`
-    func absoluteTimeString() -> String {
+    /// Returns a day-and-time string.
+    /// - Same day: `"4:52 PM"`
+    /// - Different day: `"Mon 7:05 PM"`
+    func dayTimeString() -> String {
         let formatter = Calendar.current.isDateInToday(self)
             ? Self.sameDayTimeFormatter
             : Self.differentDayTimeFormatter
 
-        return "at \(formatter.string(from: self))"
+        return formatter.string(from: self)
+    }
+
+    /// Returns an absolute time string for display below countdowns.
+    /// - Same day: `"at 4:52 PM"`
+    /// - Different day: `"at Mon 7:05 PM"`
+    func absoluteTimeString() -> String {
+        "at \(dayTimeString())"
     }
 
     /// Parses an ISO 8601 date string with fractional seconds support.

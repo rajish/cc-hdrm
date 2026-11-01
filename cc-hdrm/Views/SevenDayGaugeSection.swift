@@ -19,14 +19,32 @@ struct SevenDayGaugeSection: View {
 
     @State private var isHovered: Bool = false
 
+    /// Pace line below the countdown. `nil` when pace is unavailable.
+    /// Internal (not private) to allow @testable import verification.
+    var paceLineText: String? {
+        appState.weeklyPace?.paceLineText
+    }
+
+    /// Ring slope. With no 5-hour number it stays off during an outage too, when pace is also off.
+    /// Internal (not private) to allow @testable import verification.
+    var ringSlopeLevel: SlopeLevel? {
+        appState.hasNoFiveHourNumber ? nil : appState.sevenDaySlope
+    }
+
     /// Combined VoiceOver announcement (AC #7) + Story 11.4 AC #4:
     /// "7-day headroom: [X] percent, [slope level], resets in [relative], at [absolute]"
+    /// With no 5-hour number, pace takes the place of the slope level.
     /// Internal (not private) to allow @testable import verification.
     var combinedAccessibilityLabel: String {
         guard let headroom else {
             return "7-day headroom: unavailable"
         }
-        var label = "7-day headroom: \(Int(max(0, headroom))) percent, \(appState.sevenDaySlope.accessibilityLabel)"
+        var label = "7-day headroom: \(Int(max(0, headroom))) percent"
+        if !appState.hasNoFiveHourNumber {
+            label += ", \(appState.sevenDaySlope.accessibilityLabel)"
+        } else if let pace = appState.weeklyPace {
+            label += ", \(pace.accessibilityText)"
+        }
         if let resetsAt = appState.sevenDay?.resetsAt {
             label += ", resets in \(resetsAt.countdownString()), \(resetsAt.absoluteTimeString())"
         }
@@ -51,7 +69,7 @@ struct SevenDayGaugeSection: View {
                     windowLabel: "7d",
                     ringSize: 56,
                     strokeWidth: 4,
-                    slopeLevel: appState.sevenDaySlope
+                    slopeLevel: ringSlopeLevel
                 )
 
                 // Countdown: relative + absolute (AC #4, #5)
@@ -60,6 +78,16 @@ struct SevenDayGaugeSection: View {
                     headroomState: sevenDayState,
                     countdownTick: appState.countdownTick
                 )
+
+                if let paceLineText {
+                    Text(paceLineText)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        // Popover minimum width less its padding: wraps rather than widening the popover
+                        .frame(width: 168)
+                }
 
                 // Quotas remaining (Story 3.3 AC-7)
                 if let quotas = appState.quotasRemaining {
