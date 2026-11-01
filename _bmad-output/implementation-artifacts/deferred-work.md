@@ -102,3 +102,24 @@ Both are older drift in text restored unchanged. Neither blocks Epic 26.
 
 - `usage_polls` and `usage_rollups` have no account key. After signing in to another account, history from the previous account can appear in the weekly chart. The 24-hour sparkline and analytics already share this limit, so a fix means a schema change across all history.
 - A poll finishing during a weekly history load is not added to the chart until the next poll. A run just over an hour can be measured slightly short after 5-minute thinning. Both correct themselves.
+
+## Deferred from: build of Story 26.4 (2026-11-01)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-4-analytics-adapt-to-data.md`
+  summary: Tie analytics chart data to the range it was loaded for.
+  evidence: `AnalyticsView` changes `selectedTimeRange` at once, but `chartData` and `rollupData` stay from the old range until a load finishes. `loadData` has no check after its fetch returns, so an older load finishing last can leave the old range's data on screen. Since Story 26.4, a weekly chip press in that window can also be stored against the wrong rule. It only affects accounts whose ranges differ, and the next successful load corrects the chart.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-4-analytics-adapt-to-data.md`
+  summary: Decide whether the 24-hour 5-hour line should break where the number is missing.
+  evidence: `StepAreaChartView` filters out nil 5-hour points without starting a new segment. If an account goes from number to none and back with no time gap, the line runs across the missing stretch. The project's design calls for honest breaks. This already applied before Story 26.4 and needs an account that changes state twice in 24 hours.
+
+## Deferred from: code review of spec-26-4-analytics-adapt-to-data (2026-11-01)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-4-analytics-adapt-to-data.md`
+  summary: Clear the weekly press made while 5-hour was hidden when 5-hour data returns.
+  evidence: `AnalyticsView.SeriesVisibility.sevenDayWhileFiveHourHidden` is cleared only by a weekly press in a range that has 5-hour data. If a range shows 5-hour data and later loses it again, the old press applies again. It needs an account that regains and then loses a number in the same open window, and the next weekly press fixes it.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-4-analytics-adapt-to-data.md`
+  summary: A user with a number could see the 5-hour chip vanish if every poll in a range lacks it.
+  evidence: The rule follows the data, as specified. If a 5-hour account's API ever returns no 5-hour value for a whole 24 hours (for example an idle window), the chip hides and returns on the first poll that has one. Stored choices are kept. Check against real Pro and Max responses when they are available.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-4-analytics-adapt-to-data.md`
+  summary: The 5-hour chip shows for a moment on window open for accounts with no number.
+  evidence: The empty first frame keeps today's controls by design, so the chip appears until the first load ends, then the row shifts. Fix by hiding the whole chip row until the first load completes, if the shift is judged distracting.
