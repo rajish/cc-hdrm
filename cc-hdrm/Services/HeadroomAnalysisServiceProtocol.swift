@@ -15,8 +15,8 @@ protocol HeadroomAnalysisServiceProtocol: Sendable {
     ) -> HeadroomBreakdown
 
     /// Aggregates headroom breakdown across multiple reset events.
-    /// Events keep their stored credits. Without them, each event's tier is resolved
-    /// individually, supporting mixed-tier aggregation.
+    /// Each event's tier is resolved individually, supporting mixed-tier aggregation.
+    /// Weekly cycles keep their stored credits. A 5-hour event uses its stored credits only when its tier does not resolve.
     /// Skipped: events with nil sevenDayUtil, events with nil fiveHourPeak that are not weekly
     /// cycles, and events with neither stored credits nor a resolvable tier.
     /// 5-hour events inside a weekly cycle's 7 days are left out.

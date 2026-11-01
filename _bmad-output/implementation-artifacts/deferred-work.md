@@ -150,3 +150,21 @@ Both are older drift in text restored unchanged. Neither blocks Epic 26.
 - source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
   summary: Re-check of the deferred items from the reverted spec. Grouping before overlap and uncapped 5-cycle pricing are fixed, and unanalysable cycles no longer add capacity in value figures. A cycle still belongs wholly to the month of its reset, by choice. The 5-hour detection branches are live again, so that removal item no longer applies.
   evidence: See Design Notes in the source spec.
+
+## Deferred from: code review of Story 26.5 (2026-11-01)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: Maintainer decision: how long without a 5-hour number makes a weekly reset a weekly cycle. Today it is the 5 hours before the reset plus the polls either side.
+  evidence: `HistoricalDataService.detectAndRecordResetIfNeeded` flags a cycle when polls show no number for 5 hours. If a Pro or Max account's API answer drops `five_hour` while idle, an idle weekend flags a false cycle, and `excludingWeeklyOverlap()` then drops that week's real 5-hour events. No such response has been observed. Requiring no number for the whole cycle would close this and cost one week of delay for an account that verifies mid-week.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: `five_hour: {"utilization": null, "resets_at": null}` is stored as no number but the app treats it as a 0% number.
+  evidence: `PollingEngine.fetchUsageData` maps it with `utilization ?? 0.0`, while `persistPoll` stores both columns empty and `hasNoFiveHourWindow` reads that as no number. The shape is unobserved. Fixing it needs a stored marker or a decision to store 0.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: Any fall in weekly usage with a reset time that moves by over 60 seconds counts as a real weekly reset.
+  evidence: The second arm in `detectAndRecordResetIfNeeded` has no size threshold. Observed jitter is about 1 second, so it is unlikely, but a 1-point correction with a 2-minute shift would record a false cycle.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: Before releasing, check that the maintainer's own `usage.db` has `reset_events.is_weekly_cycle` as `INTEGER`. A test run already moved it to version 9.
+  evidence: Version 9 databases skip the migration, so a column with another name or type would not be repaired. Read-only check: `PRAGMA table_info(reset_events)`.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: Each test run leaves a temporary folder from the database redirect.
+  evidence: `DatabaseManager.init()` under test creates a new folder in the system temporary directory and nothing removes it.

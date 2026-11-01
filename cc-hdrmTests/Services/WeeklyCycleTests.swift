@@ -483,10 +483,18 @@ struct WeeklyCycleValueTests {
         #expect(summary.unusedCredits == 30)
     }
 
-    @Test("A 5-hour event keeps stored credits rather than being recomputed")
-    func storedCreditsWin() {
+    @Test("A 5-hour event with a known tier is recomputed from current limits, as in 1.6.0")
+    func fiveHourRecomputedWhenTierKnown() {
         let stored = event(fiveHourPeak: 60, sevenDayUtil: 30, credits: (used: 100, constrained: 20, unused: 30))
-        #expect(service.aggregateBreakdown(events: [stored]).usedCredits == 100)
+        let expected = service.analyzeResetEvent(fiveHourPeak: 60, sevenDayUtil: 30, creditLimits: RateLimitTier.pro.creditLimits)
+        #expect(service.aggregateBreakdown(events: [stored]).usedCredits == expected.usedCredits)
+
+        let custom = event(fiveHourPeak: 60, sevenDayUtil: 30, tier: "unmapped_tier", credits: (used: 100, constrained: 20, unused: 30))
+        let preferences = MockPreferencesManager()
+        preferences.customFiveHourCredits = 1_000_000
+        preferences.customSevenDayCredits = 10_000_000
+        let edited = HeadroomAnalysisService(preferencesManager: preferences)
+        #expect(edited.aggregateBreakdown(events: [custom]).usedCredits == 600_000)
     }
 
     @Test("The overlap is removed before grouping by month")

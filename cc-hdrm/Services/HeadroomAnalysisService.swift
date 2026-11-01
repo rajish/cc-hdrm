@@ -116,24 +116,27 @@ final class HeadroomAnalysisService: HeadroomAnalysisServiceProtocol, @unchecked
         )
     }
 
-    /// An event's stored credits, so it keeps the breakdown it was recorded with. Rows recorded
-    /// without credits are worked out from each event's tier, which supports mixed-tier aggregation.
+    /// A weekly cycle keeps the credits it was recorded with. A 5-hour event is worked out from each
+    /// event's tier as in 1.6.0, which supports mixed-tier aggregation, and falls back to its stored
+    /// credits only when the tier no longer resolves.
     private func credits(
         for event: ResetEvent,
         peak: Double,
         sevenDayUtil: Double
     ) -> (used: Double, constrained: Double, unused: Double)? {
+        var stored: (used: Double, constrained: Double, unused: Double)?
         if let used = event.usedCredits,
            let unused = event.unusedCredits,
            event.isWeeklyCycle || event.constrainedCredits != nil {
-            return (used, event.constrainedCredits ?? 0, unused)
+            stored = (used, event.constrainedCredits ?? 0, unused)
         }
+        if event.isWeeklyCycle, let stored { return stored }
 
         guard let limits = RateLimitTier.resolve(
             tierString: event.tier,
             preferencesManager: preferencesManager
         ) else {
-            return nil
+            return stored
         }
 
         let breakdown = event.isWeeklyCycle

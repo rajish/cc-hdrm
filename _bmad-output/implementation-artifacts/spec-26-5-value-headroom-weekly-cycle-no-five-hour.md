@@ -85,7 +85,7 @@ Defaults chosen, since no human is available:
 - **Credits on weekly rows:** used and unused are stored, and constrained stays NULL, so a later change to the tier table leaves old cycles alone.
 - **Old rows without stored credits:** computed from the tier table as 1.6.0 does, in memory only.
 - **A real weekly reset:** the reset time moved forward by 6 days or more, or weekly usage dropped. A smaller move with no drop still records an event as in 1.6.0, but not a weekly cycle.
-- **Known 1.6.0 differences, all requested:** stored credits win over recomputing, so editing custom limits or the tier table no longer changes past events. Stored credits count when the tier is unknown. A value over 100 is clamped. Results are identical when limits have not changed and values are in range.
+- **Known 1.6.0 differences, from the carried findings:** stored credits count when a 5-hour event's tier no longer resolves. A value over 100 is clamped. A 5-hour event whose tier resolves is still recomputed from current limits, so editing custom limits changes past events as in 1.6.0. Only weekly cycles keep their stored credits over recomputing.
 - **Overlap:** a 5-hour event in the 7 days before any weekly cycle is left out of value and capacity, because the weekly value already contains its usage. So is an unflagged empty-peak row, which adds days but no usage. Rows are untouched. With no weekly cycle in the list, the input is returned as is.
 - **Capacity:** first-to-last span of other events, without the weeks weekly cycles stand for, capped by the range as in 1.6.0, plus 7 days per weekly cycle that could be analysed.
 - **Price:** capacity days capped at the range, with a 7-day floor. A 30-day range holding 5 cycles is priced at 30 days, while utilisation keeps all 35.
@@ -118,7 +118,7 @@ Defaults chosen, since no human is available:
 
 **Breakdown**
 
-- Stored credits win; the weekly branch and 1.6.0 path differ only here.
+- Weekly cycles keep stored credits; 5-hour events are recomputed as in 1.6.0 and fall back to stored credits only when the tier is unknown.
   [`HeadroomAnalysisService.swift:121`](../../cc-hdrm/Services/HeadroomAnalysisService.swift#L121)
 
 - Two bands from weekly credits, clamped.
