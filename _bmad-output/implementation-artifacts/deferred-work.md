@@ -127,8 +127,8 @@ Both are older drift in text restored unchanged. Neither blocks Epic 26.
 ## Deferred from: build of Story 26.5 (2026-11-01)
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
-  summary: Test runs open the real `usage.db` and apply new migrations to it. Stop this before the next schema change.
-  evidence: `cc-hdrm/App/AppDelegate.swift:65` calls `DatabaseManager.shared.initialize()`, and `cc-hdrmTests/App/AppDelegateTests.swift:73` runs that method. Logs show test processes logging "Database opened at ~/Library/Application Support/cc-hdrm/usage.db", then "schema is current (version 9)". Story 26.5's test runs added `is_weekly_cycle` to the real database this way, with no rows rewritten. Fix by injecting the database manager, or by skipping startup under the test host.
+  summary: Test runs still launch the real app startup as their host, including the log scan. The database is now redirected to a temporary folder under test.
+  evidence: `cc-hdrm/App/AppDelegate.swift` runs `ClaudeCodeLogParser` under test, which reads Claude Code logs and can write `log-scan-state.json` in the real Application Support folder. Before the database redirect, test runs applied schema version 9 to the maintainer's real `usage.db`; integrity check passed and no rows changed.
 - source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
   summary: Confirm the tier string verified Ultra accounts report before Story 26.6 maps it.
   evidence: `cc-hdrm/Models/RateLimitTier.swift` knows only Pro, Max 5x and Max 20x. If Ultra reports another string with no custom limits, its weekly rows are flagged with no credits, the aggregate skips them, and the bar says the tier is unknown. Mapping the string later makes those rows countable without rewriting them.

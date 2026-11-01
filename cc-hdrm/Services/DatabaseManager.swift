@@ -52,11 +52,12 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
     /// Creates a DatabaseManager with the default production path.
     /// Database location: `~/Library/Application Support/cc-hdrm/usage.db`
     private convenience init() {
-        let appSupportURL = FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first!
-        let databaseURL = appSupportURL
+        // The app is the test host, so test runs would otherwise open and migrate the user's real database
+        let isTestHost = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        let baseURL = isTestHost
+            ? FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+            : FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let databaseURL = baseURL
             .appendingPathComponent("cc-hdrm", isDirectory: true)
             .appendingPathComponent("usage.db")
         self.init(databasePath: databaseURL)

@@ -5,6 +5,13 @@ import SQLite3
 
 @Suite("DatabaseManager Tests")
 struct DatabaseManagerTests {
+    @Test("test runs never point the shared manager at the user's real database")
+    func sharedManagerAvoidsRealDatabase() {
+        let path = DatabaseManager.shared.getDatabasePath().path
+        #expect(!path.contains("Application Support"))
+        #expect(path.hasPrefix(FileManager.default.temporaryDirectory.path))
+    }
+
 
     /// Creates an isolated DatabaseManager with a unique temporary database path.
     /// Returns the manager and path for cleanup.
