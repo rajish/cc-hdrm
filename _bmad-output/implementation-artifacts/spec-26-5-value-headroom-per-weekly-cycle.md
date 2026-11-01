@@ -2,12 +2,14 @@
 title: 'Value and Headroom Analysis per Weekly Cycle (Story 26.5)'
 type: 'feature'
 created: '2026-10-31'
-status: 'done'
+status: 'superseded'
 baseline_commit: 'd27bdfead334aca701950b14b07fcc8354754386'
 review_loop_iteration: 0
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-26-context.md'
 ---
+
+**Superseded 2026-11-01.** This story's code was reverted because it assumed every account lost the 5-hour limit. Kept as a record. See `_bmad-output/planning-artifacts/epics/epic-26-accounts-without-five-hour-limit.md`.
 
 <frozen-after-approval reason="human-owned intent — do not modify unless human renegotiates">
 
