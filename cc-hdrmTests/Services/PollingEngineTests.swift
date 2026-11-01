@@ -358,6 +358,30 @@ struct PollingEngineTests {
         #expect(appState.statusMessage == nil)
     }
 
+    @Test("footer plan name follows the tier, not the raw subscription type")
+    @MainActor
+    func footerShowsCurrentPlanName() async {
+        let credentials = KeychainCredentials(
+            accessToken: "token",
+            refreshToken: nil,
+            expiresAt: nil,
+            subscriptionType: "max",
+            rateLimitTier: RateLimitTier.max20x.rawValue,
+            scopes: nil
+        )
+        let appState = AppState()
+        let engine = PollingEngine(
+            keychainService: PEMockKeychainService(credentials: credentials),
+            tokenRefreshService: PEMockTokenRefreshService(),
+            apiClient: PEMockAPIClient(result: successResponse()),
+            appState: appState
+        )
+
+        await engine.performPollCycle()
+
+        #expect(appState.subscriptionTier == "Ultra")
+    }
+
     @Test("five_hour null from the API → weekly on the menu bar, follows the data when it comes back")
     @MainActor
     func fiveHourNullThenPresent() async throws {
@@ -1203,6 +1227,7 @@ struct PollingEngineProfileFetchTests {
 
         // Profile should have been fetched for backfill
         #expect(mockAPI.profileFetchCallCount == 1)
+        #expect(appState.subscriptionTier == "Pro")
 
         // Backfilled credentials should be written to Keychain
         let written = mockKeychain.lastWrittenCredentials

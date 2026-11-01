@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import cc_hdrm
 
@@ -22,6 +23,37 @@ struct RateLimitTierTests {
     func max20xCreditLimits() {
         #expect(RateLimitTier.max20x.fiveHourCredits == 11_000_000)
         #expect(RateLimitTier.max20x.sevenDayCredits == 83_333_300)
+    }
+
+    // MARK: - Plan Names
+
+    @Test("Plans show their current names, and the stored raw strings stay as they were")
+    func currentPlanNames() {
+        #expect(RateLimitTier.pro.displayName == "Pro")
+        #expect(RateLimitTier.max5x.displayName == "Max")
+        #expect(RateLimitTier.max20x.displayName == "Ultra")
+        #expect(RateLimitTier.max5x.rawValue == "default_claude_max_5x")
+        #expect(RateLimitTier.max20x.rawValue == "default_claude_max_20x")
+    }
+
+    // MARK: - Unknown Tier Log
+
+    @Test("An unknown tier string is logged once, with or without custom limits")
+    func unknownTierLoggedOnce() {
+        let plain = "test_tier_\(UUID().uuidString)"
+        #expect(RateLimitTier.resolve(tierString: plain, preferencesManager: nil) == nil)
+        #expect(RateLimitTier.logUnknownTierOnce(plain) == false)
+
+        let mockPrefs = MockPreferencesManager()
+        mockPrefs.customFiveHourCredits = 1_000_000
+        mockPrefs.customSevenDayCredits = 10_000_000
+        let custom = "test_tier_\(UUID().uuidString)"
+        #expect(RateLimitTier.resolve(tierString: custom, preferencesManager: mockPrefs) != nil)
+        #expect(RateLimitTier.logUnknownTierOnce(custom) == false)
+
+        let unseen = "test_tier_\(UUID().uuidString)"
+        #expect(RateLimitTier.logUnknownTierOnce(unseen) == true)
+        #expect(RateLimitTier.logUnknownTierOnce(unseen) == false)
     }
 
     // MARK: - Raw Value Mapping (AC-1)

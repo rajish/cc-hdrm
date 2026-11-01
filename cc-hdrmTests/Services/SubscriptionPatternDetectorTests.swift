@@ -188,7 +188,7 @@ struct SubscriptionPatternDetectorTests {
         #expect(overpaying != nil)
 
         if case .chronicOverpaying(let current, let recommended, let savings) = overpaying {
-            #expect(current == "Max 5x")
+            #expect(current == "Max")
             #expect(recommended == "Pro")
             #expect(savings > 0)
         }
@@ -276,9 +276,9 @@ struct SubscriptionPatternDetectorTests {
         #expect(overpaying != nil)
 
         if case .chronicOverpaying(let current, let recommended, let savings) = overpaying {
-            #expect(current == "Max 20x")
+            #expect(current == "Ultra")
             // Algorithm picks closest cheaper tier: Max 5x ($100) not Pro ($20)
-            #expect(recommended == "Max 5x")
+            #expect(recommended == "Max")
             // Savings = $205 (base $200 + extra $5) - $100 = $105
             #expect(savings == 105.0)
         }
@@ -312,7 +312,7 @@ struct SubscriptionPatternDetectorTests {
         if case .chronicUnderpowering(let count, let current, let suggested) = underpowering {
             #expect(count >= 3)
             #expect(current == "Pro")
-            #expect(suggested == "Max 5x")
+            #expect(suggested == "Max")
         }
     }
 
@@ -344,7 +344,7 @@ struct SubscriptionPatternDetectorTests {
             // 9000 cents = $90/mo extra → Pro $20 + $90 = $110 total > Max 5x $100
             #expect(count >= 0) // cost-based trigger, rate-limit count may be 0
             #expect(current == "Pro")
-            #expect(suggested == "Max 5x")
+            #expect(suggested == "Max")
         }
     }
 
@@ -424,7 +424,7 @@ struct SubscriptionPatternDetectorTests {
         if case .extraUsageOverflow(let avgExtra, let recommended, let savings) = overflow {
             // 10000 cents = $100/mo extra on Pro ($20) → total $120 > Max 5x ($100) → savings $20
             #expect(avgExtra == 100.0)
-            #expect(recommended == "Max 5x")
+            #expect(recommended == "Max")
             #expect(savings == 20.0)
         }
     }
@@ -475,7 +475,7 @@ struct SubscriptionPatternDetectorTests {
             // 1500 cents = $15/mo extra on Pro ($20) → 75% of base, > 50% threshold
             #expect(avgExtra == 15.0)
             #expect(base == 20.0)
-            #expect(recommended == "Max 5x")
+            #expect(recommended == "Max")
         }
     }
 

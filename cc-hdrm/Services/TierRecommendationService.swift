@@ -23,10 +23,10 @@ final class TierRecommendationService: TierRecommendationServiceProtocol, @unche
     /// Safety margin above actual peak usage. The recommended tier must have
     /// at least this much headroom above the user's peak usage.
     /// 0.20 = 20% headroom required.
-    private let safetyMarginFraction: Double = 0.20
+    static let safetyMarginFraction: Double = 0.20
 
     /// Threshold for counting a reset event as a rate-limit event.
-    /// A 5h peak at or above this percentage is considered rate-limited.
+    /// A peak on the account's current limit at or above this percentage is considered rate-limited.
     private let rateLimitThreshold: Double = 95.0
 
     /// API returns monetary values in cents; divide by this to get dollars.
@@ -44,7 +44,8 @@ final class TierRecommendationService: TierRecommendationServiceProtocol, @unche
 
     func recommendTier(for range: TimeRange) async throws -> TierRecommendation? {
         // Gather reset events for the analysis range
-        let resetEvents = try await historicalDataService.getResetEvents(range: range)
+        let allEvents = try await historicalDataService.getResetEvents(range: range)
+        let resetEvents = allEvents.excludingWeeklyOverlap()
 
         // Check minimum data requirement
         guard hasMinimumData(events: resetEvents) else {
@@ -53,7 +54,7 @@ final class TierRecommendationService: TierRecommendationServiceProtocol, @unche
         }
 
         // Resolve current tier from the most recent event
-        guard let currentTierString = resetEvents.last?.tier,
+        guard let currentTierString = allEvents.last?.tier,
               let currentTier = RateLimitTier(rawValue: currentTierString) else {
             Self.logger.info("Cannot resolve current tier — returning nil")
             return nil
@@ -74,6 +75,31 @@ final class TierRecommendationService: TierRecommendationServiceProtocol, @unche
             keyPath: \.sevenDayUtil
         )
 
+        let hasNoFiveHourNumber = resetEvents.endsInWeeklyCycle
+        let peakWeeklyCycleCredits = calculatePeakCredits(
+            events: resetEvents.filter(\.isWeeklyCycle),
+            creditLimit: currentLimits.sevenDayCredits,
+            keyPath: \.sevenDayUtil
+        )
+        let margin = 1.0 + Self.safetyMarginFraction
+        // ponytail: strictest safe bound, so most Ultra accounts see no downgrade. Measure the largest
+        // 5-hour rise in weekly use if that proves too cautious.
+        let fits: (RateLimitTier) -> Bool = { tier in
+            let isCheaper = tier.monthlyPrice < currentTier.monthlyPrice
+            // A weekly cycle has no 5-hour number to test a cheaper plan's limit with, and could
+            // have been spent in one window, so all of it must fit under that limit.
+            if isCheaper && peakWeeklyCycleCredits * margin > Double(tier.fiveHourCredits) {
+                return false
+            }
+            // An old 5-hour peak cannot call for a plan to escape a limit the account no longer reports.
+            return self.tierFitsUsage(
+                tier: tier,
+                peakFiveHourCredits: hasNoFiveHourNumber && !isCheaper ? 0 : peakFiveHourCredits,
+                peakSevenDayCredits: peakSevenDayCredits
+            )
+        }
+        Self.logger.info("Tier advice basis: noFiveHourNumber=\(hasNoFiveHourNumber, privacy: .public), events=\(resetEvents.count, privacy: .public) of \(allEvents.count, privacy: .public), peak5h=\(peakFiveHourCredits, privacy: .public), peak7d=\(peakSevenDayCredits, privacy: .public), peakCycle=\(peakWeeklyCycleCredits, privacy: .public)")
+
         // Count rate-limit events
         let rateLimitCount = countRateLimitEvents(events: resetEvents)
 
@@ -86,21 +112,13 @@ final class TierRecommendationService: TierRecommendationServiceProtocol, @unche
         // Evaluate each tier
         var bestTier: RateLimitTier = currentTier
         var bestTotalCost: Double = currentMonthlyCost
-        var bestFits = tierFitsUsage(
-            tier: currentTier,
-            peakFiveHourCredits: peakFiveHourCredits,
-            peakSevenDayCredits: peakSevenDayCredits
-        )
+        var bestFits = fits(currentTier)
 
         for candidateTier in RateLimitTier.allCases {
-            let fits = tierFitsUsage(
-                tier: candidateTier,
-                peakFiveHourCredits: peakFiveHourCredits,
-                peakSevenDayCredits: peakSevenDayCredits
-            )
+            let candidateFits = fits(candidateTier)
 
             let candidateTotalCost: Double
-            if fits {
+            if candidateFits {
                 // Usage fits within tier — no extra usage needed
                 candidateTotalCost = candidateTier.monthlyPrice
             } else if monthlyExtraUsage > 0 {
@@ -115,11 +133,11 @@ final class TierRecommendationService: TierRecommendationServiceProtocol, @unche
             }
 
             // Pick the cheapest tier that either fits or is cheaper in total cost
-            if fits && candidateTotalCost < bestTotalCost {
+            if candidateFits && candidateTotalCost < bestTotalCost {
                 bestTier = candidateTier
                 bestTotalCost = candidateTotalCost
                 bestFits = true
-            } else if !bestFits && fits {
+            } else if !bestFits && candidateFits {
                 // Current best doesn't fit but this candidate does — prefer it
                 bestTier = candidateTier
                 bestTotalCost = candidateTotalCost
@@ -169,10 +187,16 @@ final class TierRecommendationService: TierRecommendationServiceProtocol, @unche
 
     // MARK: - Private Helpers
 
+    /// Time the events cover. A first event that is a weekly cycle stands for the 7 days before it.
+    private func dataSpanMs(events: [ResetEvent]) -> Int64? {
+        guard let first = events.first, let last = events.last else { return nil }
+        let start = first.isWeeklyCycle ? first.timestamp - ResetEvent.weeklyCycleMs : first.timestamp
+        return last.timestamp - start
+    }
+
     /// Checks whether the data spans at least `minimumDataDays` days.
     private func hasMinimumData(events: [ResetEvent]) -> Bool {
-        guard let first = events.first, let last = events.last else { return false }
-        let spanMs = last.timestamp - first.timestamp
+        guard let spanMs = dataSpanMs(events: events) else { return false }
         let spanDays = Double(spanMs) / (24.0 * 60.0 * 60.0 * 1000.0)
         return spanDays >= Double(minimumDataDays)
     }
@@ -187,9 +211,17 @@ final class TierRecommendationService: TierRecommendationServiceProtocol, @unche
         return (peakPercent / 100.0) * Double(creditLimit)
     }
 
-    /// Counts reset events where 5h utilization reached the rate-limit threshold.
+    /// Peaks on the limit the account has now: weekly cycles when it reports no 5-hour number,
+    /// otherwise 5-hour peaks. The two bases are never mixed.
+    private func currentLimitPeaks(events: [ResetEvent]) -> [Double] {
+        events.endsInWeeklyCycle
+            ? events.filter(\.isWeeklyCycle).compactMap { $0.sevenDayUtil?.clampedToPercent }
+            : events.compactMap(\.fiveHourPeak)
+    }
+
+    /// Counts reset events whose peak on the current limit reached the rate-limit threshold.
     private func countRateLimitEvents(events: [ResetEvent]) -> Int {
-        events.filter { ($0.fiveHourPeak ?? 0) >= rateLimitThreshold }.count
+        currentLimitPeaks(events: events).filter { $0 >= rateLimitThreshold }.count
     }
 
     /// Estimates the average monthly extra usage spend from poll data.
@@ -318,14 +350,14 @@ final class TierRecommendationService: TierRecommendationServiceProtocol, @unche
         peakFiveHourCredits: Double,
         peakSevenDayCredits: Double
     ) -> Bool {
-        let required5h = peakFiveHourCredits * (1.0 + safetyMarginFraction)
-        let required7d = peakSevenDayCredits * (1.0 + safetyMarginFraction)
+        let required5h = peakFiveHourCredits * (1.0 + Self.safetyMarginFraction)
+        let required7d = peakSevenDayCredits * (1.0 + Self.safetyMarginFraction)
         return required5h <= Double(tier.fiveHourCredits) && required7d <= Double(tier.sevenDayCredits)
     }
 
     /// Calculates the average headroom percentage across recent reset events.
     private func calculateAverageHeadroom(events: [ResetEvent]) -> Double {
-        let peaks = events.compactMap { $0.fiveHourPeak }
+        let peaks = currentLimitPeaks(events: events)
         guard !peaks.isEmpty else { return 100 }
         let avgPeak = peaks.reduce(0, +) / Double(peaks.count)
         return max(100.0 - avgPeak, 0)
@@ -333,8 +365,7 @@ final class TierRecommendationService: TierRecommendationServiceProtocol, @unche
 
     /// Calculates the number of weeks of data from reset events.
     private func calculateWeeksOfData(events: [ResetEvent]) -> Int {
-        guard let first = events.first, let last = events.last else { return 0 }
-        let spanMs = last.timestamp - first.timestamp
+        guard let spanMs = dataSpanMs(events: events) else { return 0 }
         let spanWeeks = Double(spanMs) / (7.0 * 24.0 * 60.0 * 60.0 * 1000.0)
         return max(Int(spanWeeks.rounded()), 1)
     }

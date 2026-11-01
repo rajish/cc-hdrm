@@ -146,7 +146,7 @@ final class PollingEngine: PollingEngineProtocol {
     func performPollCycle() async {
         do {
             let credentials = try await keychainService.readCredentials()
-            appState.updateSubscriptionTier(credentials.subscriptionType)
+            appState.updateSubscriptionTier(credentials.planName)
             if appState.oauthState != .authenticated {
                 appState.updateOAuthState(.authenticated)
             }
@@ -627,7 +627,7 @@ final class PollingEngine: PollingEngineProtocol {
             Self.logger.info("Tier backfilled from profile — tier: \(tier ?? "nil", privacy: .public)")
 
             // Update subscription tier display immediately
-            appState.updateSubscriptionTier(enriched.subscriptionType)
+            appState.updateSubscriptionTier(enriched.planName)
 
             return enriched
         } catch {

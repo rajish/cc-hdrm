@@ -91,21 +91,30 @@ final class SubscriptionPatternDetector: SubscriptionPatternDetectorProtocol, @u
         let calendar = Calendar.current
         var weeklyUtilization: [(weekStart: Date, avgUtil: Double)] = []
         var weekGroups: [Int: [Double]] = [:] // weekOfYear -> utilization values
+        var weeklyPeaks: [Int: Double] = [:] // weekOfYear -> highest weekly value on polls with no 5-hour number
 
         for poll in polls {
-            guard let util = poll.fiveHourUtil else { continue }
             let date = Date(timeIntervalSince1970: Double(poll.timestamp) / 1000.0)
             let weekOfYear = calendar.component(.weekOfYear, from: date)
             let year = calendar.component(.yearForWeekOfYear, from: date)
             let key = year * 100 + weekOfYear
-            weekGroups[key, default: []].append(util)
+            if let util = poll.fiveHourUtil {
+                weekGroups[key, default: []].append(util)
+            } else if let weekly = poll.sevenDayUtil {
+                weeklyPeaks[key] = max(weeklyPeaks[key] ?? 0, weekly)
+            }
         }
 
-        // Calculate average utilization per week, sorted chronologically
-        let sortedKeys = weekGroups.keys.sorted()
+        // Calculate utilization per week, sorted chronologically. A week with no 5-hour number
+        // uses its weekly peak; an average would understate a value that only climbs within a cycle.
+        let sortedKeys = Set(weekGroups.keys).union(weeklyPeaks.keys).sorted()
         for key in sortedKeys {
-            let values = weekGroups[key]!
-            let avg = values.reduce(0, +) / Double(values.count)
+            let avg: Double
+            if let values = weekGroups[key] {
+                avg = values.reduce(0, +) / Double(values.count)
+            } else {
+                avg = (weeklyPeaks[key] ?? 0).clampedToPercent
+            }
             let year = key / 100
             let week = key % 100
             var components = DateComponents()
@@ -166,7 +175,7 @@ final class SubscriptionPatternDetector: SubscriptionPatternDetectorProtocol, @u
         }
 
         // Group reset events by calendar month
-        let monthlyData = groupByCalendarMonth(resetEvents)
+        let monthlyData = groupByCalendarMonth(resetEvents.excludingWeeklyOverlap())
         guard monthlyData.count >= Self.chronicOverpayingMinMonths else {
             Self.logger.debug("Chronic overpaying: insufficient data (\(monthlyData.count) months < \(Self.chronicOverpayingMinMonths))")
             return nil
@@ -195,7 +204,14 @@ final class SubscriptionPatternDetector: SubscriptionPatternDetectorProtocol, @u
                 let fiveHourCapacity = Double(cheaperTier.fiveHourCredits) / Double(currentTier.fiveHourCredits) * 100.0
                 let sevenDayCapacity = Double(cheaperTier.sevenDayCredits) / Double(currentTier.sevenDayCredits) * 100.0
 
-                if peakUtil5h <= fiveHourCapacity && peakUtil7d <= sevenDayCapacity {
+                // A weekly cycle has no 5-hour number to test the cheaper plan's limit with, and
+                // could have been spent in one window, so all of it must fit under that limit.
+                let weeklyCyclePeak = monthData.events.filter(\.isWeeklyCycle).compactMap(\.sevenDayUtil).max() ?? 0
+                let weeklyCycleCredits = weeklyCyclePeak / 100.0 * Double(currentTier.sevenDayCredits)
+                    * (1.0 + TierRecommendationService.safetyMarginFraction)
+
+                if peakUtil5h <= fiveHourCapacity && peakUtil7d <= sevenDayCapacity
+                    && weeklyCycleCredits <= Double(cheaperTier.fiveHourCredits) {
                     consecutiveMonths += 1
                 } else {
                     break
@@ -305,28 +321,13 @@ final class SubscriptionPatternDetector: SubscriptionPatternDetectorProtocol, @u
 
     /// Detects if monthly utilization has declined for 3+ consecutive months.
     private func detectUsageDecay() async throws -> PatternFinding? {
-        let rollups = try await historicalDataService.getRolledUpData(range: .all)
-        guard !rollups.isEmpty else { return nil }
-
-        // Group rollups by calendar month, compute average 5h utilization
-        let calendar = Calendar.current
-        var monthlyAvg: [(yearMonth: Int, avg: Double)] = []
-        var monthGroups: [Int: [Double]] = [:]
-
-        for rollup in rollups {
-            guard let avg = rollup.fiveHourAvg else { continue }
-            let date = Date(timeIntervalSince1970: Double(rollup.periodStart) / 1000.0)
-            let year = calendar.component(.year, from: date)
-            let month = calendar.component(.month, from: date)
-            let key = year * 100 + month
-            monthGroups[key, default: []].append(avg)
-        }
-
-        let sortedKeys = monthGroups.keys.sorted()
-        for key in sortedKeys {
-            let values = monthGroups[key]!
-            let avg = values.reduce(0, +) / Double(values.count)
-            monthlyAvg.append((key, avg))
+        let resetEvents = try await historicalDataService.getResetEvents(fromTimestamp: nil, toTimestamp: nil)
+        let monthlyAvg: [(yearMonth: Int, avg: Double)]
+        if resetEvents.endsInWeeklyCycle {
+            Self.logger.debug("Usage decay: measuring weekly-cycle peaks, the account reports no 5-hour number")
+            monthlyAvg = monthlyWeeklyCyclePeaks(resetEvents)
+        } else {
+            monthlyAvg = monthlyFiveHourAverages(try await historicalDataService.getRolledUpData(range: .all))
         }
 
         guard monthlyAvg.count >= Self.usageDecayMinMonths + 1 else {
@@ -458,6 +459,37 @@ final class SubscriptionPatternDetector: SubscriptionPatternDetectorProtocol, @u
     }
 
     // MARK: - Helpers
+
+    /// Average 5h utilization per calendar month, sorted chronologically.
+    private func monthlyFiveHourAverages(_ rollups: [UsageRollup]) -> [(yearMonth: Int, avg: Double)] {
+        let calendar = Calendar.current
+        var monthGroups: [Int: [Double]] = [:]
+
+        for rollup in rollups {
+            guard let avg = rollup.fiveHourAvg else { continue }
+            let date = Date(timeIntervalSince1970: Double(rollup.periodStart) / 1000.0)
+            let year = calendar.component(.year, from: date)
+            let month = calendar.component(.month, from: date)
+            let key = year * 100 + month
+            monthGroups[key, default: []].append(avg)
+        }
+
+        return monthGroups.keys.sorted().map { key in
+            let values = monthGroups[key]!
+            return (key, values.reduce(0, +) / Double(values.count))
+        }
+    }
+
+    /// Average weekly-cycle peak per calendar month, sorted chronologically. Months before an
+    /// account lost its 5-hour number have no cycles and are left out, so a decline is never
+    /// measured between 5-hour averages and weekly peaks.
+    private func monthlyWeeklyCyclePeaks(_ events: [ResetEvent]) -> [(yearMonth: Int, avg: Double)] {
+        groupByCalendarMonth(events.filter(\.isWeeklyCycle)).compactMap { month in
+            let peaks = month.events.compactMap { $0.sevenDayUtil?.clampedToPercent }
+            guard !peaks.isEmpty else { return nil }
+            return (month.yearMonth, peaks.reduce(0, +) / Double(peaks.count))
+        }
+    }
 
     /// Groups reset events by calendar month.
     private struct MonthData {

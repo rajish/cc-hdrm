@@ -58,6 +58,30 @@ struct KeychainCredentialsTests {
         #expect(creds.expiresAt == 1738400000000)
     }
 
+    // MARK: - Plan Name
+
+    @Test("planName uses the current name for a known tier and what the account reports otherwise")
+    func planName() {
+        func name(tier: String?, subscriptionType: String?) -> String? {
+            KeychainCredentials(
+                accessToken: "at",
+                refreshToken: nil,
+                expiresAt: nil,
+                subscriptionType: subscriptionType,
+                rateLimitTier: tier,
+                scopes: nil
+            ).planName
+        }
+        #expect(name(tier: "default_claude_max_20x", subscriptionType: "max") == "Ultra")
+        #expect(name(tier: "default_claude_max_5x", subscriptionType: "max") == "Max")
+        #expect(name(tier: "default_claude_pro", subscriptionType: "pro") == "Pro")
+        #expect(name(tier: "some_future_tier", subscriptionType: "max") == "max")
+        #expect(name(tier: nil, subscriptionType: "team") == "team")
+        #expect(name(tier: "default_claude_max_5x", subscriptionType: "team") == "team")
+        #expect(name(tier: "default_claude_max_20x", subscriptionType: nil) == "Ultra")
+        #expect(name(tier: nil, subscriptionType: nil) == nil)
+    }
+
     // MARK: - Codable Round-Trip
 
     @Test("Codable round-trip preserves all fields")

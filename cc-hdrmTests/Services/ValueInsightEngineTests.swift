@@ -683,7 +683,7 @@ struct ValueInsightEngineTests {
     @Test("insightFromPatternFinding produces .patternFinding priority")
     func patternFindingConversion() {
         let finding = PatternFinding.chronicOverpaying(
-            currentTier: "Max 5x", recommendedTier: "Pro", monthlySavings: 180
+            currentTier: "Max", recommendedTier: "Pro", monthlySavings: 180
         )
         let insight = ValueInsightEngine.insightFromPatternFinding(finding)
 

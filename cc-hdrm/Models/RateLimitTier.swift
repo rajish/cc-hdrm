@@ -2,7 +2,8 @@ import Foundation
 import os
 
 /// Known Anthropic subscription tiers with hardcoded credit limits.
-/// Raw values match the `rateLimitTier` strings stored in Keychain.
+/// Raw values match the `rateLimitTier` strings stored in Keychain and in `reset_events`, so
+/// case names and raw values keep the old plan names. Only `displayName` follows the current ones.
 enum RateLimitTier: String, CaseIterable, Sendable {
     case pro = "default_claude_pro"
     case max5x = "default_claude_max_5x"
@@ -39,8 +40,8 @@ enum RateLimitTier: String, CaseIterable, Sendable {
     var displayName: String {
         switch self {
         case .pro: return "Pro"
-        case .max5x: return "Max 5x"
-        case .max20x: return "Max 20x"
+        case .max5x: return "Max"
+        case .max20x: return "Ultra"
         }
     }
 
@@ -67,6 +68,10 @@ enum RateLimitTier: String, CaseIterable, Sendable {
             return tier.creditLimits
         }
 
+        if let tierString {
+            logUnknownTierOnce(tierString)
+        }
+
         // Try user-configured custom limits
         if let prefs = preferencesManager,
            let custom5h = prefs.customFiveHourCredits,
@@ -79,6 +84,19 @@ enum RateLimitTier: String, CaseIterable, Sendable {
         // No match — log and return nil
         logger.warning("Unknown rate limit tier: \(tierString ?? "nil", privacy: .public)")
         return nil
+    }
+
+    private static let loggedUnknownTiers = OSAllocatedUnfairLock(initialState: Set<String>())
+
+    /// Logs an unknown tier string the first time it appears since launch, even with custom limits set.
+    /// This line is how the string a new plan really reports can be read. Returns whether it logged.
+    @discardableResult
+    static func logUnknownTierOnce(_ tierString: String) -> Bool {
+        let isFirstSighting = loggedUnknownTiers.withLock { $0.insert(tierString).inserted }
+        if isFirstSighting {
+            logger.info("Unmapped rate limit tier string: \(tierString, privacy: .public)")
+        }
+        return isFirstSighting
     }
 
     /// Validates that custom credit limits produce a sensible normalization factor.
@@ -106,7 +124,7 @@ struct CreditLimits: Sendable, Equatable {
     }
 
     /// 7d_limit / 5h_limit — used for slope normalization.
-    /// ~9.09 for Pro, ~12.63 for Max 5x, ~7.58 for Max 20x.
+    /// ~9.09 for Pro, ~12.63 for Max, ~7.58 for Ultra.
     /// Returns 0 if `fiveHourCredits` is zero (defensive guard — prevents inf propagation).
     var normalizationFactor: Double {
         guard fiveHourCredits > 0 else { return 0 }
