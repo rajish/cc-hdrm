@@ -3,7 +3,7 @@ import os
 import SQLite3
 
 /// Current database schema version. Increment when schema changes require migration.
-private let currentSchemaVersion: Int = 8
+private let currentSchemaVersion: Int = 9
 
 /// SQLITE_TRANSIENT tells SQLite to make its own copy of the string data.
 /// Required when binding strings from Swift's withCString which uses temporary buffers.
@@ -52,11 +52,12 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
     /// Creates a DatabaseManager with the default production path.
     /// Database location: `~/Library/Application Support/cc-hdrm/usage.db`
     private convenience init() {
-        let appSupportURL = FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        ).first!
-        let databaseURL = appSupportURL
+        // The app is the test host, so test runs would otherwise open and migrate the user's real database
+        let isTestHost = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        let baseURL = isTestHost
+            ? FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+            : FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let databaseURL = baseURL
             .appendingPathComponent("cc-hdrm", isDirectory: true)
             .appendingPathComponent("usage.db")
         self.init(databasePath: databaseURL)
@@ -191,6 +192,15 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
             try executeSQL("ALTER TABLE usage_rollups ADD COLUMN fable_weekly_peak REAL", on: connection)
             try executeSQL("ALTER TABLE usage_rollups ADD COLUMN fable_weekly_min REAL", on: connection)
             Self.logger.info("Migration v7->v8: added fable weekly columns to usage_polls and usage_rollups")
+        }
+
+        if existingVersion < 9 {
+            let connection = try getConnection()
+            // The version is written after every migration, so a stop in between would otherwise repeat this ALTER and fail forever.
+            if sqlite3_table_column_metadata(connection, nil, "reset_events", "is_weekly_cycle", nil, nil, nil, nil, nil) != SQLITE_OK {
+                try executeSQL("ALTER TABLE reset_events ADD COLUMN is_weekly_cycle INTEGER", on: connection)
+            }
+            Self.logger.info("Migration v8->v9: added is_weekly_cycle column to reset_events")
         }
 
         Self.logger.info("Migrations complete: \(existingVersion) -> \(currentSchemaVersion)")
@@ -337,7 +347,8 @@ final class DatabaseManager: DatabaseManagerProtocol, @unchecked Sendable {
                 tier TEXT,
                 used_credits REAL,
                 constrained_credits REAL,
-                waste_credits REAL
+                waste_credits REAL,
+                is_weekly_cycle INTEGER
             )
             """
         try executeSQL(createTable, on: connection)

@@ -28,11 +28,14 @@ enum CycleUtilizationCalculator {
     ) -> [CycleUtilization] {
         guard !resetEvents.isEmpty else { return [] }
 
+        // Before grouping: a weekly cycle's 7 days can start in the previous group.
+        let countedEvents = resetEvents.excludingWeeklyOverlap()
+
         let groups: [(key: CycleKey, events: [ResetEvent])]
         if let day = billingCycleDay {
-            groups = groupByBillingCycle(events: resetEvents, billingDay: day)
+            groups = groupByBillingCycle(events: countedEvents, billingDay: day)
         } else {
-            groups = groupByCalendarMonth(events: resetEvents)
+            groups = groupByCalendarMonth(events: countedEvents)
         }
 
         guard !groups.isEmpty else { return [] }

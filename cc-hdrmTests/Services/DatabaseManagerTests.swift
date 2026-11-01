@@ -5,6 +5,13 @@ import SQLite3
 
 @Suite("DatabaseManager Tests")
 struct DatabaseManagerTests {
+    @Test("test runs never point the shared manager at the user's real database")
+    func sharedManagerAvoidsRealDatabase() {
+        let path = DatabaseManager.shared.getDatabasePath().path
+        #expect(!path.contains("Application Support"))
+        #expect(path.hasPrefix(FileManager.default.temporaryDirectory.path))
+    }
+
 
     /// Creates an isolated DatabaseManager with a unique temporary database path.
     /// Returns the manager and path for cleanup.
@@ -51,7 +58,7 @@ struct DatabaseManagerTests {
         #expect(manager.indexExists("idx_reset_events_timestamp"))
     }
 
-    @Test("Schema creation sets schema version to current (8)")
+    @Test("Schema creation sets schema version to current (9)")
     func schemaCreationSetsVersion() throws {
         let (manager, path) = makeManager()
         defer { cleanup(manager: manager, path: path) }
@@ -59,7 +66,7 @@ struct DatabaseManagerTests {
         try manager.ensureSchema()
 
         let version = try manager.getSchemaVersion()
-        #expect(version == 8)
+        #expect(version == 9)
     }
 
     @Test("Database path is correct")
@@ -202,7 +209,7 @@ struct DatabaseManagerTests {
         let version2 = try manager2.getSchemaVersion()
 
         #expect(version1 == version2)
-        #expect(version1 == 8)
+        #expect(version1 == 9)
     }
 
     @Test("Migration v1->v2 creates rollup_metadata table")
@@ -289,7 +296,7 @@ struct DatabaseManagerTests {
         #expect(util == 0.99)
 
         // Verify version bumped to current (migration runs all the way through)
-        #expect(try manager2.getSchemaVersion() == 8)
+        #expect(try manager2.getSchemaVersion() == 9)
     }
 
     @Test("Migration v2->v3 adds extra_usage columns to usage_polls")
@@ -377,7 +384,7 @@ struct DatabaseManagerTests {
         #expect(util == 0.88)
 
         // Verify version bumped to current
-        #expect(try manager2.getSchemaVersion() == 8)
+        #expect(try manager2.getSchemaVersion() == 9)
     }
 
     // MARK: - Table Schema Verification (AC #1)
@@ -608,7 +615,7 @@ struct DatabaseManagerTests {
         let rollupResult = sqlite3_exec(connection2, "INSERT INTO usage_rollups (period_start, period_end, resolution, extra_usage_delta) VALUES (1000, 2000, '5min', 10.5)", nil, nil, &errorMessage)
         #expect(rollupResult == SQLITE_OK, "INSERT with extra_usage_delta into usage_rollups should succeed")
 
-        #expect(try manager2.getSchemaVersion() == 8)
+        #expect(try manager2.getSchemaVersion() == 9)
     }
 
     @Test("Migration v4->v5 backfills deltas from consecutive polls")
@@ -771,7 +778,7 @@ struct DatabaseManagerTests {
         #expect(manager2.tableExists("tpp_measurements"))
         #expect(manager2.indexExists("idx_tpp_timestamp"))
         #expect(manager2.indexExists("idx_tpp_model_source"))
-        #expect(try manager2.getSchemaVersion() == 8)
+        #expect(try manager2.getSchemaVersion() == 9)
     }
 
     // MARK: - Story 21.3: Migration v7->v8 (fable weekly columns)
@@ -877,10 +884,10 @@ struct DatabaseManagerTests {
         #expect(sqlite3_column_type(stmt, 1) == SQLITE_NULL, "Pre-migration rollup should have NULL fable_weekly_avg")
         sqlite3_finalize(stmt)
 
-        #expect(try manager2.getSchemaVersion() == 8)
+        #expect(try manager2.getSchemaVersion() == 9)
     }
 
-    @Test("Migrated v7 database has identical column order to fresh v8 database")
+    @Test("Migrated v7 database has identical column order to a fresh database")
     func migratedAndFreshSchemasHaveIdenticalColumnOrder() throws {
         let tempDir = FileManager.default.temporaryDirectory
 
@@ -893,7 +900,7 @@ struct DatabaseManagerTests {
         defer { cleanup(manager: migratedManager, path: migratedPath) }
         try migratedManager.ensureSchema()
 
-        // Fresh DB: created at v8 directly
+        // Fresh DB: created at the current version directly
         let (freshManager, freshPath) = makeManager()
         defer { cleanup(manager: freshManager, path: freshPath) }
         try freshManager.ensureSchema()
@@ -901,11 +908,69 @@ struct DatabaseManagerTests {
         let migratedConn = try migratedManager.getConnection()
         let freshConn = try freshManager.getConnection()
 
-        for table in ["usage_polls", "usage_rollups"] {
+        for table in ["usage_polls", "usage_rollups", "reset_events"] {
             let migratedColumns = columnOrder(migratedConn, table: table)
             let freshColumns = columnOrder(freshConn, table: table)
             #expect(migratedColumns == freshColumns, "\(table) column order must match between migrated and fresh databases (rows are read positionally)")
         }
+    }
+
+    // MARK: - Migration v8->v9 (is_weekly_cycle)
+
+    @Test("Migrating to v9 adds is_weekly_cycle and leaves existing reset_events rows as they were")
+    func migrationV9KeepsExistingResetEvents() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let path = tempDir.appendingPathComponent("test_\(UUID().uuidString).db")
+        let setup = DatabaseManager(databasePath: path)
+        let setupConnection = try setup.getConnection()
+        createV7Schema(setupConnection)
+        sqlite3_exec(setupConnection, """
+            INSERT INTO reset_events (timestamp, five_hour_peak, seven_day_util, tier, used_credits, constrained_credits, waste_credits)
+            VALUES (1000, 60.0, 30.0, 'default_claude_pro', 330000.0, 11000.0, 209000.0),
+                   (2000, NULL, 70.0, 'default_claude_pro', NULL, NULL, NULL)
+            """, nil, nil, nil)
+        setup.closeConnection()
+
+        let manager = DatabaseManager(databasePath: path)
+        defer { cleanup(manager: manager, path: path) }
+        try manager.ensureSchema()
+        #expect(try manager.getSchemaVersion() == 9)
+
+        var statement: OpaquePointer?
+        sqlite3_prepare_v2(try manager.getConnection(), "SELECT COUNT(*) FROM reset_events WHERE is_weekly_cycle IS NULL", -1, &statement, nil)
+        sqlite3_step(statement)
+        #expect(sqlite3_column_int(statement, 0) == 2)
+        sqlite3_finalize(statement)
+
+        let events = try await HistoricalDataService(databaseManager: manager).getResetEvents(fromTimestamp: nil, toTimestamp: nil)
+        #expect(events == [
+            ResetEvent(id: 1, timestamp: 1000, fiveHourPeak: 60, sevenDayUtil: 30, tier: "default_claude_pro",
+                       usedCredits: 330_000, constrainedCredits: 11_000, unusedCredits: 209_000),
+            ResetEvent(id: 2, timestamp: 2000, fiveHourPeak: nil, sevenDayUtil: 70, tier: "default_claude_pro",
+                       usedCredits: nil, constrainedCredits: nil, unusedCredits: nil)
+        ])
+    }
+
+    @Test("Migration to v9 succeeds when an earlier run stopped after adding the column")
+    func migrationV9RepeatsSafely() throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("test_\(UUID().uuidString).db")
+        let setup = DatabaseManager(databasePath: path)
+        let connection = try setup.getConnection()
+        createV7Schema(connection)
+        sqlite3_exec(connection, "ALTER TABLE reset_events ADD COLUMN is_weekly_cycle INTEGER", nil, nil, nil)
+        sqlite3_exec(connection, "ALTER TABLE usage_polls ADD COLUMN fable_weekly_util REAL", nil, nil, nil)
+        sqlite3_exec(connection, "ALTER TABLE usage_polls ADD COLUMN fable_weekly_resets_at INTEGER", nil, nil, nil)
+        sqlite3_exec(connection, "ALTER TABLE usage_rollups ADD COLUMN fable_weekly_avg REAL", nil, nil, nil)
+        sqlite3_exec(connection, "ALTER TABLE usage_rollups ADD COLUMN fable_weekly_peak REAL", nil, nil, nil)
+        sqlite3_exec(connection, "ALTER TABLE usage_rollups ADD COLUMN fable_weekly_min REAL", nil, nil, nil)
+        sqlite3_exec(connection, "PRAGMA user_version = 8", nil, nil, nil)
+        setup.closeConnection()
+
+        let manager = DatabaseManager(databasePath: path)
+        defer { cleanup(manager: manager, path: path) }
+        try manager.ensureSchema()
+
+        #expect(try manager.getSchemaVersion() == 9)
     }
 
     // MARK: - Protocol Conformance

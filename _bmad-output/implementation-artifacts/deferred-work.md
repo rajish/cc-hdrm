@@ -123,3 +123,59 @@ Both are older drift in text restored unchanged. Neither blocks Epic 26.
 - source_spec: `_bmad-output/implementation-artifacts/spec-26-4-analytics-adapt-to-data.md`
   summary: The 5-hour chip shows for a moment on window open for accounts with no number.
   evidence: The empty first frame keeps today's controls by design, so the chip appears until the first load ends, then the row shifts. Fix by hiding the whole chip row until the first load completes, if the shift is judged distracting.
+
+## Deferred from: build of Story 26.5 (2026-11-01)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: Test runs still launch the real app startup as their host, including the log scan. The database is now redirected to a temporary folder under test.
+  evidence: `cc-hdrm/App/AppDelegate.swift` runs `ClaudeCodeLogParser` under test, which reads Claude Code logs and can write `log-scan-state.json` in the real Application Support folder. Before the database redirect, test runs applied schema version 9 to the maintainer's real `usage.db`; integrity check passed and no rows changed.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: Confirm the tier string verified Ultra accounts report before Story 26.6 maps it.
+  evidence: `cc-hdrm/Models/RateLimitTier.swift` knows only Pro, Max 5x and Max 20x. If Ultra reports another string with no custom limits, its weekly rows are flagged with no credits, the aggregate skips them, and the bar says the tier is unknown. Mapping the string later makes those rows countable without rewriting them.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: A weekly cycle that cannot be analysed still removes the 5-hour events in its 7 days.
+  evidence: `excludingWeeklyOverlap()` in `cc-hdrm/Models/ResetEvent.swift` has no tier information. A Max account that verifies onto an unmapped string loses that week from percentage figures until the string is mapped. Also, an all-unanalysable list shows 0% when current limits resolve, and the 14-day gate in `ValueInsightEngine.weekInsight` still counts such cycles.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: Decide what the 24-hour range and the wait for the first weekly reset should say on an account with no number.
+  evidence: The 24-hour range reads "No reset events in this period" about 6 days in 7, because a cycle is only recorded when it ends. Every range reads the same until the first reset after upgrade, since rows from 1.6.1 stay unflagged.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: A light weekly cycle goes unrecorded if the weekly reset time becomes blank when usage returns to 0.
+  evidence: The fallback in `HistoricalDataService.detectAndRecordResetIfNeeded` needs a drop of 50 points, so 30% to blank records nothing. The shape is unobserved, and changing it unguarded would alter 1.6.0 detection.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: Migrations before version 9 can fail forever if the app stops between an `ALTER` and the version write.
+  evidence: `DatabaseManager.runMigrations` writes the version once at the end, with no transaction. The version 9 step checks for its column; earlier steps do not.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: Test cleanup helpers delete the whole system temporary directory, which can disturb other tests running at the same time.
+  evidence: `cleanup` in `cc-hdrmTests/Services/HistoricalDataServiceTests.swift` removes `path.deletingLastPathComponent()`, and that path is `FileManager.default.temporaryDirectory`.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: Re-check of the deferred items from the reverted spec. Grouping before overlap and uncapped 5-cycle pricing are fixed, and unanalysable cycles no longer add capacity in value figures. A cycle still belongs wholly to the month of its reset, by choice. The 5-hour detection branches are live again, so that removal item no longer applies.
+  evidence: See Design Notes in the source spec.
+
+## Deferred from: code review of Story 26.5 (2026-11-01)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: Maintainer decision: how long without a 5-hour number makes a weekly reset a weekly cycle. Today it is the 5 hours before the reset plus the polls either side.
+  evidence: `HistoricalDataService.detectAndRecordResetIfNeeded` flags a cycle when polls show no number for 5 hours. If a Pro or Max account's API answer drops `five_hour` while idle, an idle weekend flags a false cycle, and `excludingWeeklyOverlap()` then drops that week's real 5-hour events. No such response has been observed. Requiring no number for the whole cycle would close this and cost one week of delay for an account that verifies mid-week.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: `five_hour: {"utilization": null, "resets_at": null}` is stored as no number but the app treats it as a 0% number.
+  evidence: `PollingEngine.fetchUsageData` maps it with `utilization ?? 0.0`, while `persistPoll` stores both columns empty and `hasNoFiveHourWindow` reads that as no number. The shape is unobserved. Fixing it needs a stored marker or a decision to store 0.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: Any fall in weekly usage with a reset time that moves by over 60 seconds counts as a real weekly reset.
+  evidence: The second arm in `detectAndRecordResetIfNeeded` has no size threshold. Observed jitter is about 1 second, so it is unlikely, but a 1-point correction with a 2-minute shift would record a false cycle.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: Before releasing, check that the maintainer's own `usage.db` has `reset_events.is_weekly_cycle` as `INTEGER`. A test run already moved it to version 9.
+  evidence: Version 9 databases skip the migration, so a column with another name or type would not be repaired. Read-only check: `PRAGMA table_info(reset_events)`.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
+  summary: Each test run leaves a temporary folder from the database redirect.
+  evidence: `DatabaseManager.init()` under test creates a new folder in the system temporary directory and nothing removes it.
+
+## Deferred from: CodeRabbit review of Story 26.5 (2026-11-01)
+
+All need a weekly cycle on an unmapped tier, or an account that changed state or plan. Re-check them once Story 26.6 confirms the real Ultra tier string.
+
+- `ResetEvent.excludingWeeklyOverlap` removes 5-hour events before a weekly cycle that later cannot be analysed. The figures correct themselves once the tier maps.
+- `AnalyticsView.showsFullBar` and `AnalyticsView.computeDataSpanHours` count weekly cycles that `aggregateBreakdown` skips, so a range of unanalysable cycles from an older unmapped tier can show a 0% bar.
+- `ResetEvent.fiveHourSpanMs` subtracts weekly cycles under 7 days apart twice. This needs a reset that moved earlier on an account that changed state.
+- `SubscriptionValueCalculator.calculate` divides stored weekly credits by the current tier's capacity, so a weekly cycle recorded before a plan change is scaled. 5-hour aggregation already uses the current tier's capacity.
+- `HistoricalDataService` classification ignores a poll inside the 5-hour lookback that has a 5-hour reset time but no utilization. This shape has not been observed.
+

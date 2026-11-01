@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-/// Calculates headroom breakdown (used, constrained, unused) at each 5-hour reset event.
+/// Calculates headroom breakdown (used, constrained, unused) at each reset event.
 /// Pure computation — no database access, no side effects.
 final class HeadroomAnalysisService: HeadroomAnalysisServiceProtocol, @unchecked Sendable {
     private static let logger = Logger(
@@ -21,6 +21,8 @@ final class HeadroomAnalysisService: HeadroomAnalysisServiceProtocol, @unchecked
         sevenDayUtil: Double,
         creditLimits: CreditLimits
     ) -> HeadroomBreakdown {
+        let fiveHourPeak = fiveHourPeak.clampedToPercent
+        let sevenDayUtil = sevenDayUtil.clampedToPercent
         let fiveHourLimit = Double(creditLimits.fiveHourCredits)
         let sevenDayLimit = Double(creditLimits.sevenDayCredits)
 
@@ -70,36 +72,30 @@ final class HeadroomAnalysisService: HeadroomAnalysisServiceProtocol, @unchecked
         var totalUnused: Double = 0
         var peakSum: Double = 0
         var validCount = 0
+        var weeklyCycleCount = 0
 
-        for event in events {
-            // Skip events with nil fiveHourPeak or sevenDayUtil
-            guard let peak = event.fiveHourPeak,
-                  let util7d = event.sevenDayUtil else {
-                Self.logger.info("Skipping event id=\(event.id) — missing fiveHourPeak or sevenDayUtil")
+        for event in events.excludingWeeklyOverlap() {
+            // Skip events with no value for the window they measure, or no sevenDayUtil
+            guard let util7d = event.sevenDayUtil,
+                  let peak = event.isWeeklyCycle ? util7d.clampedToPercent : event.fiveHourPeak else {
+                Self.logger.info("Skipping event id=\(event.id) — missing peak or sevenDayUtil")
                 continue
             }
 
-            // Resolve credit limits per-event from each event's tier
-            guard let limits = RateLimitTier.resolve(
-                tierString: event.tier,
-                preferencesManager: preferencesManager
-            ) else {
-                Self.logger.info("Skipping event id=\(event.id) — unresolvable tier '\(event.tier ?? "nil", privacy: .public)'")
+            guard let credits = credits(for: event, peak: peak, sevenDayUtil: util7d) else {
+                Self.logger.info("Skipping event id=\(event.id) — no stored credits and unresolvable tier '\(event.tier ?? "nil", privacy: .public)'")
                 continue
             }
 
-            let breakdown = analyzeResetEvent(
-                fiveHourPeak: peak,
-                sevenDayUtil: util7d,
-                creditLimits: limits
-            )
-
-            totalUsed += breakdown.usedCredits
-            totalConstrained += breakdown.constrainedCredits
-            totalUnused += breakdown.unusedCredits
-            peakSum += peak
+            totalUsed += credits.used
+            totalConstrained += credits.constrained
+            totalUnused += credits.unused
+            peakSum += peak.clampedToPercent
             validCount += 1
+            if event.isWeeklyCycle { weeklyCycleCount += 1 }
         }
+
+        Self.logger.debug("Aggregated \(events.count) events: counted=\(validCount), weekly=\(weeklyCycleCount)")
 
         let totalCredits = totalUsed + totalConstrained + totalUnused
         let usedPercent = totalCredits > 0 ? (totalUsed / totalCredits) * 100.0 : 0
@@ -115,7 +111,37 @@ final class HeadroomAnalysisService: HeadroomAnalysisServiceProtocol, @unchecked
             avgPeakUtilization: avgPeak,
             usedPercent: usedPercent,
             constrainedPercent: constrainedPercent,
-            unusedPercent: unusedPercent
+            unusedPercent: unusedPercent,
+            weeklyCycleCount: weeklyCycleCount
         )
+    }
+
+    /// A weekly cycle keeps the credits it was recorded with. A 5-hour event is worked out from each
+    /// event's tier as in 1.6.0, which supports mixed-tier aggregation, and falls back to its stored
+    /// credits only when the tier no longer resolves.
+    private func credits(
+        for event: ResetEvent,
+        peak: Double,
+        sevenDayUtil: Double
+    ) -> (used: Double, constrained: Double, unused: Double)? {
+        var stored: (used: Double, constrained: Double, unused: Double)?
+        if let used = event.usedCredits,
+           let unused = event.unusedCredits,
+           event.isWeeklyCycle || event.constrainedCredits != nil {
+            stored = (used, event.constrainedCredits ?? 0, unused)
+        }
+        if event.isWeeklyCycle, let stored { return stored }
+
+        guard let limits = RateLimitTier.resolve(
+            tierString: event.tier,
+            preferencesManager: preferencesManager
+        ) else {
+            return stored
+        }
+
+        let breakdown = event.isWeeklyCycle
+            ? HeadroomBreakdown.weeklyCycle(sevenDayPeak: peak, creditLimits: limits)
+            : analyzeResetEvent(fiveHourPeak: peak, sevenDayUtil: sevenDayUtil, creditLimits: limits)
+        return (breakdown.usedCredits, breakdown.constrainedCredits, breakdown.unusedCredits)
     }
 }
