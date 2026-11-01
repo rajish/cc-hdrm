@@ -1,4 +1,5 @@
 import Testing
+import SQLite3
 import SwiftUI
 import AppKit
 @testable import cc_hdrm
@@ -824,5 +825,266 @@ struct AnalyticsPanelTests {
 
         panel.cancelOperation(nil)
         #expect(panel.isVisible == false)
+    }
+}
+
+@Suite("AnalyticsView Five-Hour Data Tests")
+@MainActor
+struct AnalyticsViewFiveHourDataTests {
+
+    private typealias Visibility = AnalyticsView.SeriesVisibility
+
+    private func poll(_ minute: Int64 = 0, fiveHour: Double? = nil, sevenDay: Double? = 20) -> UsagePoll {
+        UsagePoll(id: minute, timestamp: 1_800_000_000_000 + minute * 60_000, fiveHourUtil: fiveHour,
+                  fiveHourResetsAt: nil, sevenDayUtil: sevenDay, sevenDayResetsAt: nil)
+    }
+
+    private func rollup(
+        day: Int64 = 0,
+        avg: Double? = nil,
+        peak: Double? = nil,
+        min: Double? = nil,
+        resetCount: Int = 0
+    ) -> UsageRollup {
+        let dayMs: Int64 = 86_400_000
+        let start = 1_800_000_000_000 + day * dayMs
+        return UsageRollup(id: day, periodStart: start, periodEnd: start + dayMs, resolution: .daily,
+                           fiveHourAvg: avg, fiveHourPeak: peak, fiveHourMin: min,
+                           sevenDayAvg: 20, sevenDayPeak: 30, sevenDayMin: 10,
+                           resetCount: resetCount, unusedCredits: nil)
+    }
+
+    // MARK: - Deciding from the data
+
+    @Test("a 24-hour range with only weekly polls hides the 5-hour series")
+    func weeklyOnlyPollsHide() {
+        #expect(AnalyticsView.isFiveHourHidden(polls: [poll(0), poll(1)], rollups: []))
+    }
+
+    @Test("rollups with no 5-hour value hide the 5-hour series")
+    func weeklyOnlyRollupsHide() {
+        #expect(AnalyticsView.isFiveHourHidden(polls: [], rollups: [rollup(day: 0), rollup(day: 1)]))
+    }
+
+    @Test("one 5-hour value anywhere keeps the series")
+    func oneValueKeeps() {
+        #expect(!AnalyticsView.isFiveHourHidden(polls: [poll(0), poll(1, fiveHour: 0)], rollups: []))
+        #expect(!AnalyticsView.isFiveHourHidden(polls: [], rollups: [rollup(day: 0), rollup(day: 1, avg: 5)]))
+        #expect(!AnalyticsView.isFiveHourHidden(polls: [], rollups: [rollup(day: 0), rollup(day: 1, peak: 5)]))
+        #expect(!AnalyticsView.isFiveHourHidden(polls: [], rollups: [rollup(day: 0), rollup(day: 1, min: 5)]))
+    }
+
+    @Test("an empty range decides nothing, so the controls stay as they are today")
+    func emptyRangeKeeps() {
+        #expect(!AnalyticsView.isFiveHourHidden(polls: [], rollups: []))
+    }
+
+    // MARK: - A range with 5-hour data is unchanged
+
+    @Test("with 5-hour data, every stored choice is drawn exactly as stored")
+    func withDataEqualsStored() {
+        let flags = [true, false]
+        for fiveHour in flags {
+            for sevenDay in flags {
+                for fable in flags {
+                    for hasFable in flags {
+                        let stored = Visibility(fiveHour: fiveHour, sevenDay: sevenDay, fable: fable)
+                        let drawn = stored.effective(fiveHourHidden: false, hasFableData: hasFable)
+                        #expect(drawn.fiveHour == fiveHour)
+                        #expect(drawn.sevenDay == sevenDay)
+                        #expect(drawn.fable == (fable && hasFable))
+                    }
+                }
+            }
+        }
+    }
+
+    @Test("with 5-hour data, the weekly chip writes the stored choice")
+    func withDataChipWritesStored() {
+        var stored = Visibility()
+        stored.setSevenDay(false, fiveHourHidden: false)
+        #expect(stored == Visibility(fiveHour: true, sevenDay: false, fable: true))
+    }
+
+    @Test("defaults still draw every series when the range has 5-hour data")
+    func withDataDefaults() {
+        let drawn = Visibility().effective(fiveHourHidden: false, hasFableData: true)
+        #expect(drawn.fiveHour && drawn.sevenDay && drawn.fable)
+    }
+
+    // MARK: - A range without 5-hour data
+
+    @Test("without 5-hour data, the 5-hour series is off and weekly stays on by default")
+    func withoutDataDefaults() {
+        let drawn = Visibility().effective(fiveHourHidden: true, hasFableData: false)
+        #expect(!drawn.fiveHour)
+        #expect(drawn.sevenDay)
+    }
+
+    @Test("if 5-hour was the only series on, weekly shows")
+    func onlyFiveHourFallsBackToWeekly() {
+        let stored = Visibility(fiveHour: true, sevenDay: false, fable: false)
+        let drawn = stored.effective(fiveHourHidden: true, hasFableData: true)
+        #expect(!drawn.fiveHour)
+        #expect(drawn.sevenDay)
+    }
+
+    @Test("a Fable toggle with no Fable data does not stop weekly showing")
+    func fableWithoutDataStillFallsBack() {
+        let stored = Visibility(fiveHour: true, sevenDay: false, fable: true)
+        #expect(stored.effective(fiveHourHidden: true, hasFableData: false).sevenDay)
+    }
+
+    @Test("if Fable is showing, weekly stays off as the user chose")
+    func fableShowingKeepsWeeklyOff() {
+        let stored = Visibility(fiveHour: true, sevenDay: false, fable: true)
+        let drawn = stored.effective(fiveHourHidden: true, hasFableData: true)
+        #expect(!drawn.sevenDay)
+        #expect(drawn.fable)
+    }
+
+    @Test("a user who switched everything off still gets the select-a-series state")
+    func everythingOffStaysOff() {
+        let stored = Visibility(fiveHour: false, sevenDay: false, fable: false)
+        let drawn = stored.effective(fiveHourHidden: true, hasFableData: false)
+        #expect(!drawn.fiveHour && !drawn.sevenDay && !drawn.fable)
+    }
+
+    // MARK: - Toggles and the stored choice
+
+    @Test("the weekly chip responds to every press while 5-hour is hidden")
+    func weeklyChipResponds() {
+        var stored = Visibility()
+        stored.setSevenDay(false, fiveHourHidden: true)
+        #expect(!stored.effective(fiveHourHidden: true, hasFableData: false).sevenDay)
+        stored.setSevenDay(true, fiveHourHidden: true)
+        #expect(stored.effective(fiveHourHidden: true, hasFableData: false).sevenDay)
+    }
+
+    @Test("the weekly chip responds when weekly is only showing as the fallback")
+    func weeklyChipRespondsDuringFallback() {
+        var stored = Visibility(fiveHour: true, sevenDay: false, fable: false)
+        #expect(stored.effective(fiveHourHidden: true, hasFableData: false).sevenDay)
+        stored.setSevenDay(false, fiveHourHidden: true)
+        #expect(!stored.effective(fiveHourHidden: true, hasFableData: false).sevenDay)
+    }
+
+    @Test("visiting a range without 5-hour data and returning keeps the stored choices")
+    func storedChoicesSurviveRoundTrip() {
+        for original in [
+            Visibility(fiveHour: true, sevenDay: false, fable: false),
+            Visibility(fiveHour: false, sevenDay: true, fable: true),
+            Visibility()
+        ] {
+            #expect(!original.effective(fiveHourHidden: true, hasFableData: false).fiveHour)
+            let back = original.effective(fiveHourHidden: false, hasFableData: true)
+            #expect(back.fiveHour == original.fiveHour)
+            #expect(back.sevenDay == original.sevenDay)
+        }
+    }
+
+    @Test("a weekly press while 5-hour is hidden does not apply once 5-hour data returns")
+    func hiddenPressDoesNotLeak() {
+        var stored = Visibility(fiveHour: true, sevenDay: true, fable: true)
+        stored.setSevenDay(false, fiveHourHidden: true)
+        let back = stored.effective(fiveHourHidden: false, hasFableData: false)
+        #expect(stored.fiveHour)
+        #expect(stored.sevenDay)
+        #expect(back.fiveHour)
+        #expect(back.sevenDay)
+    }
+
+    @Test("a newer weekly choice with 5-hour data replaces an older press made while hidden")
+    func newerChoiceReplacesHiddenPress() {
+        var stored = Visibility()
+        stored.setSevenDay(false, fiveHourHidden: true)
+        stored.setSevenDay(true, fiveHourHidden: false)
+        #expect(stored.effective(fiveHourHidden: true, hasFableData: false).sevenDay)
+    }
+
+    // MARK: - Where 5-hour data exists in a mixed range
+
+    @Test("slope colouring also works when an account gains a number")
+    func slopeWhenGainingNumber() {
+        let polls = [poll(0), poll(1), poll(10, fiveHour: 10), poll(11, fiveHour: 12)]
+        #expect(StepAreaChartView.computeSlopeAtEachPoint(polls: polls) == [nil, nil, .flat, .steep])
+    }
+
+    @Test("slope colouring works on points with a number and is nil on points without")
+    func slopeInMixedRange() {
+        let polls = [poll(0, fiveHour: 10), poll(1, fiveHour: 12), poll(2, fiveHour: 14), poll(3), poll(4)]
+        #expect(StepAreaChartView.computeSlopeAtEachPoint(polls: polls) == [.flat, .steep, .steep, nil, nil])
+    }
+
+    @Test("reset markers stay in a mixed range, and losing the number is not a reset")
+    func resetsInMixedRange() {
+        let polls = [
+            poll(0, fiveHour: 60, sevenDay: 30),
+            poll(1, fiveHour: 20, sevenDay: 30),
+            poll(2, fiveHour: nil, sevenDay: 30),
+            poll(3, fiveHour: nil, sevenDay: 5)
+        ]
+        let resets = StepAreaChartView.findResetTimestamps(in: polls)
+        #expect(resets.map { Int64($0.timeIntervalSince1970 * 1000) } == [polls[1].timestamp, polls[3].timestamp])
+    }
+
+    @Test("the 24-hour chart draws 5-hour only for points that have it")
+    func stepChartInMixedRange() {
+        let polls = (0..<10).map { poll(Int64($0), fiveHour: $0 < 5 ? Double($0) + 10 : nil) }
+        let chart = StepAreaChartView(polls: polls, fiveHourVisible: true, sevenDayVisible: true)
+        #expect(chart.fiveHourPoints.count == 5)
+        #expect(chart.sevenDayPoints.count == 10)
+    }
+
+    @Test("bars keep old 5-hour peaks and reset counts, and new periods have no 5-hour peak")
+    func barsInMixedRange() {
+        let rollups = [rollup(day: 0, avg: 30, peak: 45, min: 10, resetCount: 2), rollup(day: 1)]
+        let points = BarChartView.makeBarPoints(from: rollups, timeRange: .all)
+        #expect(points.map(\.fiveHourPeak) == [45, nil])
+        #expect(points.map(\.resetCount) == [2, 0])
+    }
+
+    // MARK: - Real database
+
+    @Test("a long range spanning a state change shows old 5-hour data; the 24-hour range does not")
+    func realDatabaseAcrossStateChange() async throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("test_\(UUID().uuidString).db")
+        let manager = DatabaseManager(databasePath: path)
+        defer {
+            manager.closeConnection()
+            try? FileManager.default.removeItem(at: path)
+        }
+        try manager.ensureSchema()
+        let service = HistoricalDataService(databaseManager: manager)
+
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let dayMs: Int64 = 86_400_000
+        let oldStart = now - 60 * dayMs
+        let connection = try manager.getConnection()
+        #expect(sqlite3_exec(connection, """
+            INSERT INTO usage_rollups (period_start, period_end, resolution,
+                five_hour_avg, five_hour_peak, five_hour_min,
+                seven_day_avg, seven_day_peak, seven_day_min, reset_count)
+            VALUES (\(oldStart), \(oldStart + dayMs), 'daily', 30, 45, 10, 20, 25, 15, 1)
+            """, nil, nil, nil) == SQLITE_OK)
+
+        try await service.persistPoll(UsageResponse(
+            fiveHour: nil,
+            sevenDay: WindowUsage(utilization: 40, resetsAt: nil),
+            limits: nil,
+            extraUsage: nil
+        ))
+
+        let all = try await AnalyticsView.fetchData(for: .all, using: service)
+        #expect(!AnalyticsView.isFiveHourHidden(polls: all.chartData, rollups: all.rollupData))
+        let bars = BarChartView.makeBarPoints(from: all.rollupData, timeRange: .all)
+        #expect(bars.first?.fiveHourPeak == 45)
+        #expect(bars.first?.resetCount == 1)
+        #expect(bars.last?.fiveHourPeak == nil)
+        #expect(bars.last?.sevenDayPeak == 40)
+
+        let day = try await AnalyticsView.fetchData(for: .day, using: service)
+        #expect(day.chartData.count == 1)
+        #expect(AnalyticsView.isFiveHourHidden(polls: day.chartData, rollups: day.rollupData))
     }
 }

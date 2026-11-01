@@ -26,6 +26,28 @@ struct AnalyticsView: View {
         var fiveHour: Bool = true
         var sevenDay: Bool = true
         var fable: Bool = true
+        /// The 7-day choice made while the 5-hour series is hidden. Kept apart from `sevenDay`
+        /// so a press in a range without 5-hour data cannot rewrite the stored choice.
+        var sevenDayWhileFiveHourHidden: Bool?
+
+        /// What to draw for this range. Never stored, so the user's choices survive hiding.
+        func effective(fiveHourHidden: Bool, hasFableData: Bool) -> SeriesVisibility {
+            var result = self
+            result.fable = fable && hasFableData
+            guard fiveHourHidden else { return result }
+            result.fiveHour = false
+            result.sevenDay = sevenDayWhileFiveHourHidden ?? (sevenDay || (fiveHour && !result.fable))
+            return result
+        }
+
+        mutating func setSevenDay(_ isOn: Bool, fiveHourHidden: Bool) {
+            if fiveHourHidden {
+                sevenDayWhileFiveHourHidden = isOn
+            } else {
+                sevenDay = isOn
+                sevenDayWhileFiveHourHidden = nil
+            }
+        }
     }
 
     // Default to .week — shows recent trends without overwhelming detail.
@@ -35,19 +57,10 @@ struct AnalyticsView: View {
     /// Session-only — resets when the analytics window is closed and reopened.
     @State private var seriesVisibility: [TimeRange: SeriesVisibility] = [:]
 
-    /// Whether the 5-hour series is visible for the currently selected time range.
-    private var fiveHourVisible: Bool {
-        seriesVisibility[selectedTimeRange]?.fiveHour ?? true
-    }
-
-    /// Whether the 7-day series is visible for the currently selected time range.
-    private var sevenDayVisible: Bool {
-        seriesVisibility[selectedTimeRange]?.sevenDay ?? true
-    }
-
-    /// Whether the model-scoped (Fable) series is toggled on for the currently selected time range.
-    private var fableVisible: Bool {
-        seriesVisibility[selectedTimeRange]?.fable ?? true
+    /// The series to draw for the currently selected time range.
+    private var effectiveSeries: SeriesVisibility {
+        (seriesVisibility[selectedTimeRange] ?? SeriesVisibility())
+            .effective(fiveHourHidden: isFiveHourHidden, hasFableData: hasFableData)
     }
 
     /// Binding that reads/writes 5-hour visibility for the current time range.
@@ -61,8 +74,11 @@ struct AnalyticsView: View {
     /// Binding that reads/writes 7-day visibility for the current time range.
     private var sevenDayBinding: Binding<Bool> {
         Binding(
-            get: { seriesVisibility[selectedTimeRange]?.sevenDay ?? true },
-            set: { seriesVisibility[selectedTimeRange, default: SeriesVisibility()].sevenDay = $0 }
+            get: { effectiveSeries.sevenDay },
+            set: {
+                seriesVisibility[selectedTimeRange, default: SeriesVisibility()]
+                    .setSevenDay($0, fiveHourHidden: isFiveHourHidden)
+            }
         )
     }
 
@@ -84,6 +100,19 @@ struct AnalyticsView: View {
     static func hasFableData(polls: [UsagePoll], rollups: [UsageRollup]) -> Bool {
         polls.contains { $0.fableWeeklyUtil != nil }
             || rollups.contains { $0.fableWeeklyAvg != nil || $0.fableWeeklyPeak != nil || $0.fableWeeklyMin != nil }
+    }
+
+    /// Whether the loaded chart data rules out the 5-hour series.
+    private var isFiveHourHidden: Bool {
+        Self.isFiveHourHidden(polls: chartData, rollups: rollupData)
+    }
+
+    /// An empty range decides nothing: it keeps today's controls, so an account with a number
+    /// never loses its toggle on a fresh install or while the first load runs.
+    static func isFiveHourHidden(polls: [UsagePoll], rollups: [UsageRollup]) -> Bool {
+        guard !polls.isEmpty || !rollups.isEmpty else { return false }
+        return !polls.contains { $0.fiveHourUtil != nil }
+            && !rollups.contains { $0.fiveHourAvg != nil || $0.fiveHourPeak != nil || $0.fiveHourMin != nil }
     }
 
     /// Label for the Fable series chip and tooltip rows — live API display name,
@@ -127,9 +156,9 @@ struct AnalyticsView: View {
                 pollData: chartData,
                 rollupData: rollupData,
                 timeRange: selectedTimeRange,
-                fiveHourVisible: fiveHourVisible,
-                sevenDayVisible: sevenDayVisible,
-                fableVisible: fableVisible && hasFableData,
+                fiveHourVisible: effectiveSeries.fiveHour,
+                sevenDayVisible: effectiveSeries.sevenDay,
+                fableVisible: effectiveSeries.fable,
                 fableLabel: fableLabel,
                 isLoading: isLoading,
                 hasAnyHistoricalData: hasAnyHistoricalData,
@@ -334,6 +363,11 @@ struct AnalyticsView: View {
                 using: historicalDataService,
                 existingAllTimeEvents: allTimeResetEvents.isEmpty ? nil : allTimeResetEvents
             )
+            let wasFiveHourHidden = isFiveHourHidden
+            let nowFiveHourHidden = Self.isFiveHourHidden(polls: result.chartData, rollups: result.rollupData)
+            if wasFiveHourHidden != nowFiveHourHidden {
+                Self.logger.info("5-hour series \(nowFiveHourHidden ? "hidden" : "shown", privacy: .public) for range \(selectedTimeRange.displayLabel, privacy: .public): polls=\(result.chartData.count, privacy: .public) rollups=\(result.rollupData.count, privacy: .public)")
+            }
             chartData = result.chartData
             rollupData = result.rollupData
             resetEvents = result.resetEvents
@@ -514,16 +548,18 @@ struct AnalyticsView: View {
 
     private var seriesToggles: some View {
         HStack(spacing: 8) {
-            seriesToggleButton(
-                label: "5h",
-                color: .headroomNormal,
-                isActive: fiveHourBinding,
-                accessibilityPrefix: "5-hour series"
-            )
+            if !isFiveHourHidden {
+                seriesToggleButton(
+                    label: "5h",
+                    color: .headroomNormal,
+                    isActive: fiveHourBinding,
+                    accessibilityPrefix: "5-hour series"
+                )
 
-            Text("|")
-                .font(.caption)
-                .foregroundStyle(.quaternary)
+                Text("|")
+                    .font(.caption)
+                    .foregroundStyle(.quaternary)
+            }
 
             seriesToggleButton(
                 label: "7d",
