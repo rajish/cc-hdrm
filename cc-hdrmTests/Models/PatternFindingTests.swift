@@ -53,6 +53,13 @@ struct PatternFindingTests {
         #expect(summary.contains("$20/mo"))
     }
 
+    @Test("forgottenSubscription summary states no price when the plan cost is unknown")
+    func forgottenSubscriptionSummaryWithoutCost() {
+        let summary = PatternFinding.forgottenSubscription(weeks: 3, avgUtilization: 3.0, monthlyCost: 0).summary
+        #expect(summary == "You've used less than 5% of your Claude capacity for 3 weeks. That's ~3% utilization. Worth reviewing?")
+        #expect(!summary.contains("$"))
+    }
+
     @Test("chronicOverpaying summary includes recommended tier and savings")
     func chronicOverpayingSummary() {
         let finding = PatternFinding.chronicOverpaying(currentTier: "Max", recommendedTier: "Pro", monthlySavings: 80.0)

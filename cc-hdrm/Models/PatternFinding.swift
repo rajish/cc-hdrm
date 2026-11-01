@@ -43,7 +43,9 @@ enum PatternFinding: Sendable, Equatable {
     var summary: String {
         switch self {
         case .forgottenSubscription(let weeks, let avgUtil, let cost):
-            return "You've used less than 5% of your Claude capacity for \(weeks) weeks. That's $\(Int(cost))/mo for ~\(String(format: "%.0f", avgUtil))% utilization. Worth reviewing?"
+            let utilization = "~\(String(format: "%.0f", avgUtil))% utilization"
+            let detail = cost > 0 ? "That's $\(Int(cost))/mo for \(utilization)." : "That's \(utilization)."
+            return "You've used less than 5% of your Claude capacity for \(weeks) weeks. \(detail) Worth reviewing?"
 
         case .chronicOverpaying(_, let recommended, let savings):
             return "Your usage fits \(recommended) — you could save $\(Int(savings))/mo"
