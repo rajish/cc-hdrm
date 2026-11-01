@@ -370,7 +370,9 @@ enum ValueInsightEngine {
     /// Names the period a range's value covers. When a range holds only weekly cycles, the
     /// value is the whole cycle that ended, not "today" or "this week".
     private static func periodName(_ rangeName: String, events: [ResetEvent]) -> String {
-        events.isOnlyWeeklyCycles ? "last cycle" : rangeName
+        guard events.isOnlyWeeklyCycles else { return rangeName }
+        let cycles = events.filter(\.isWeeklyCycle).count
+        return cycles == 1 ? "last cycle" : "last \(cycles) cycles"
     }
 
     /// Whether the utilization is in the "quiet" range (20-80%).

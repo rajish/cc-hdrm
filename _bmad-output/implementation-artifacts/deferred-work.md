@@ -168,3 +168,14 @@ Both are older drift in text restored unchanged. Neither blocks Epic 26.
 - source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-weekly-cycle-no-five-hour.md`
   summary: Each test run leaves a temporary folder from the database redirect.
   evidence: `DatabaseManager.init()` under test creates a new folder in the system temporary directory and nothing removes it.
+
+## Deferred from: CodeRabbit review of Story 26.5 (2026-11-01)
+
+All need a weekly cycle on an unmapped tier, or an account that changed state or plan. Re-check them once Story 26.6 confirms the real Ultra tier string.
+
+- `ResetEvent.excludingWeeklyOverlap` removes 5-hour events before a weekly cycle that later cannot be analysed. The figures correct themselves once the tier maps.
+- `AnalyticsView.showsFullBar` and `AnalyticsView.computeDataSpanHours` count weekly cycles that `aggregateBreakdown` skips, so a range of unanalysable cycles from an older unmapped tier can show a 0% bar.
+- `ResetEvent.fiveHourSpanMs` subtracts weekly cycles under 7 days apart twice. This needs a reset that moved earlier on an account that changed state.
+- `SubscriptionValueCalculator.calculate` divides stored weekly credits by the current tier's capacity, so a weekly cycle recorded before a plan change is scaled. 5-hour aggregation already uses the current tier's capacity.
+- `HistoricalDataService` classification ignores a poll inside the 5-hour lookback that has a 5-hour reset time but no utilization. This shape has not been observed.
+

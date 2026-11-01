@@ -19,7 +19,7 @@ context:
 
 ## Boundaries & Constraints
 
-**Always:** A weekly cycle is a weekly reset with no 5-hour number on the polls around it. Events with stored credits keep them. Old rows are never rewritten. Accounts with a number match 1.6.0, proven by tests.
+**Always:** A weekly cycle is a weekly reset with no 5-hour number on the polls around it. Weekly cycles keep their stored credits. A 5-hour event with a resolvable tier is recomputed as in 1.6.0, and uses stored credits only when the tier no longer resolves. Old rows are never rewritten. Accounts with a number match 1.6.0, proven by tests.
 
 **Ask First:** Nothing open. This runs unattended, so defaults are recorded in Design Notes.
 

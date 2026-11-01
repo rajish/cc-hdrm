@@ -595,6 +595,30 @@ struct WeeklyCycleValueTests {
         }
     }
 
+    @Test("Two weekly cycles in one range are not called the last cycle")
+    func twoCyclesCopy() {
+        let cycles = [
+            event(id: 1, daysAgo: 8, sevenDayUtil: 50, weekly: true),
+            event(id: 2, daysAgo: 1, sevenDayUtil: 50, weekly: true)
+        ]
+        let unpriced = CreditLimits(fiveHourCredits: 550_000, sevenDayCredits: 5_000_000)
+        let insight = ValueInsightEngine.computeInsight(
+            timeRange: .week,
+            subscriptionValue: nil,
+            resetEvents: cycles,
+            allTimeResetEvents: cycles,
+            creditLimits: unpriced,
+            headroomAnalysisService: service
+        )
+        #expect(insight.text.contains("last 2 cycles"), "\(insight.text)")
+    }
+
+    @Test("A 5-hour peak over 100 cannot push the average peak past 100")
+    func clampedAveragePeak() {
+        let summary = service.aggregateBreakdown(events: [event(id: 1, fiveHourPeak: 120, sevenDayUtil: 20)])
+        #expect(summary.avgPeakUtilization == 100)
+    }
+
     @Test("A weekly-only range speaks of the last cycle and shows the bar")
     func weeklyCopy() throws {
         let events = [event(weekly: true)]

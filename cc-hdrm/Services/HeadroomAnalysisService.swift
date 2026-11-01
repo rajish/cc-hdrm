@@ -90,7 +90,7 @@ final class HeadroomAnalysisService: HeadroomAnalysisServiceProtocol, @unchecked
             totalUsed += credits.used
             totalConstrained += credits.constrained
             totalUnused += credits.unused
-            peakSum += peak
+            peakSum += peak.clampedToPercent
             validCount += 1
             if event.isWeeklyCycle { weeklyCycleCount += 1 }
         }
