@@ -3,7 +3,7 @@
 **Date:** 2026-10-31
 **Triggered by:** External platform change — Anthropic removed the 5-hour usage limit
 **Category:** Strategic pivot / platform change
-**Status:** APPROVED 2026-10-31 (Boss)
+**Status:** SUPERSEDED 2026-11-01 by `_bmad-output/planning-artifacts/sprint-change-proposal-2026-11-01.md`. The 5-hour limit was removed for verified Ultra accounts only.
 **Release:** `[minor]` (1.6.0 → 1.7.0)
 **Review mode:** Batch
 
