@@ -91,3 +91,15 @@ Both are older drift in text restored unchanged. Neither blocks Epic 26.
 - source_spec: `_bmad-output/implementation-artifacts/spec-26-3-weekly-first-popover-no-five-hour.md`
   summary: Check that VoiceOver's double-tap opens analytics from the 24-hour sparkline.
   evidence: `cc-hdrm/Views/Sparkline.swift` marks that chart as a button with no accessibility action, and its tap handling lives in `cc-hdrm/Views/InteractionOverlay.swift`. The weekly chart got an explicit action, while the 24-hour chart was left unchanged by rule. It has not been tried with VoiceOver.
+
+## Deferred from: code review of Story 26.3 (2026-11-01)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-3-weekly-first-popover-no-five-hour.md`
+  summary: Decide whether the weekly chart should need one unbroken hour of data, or one hour of data in total.
+  evidence: `SparklinePathBuilder.hasDrawableWeeklyData` in `cc-hdrm/Views/Sparkline.swift` checks one unbroken run of at least 60 minutes. A laptop used in short sessions, each under an hour with sleep between, shows the "Open analytics" link all week despite days of history. This is what the spec asks for; the maintainer should confirm it suits real use.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-3-weekly-first-popover-no-five-hour.md`
+  summary: Add a back-off for a weekly chart load that keeps failing.
+  evidence: `PollingEngine.refreshWeeklySparkline` in `cc-hdrm/Services/PollingEngine.swift` retries a failed load at every poll, as the spec says. If the rollup read fails each time, every poll repeats the full raw read, up to about 60,000 rows when analytics has never opened.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-3-weekly-first-popover-no-five-hour.md`
+  summary: Decide whether an unavailable database should count as a failed weekly chart load.
+  evidence: `HistoricalDataService.getRecentPolls` and `getRolledUpData` return empty lists, not errors, when the database is unavailable. The engine then marks the cycle as loaded with only the current poll and builds the chart in memory. The database is only made available at launch, so it never recovers within a session.
