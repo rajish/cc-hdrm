@@ -15,32 +15,6 @@ struct TPPStorageServiceTests {
         return (service, manager, testPath)
     }
 
-    private func makeRow(timestamp: Int64, source: MeasurementSource, fiveHourDelta: Double?, sevenDayDelta: Double?) -> TPPMeasurement {
-        TPPMeasurement(
-            id: nil,
-            timestamp: timestamp,
-            windowStart: timestamp - 1000,
-            model: "claude-sonnet-4-6",
-            variant: nil,
-            source: source,
-            fiveHourBefore: fiveHourDelta.map { _ in 10.0 },
-            fiveHourAfter: fiveHourDelta.map { 10.0 + $0 },
-            fiveHourDelta: fiveHourDelta,
-            sevenDayBefore: sevenDayDelta.map { _ in 28.0 },
-            sevenDayAfter: sevenDayDelta.map { 28.0 + $0 },
-            sevenDayDelta: sevenDayDelta,
-            inputTokens: 500,
-            outputTokens: 500,
-            cacheCreateTokens: 0,
-            cacheReadTokens: 0,
-            totalRawTokens: 1000,
-            tppFiveHour: fiveHourDelta.map { 1000.0 / $0 },
-            tppSevenDay: sevenDayDelta.map { 1000.0 / $0 },
-            confidence: .low,
-            messageCount: 1
-        )
-    }
-
     private func cleanup(manager: DatabaseManager, path: URL) {
         manager.closeConnection()
         try? FileManager.default.removeItem(at: path)
@@ -191,27 +165,5 @@ struct TPPStorageServiceTests {
         let latest = try await service.latestBenchmark(model: "claude-sonnet-4-6", variant: "output-heavy")
         #expect(latest?.timestamp == 2000)
         #expect(latest?.totalRawTokens == 1000)
-    }
-
-    @Test("deleteBackfillRecords removes only weekly backfill rows and keeps 5h-based backfill rows")
-    func deleteBackfillKeepsFiveHourRows() async throws {
-        let (service, manager, path) = try makeService()
-        defer { cleanup(manager: manager, path: path) }
-
-        let rows = [
-            makeRow(timestamp: 1000, source: .passiveBackfill, fiveHourDelta: 2.0, sevenDayDelta: nil),  // old 5h-based — kept
-            makeRow(timestamp: 2000, source: .rollupBackfill, fiveHourDelta: 5.0, sevenDayDelta: 1.0),   // old 5h-based — kept
-            makeRow(timestamp: 3000, source: .passiveBackfill, fiveHourDelta: nil, sevenDayDelta: 1.0),  // weekly — deleted
-            makeRow(timestamp: 4000, source: .rollupBackfill, fiveHourDelta: nil, sevenDayDelta: 2.0),   // weekly — deleted
-            makeRow(timestamp: 5000, source: .passive, fiveHourDelta: nil, sevenDayDelta: 1.0),          // not backfill — kept
-        ]
-        for row in rows {
-            try await service.storePassiveResult(row)
-        }
-
-        try await service.deleteBackfillRecords()
-
-        let remaining = try await service.getMeasurements(from: 0, to: Int64.max, source: nil, model: nil, confidence: nil)
-        #expect(remaining.map(\.timestamp) == [1000, 2000, 5000])
     }
 }

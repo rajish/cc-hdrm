@@ -17,14 +17,14 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
         category: "tpp-backfill"
     )
 
-    /// Minimum weekly utilization delta to trigger a TPP measurement.
+    /// Minimum utilization delta to trigger a TPP measurement.
     private static let minDelta: Double = 1.0
 
-    /// Minimum weekly delta for medium confidence (single model).
-    private static let mediumConfidenceDelta: Double = 2.0
+    /// Utilization drop threshold for reset detection (50%).
+    private static let resetDropThreshold: Double = 50.0
 
-    /// Maximum window duration without a weekly step (6 hours in milliseconds), matching `PassiveTPPEngine`.
-    private static let maxWindowMs: Int64 = 6 * 60 * 60 * 1000
+    /// Minimum 5h delta for medium confidence (single model).
+    private static let mediumConfidenceDelta: Double = 3.0
 
     init(
         historicalDataService: any HistoricalDataServiceProtocol,
@@ -143,43 +143,32 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
 
         var measurementCount = 0
 
-        // Window runs from the last weekly step, reset or missing-7d point, so a 1% step
-        // gets the tokens of every poll interval since then.
-        var windowStart: (timestamp: Int64, sevenDay: Double)? = polls[0].sevenDayUtil.map { (polls[0].timestamp, $0) }
-
         for i in 1..<polls.count {
             let previous = polls[i - 1]
             let current = polls[i]
 
-            guard let currentSevenDay = current.sevenDayUtil else {
-                windowStart = nil
-                continue
-            }
-            guard var start = windowStart, let previousSevenDay = previous.sevenDayUtil else {
-                windowStart = (current.timestamp, currentSevenDay)
+            guard let currentFiveHour = current.fiveHourUtil,
+                  let previousFiveHour = previous.fiveHourUtil else {
                 continue
             }
 
-            // Weekly utilization only falls at a reset
-            if currentSevenDay < previousSevenDay {
-                Self.logger.debug("Backfill: weekly reset between \(previous.timestamp) and \(current.timestamp) — restarting window")
-                windowStart = (current.timestamp, currentSevenDay)
+            // Reset detection: 5h utilization drops by >= 50%
+            if previousFiveHour - currentFiveHour >= Self.resetDropThreshold {
                 continue
             }
 
-            // Same as the live engine: a step never absorbs tokens from a window older than the cap
-            if current.timestamp - start.timestamp > Self.maxWindowMs {
-                Self.logger.debug("Backfill: window from \(start.timestamp) exceeded 6h cap — restarting at \(previous.timestamp)")
-                start = (previous.timestamp, previousSevenDay)
-                windowStart = start
+            let fiveHourDelta = currentFiveHour - previousFiveHour
+            let sevenDayDelta: Double? = {
+                guard let curr = current.sevenDayUtil, let prev = previous.sevenDayUtil else { return nil }
+                return curr - prev
+            }()
+
+            guard fiveHourDelta >= Self.minDelta || (sevenDayDelta ?? 0) >= Self.minDelta else {
+                continue
             }
 
-            let sevenDayDelta = currentSevenDay - start.sevenDay
-            guard sevenDayDelta >= Self.minDelta else { continue }
-            windowStart = (current.timestamp, currentSevenDay)
-
-            // Query log parser for tokens in [window start, current.timestamp)
-            let tokenAggregates = logParser.getTokens(from: start.timestamp, to: current.timestamp)
+            // Query log parser for tokens in [previous.timestamp, current.timestamp)
+            let tokenAggregates = logParser.getTokens(from: previous.timestamp, to: current.timestamp)
             let totalTokensAcrossModels = tokenAggregates.reduce(0) {
                 $0 + $1.inputTokens + $1.outputTokens + $1.cacheCreateTokens + $1.cacheReadTokens
             }
@@ -192,30 +181,40 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
                     let totalRaw = aggregate.inputTokens + aggregate.outputTokens + aggregate.cacheCreateTokens + aggregate.cacheReadTokens
                     // cache_read is free; cache_create costs 1.25x base input
                     let effectiveTokens = Double(aggregate.inputTokens + aggregate.outputTokens) + Double(aggregate.cacheCreateTokens) * 1.25
-                    let tppSevenDay = effectiveTokens / sevenDayDelta
+                    let tppFiveHour: Double? = fiveHourDelta >= Self.minDelta ? effectiveTokens / fiveHourDelta : nil
+                    let tppSevenDay: Double? = {
+                        guard let sd = sevenDayDelta, sd >= Self.minDelta else { return nil }
+                        return effectiveTokens / sd
+                    }()
 
-                    let confidence: MeasurementConfidence =
-                        !isMultiModel && sevenDayDelta >= Self.mediumConfidenceDelta ? .medium : .low
+                    let confidence: MeasurementConfidence
+                    if isMultiModel {
+                        confidence = .low
+                    } else if fiveHourDelta >= Self.mediumConfidenceDelta {
+                        confidence = .medium
+                    } else {
+                        confidence = .low
+                    }
 
                     let measurement = TPPMeasurement(
                         id: nil,
                         timestamp: current.timestamp,
-                        windowStart: start.timestamp,
+                        windowStart: previous.timestamp,
                         model: aggregate.model,
                         variant: nil,
                         source: .passiveBackfill,
-                        fiveHourBefore: nil,
-                        fiveHourAfter: nil,
-                        fiveHourDelta: nil,
-                        sevenDayBefore: start.sevenDay,
-                        sevenDayAfter: currentSevenDay,
+                        fiveHourBefore: previousFiveHour,
+                        fiveHourAfter: currentFiveHour,
+                        fiveHourDelta: fiveHourDelta,
+                        sevenDayBefore: previous.sevenDayUtil,
+                        sevenDayAfter: current.sevenDayUtil,
                         sevenDayDelta: sevenDayDelta,
                         inputTokens: aggregate.inputTokens,
                         outputTokens: aggregate.outputTokens,
                         cacheCreateTokens: aggregate.cacheCreateTokens,
                         cacheReadTokens: aggregate.cacheReadTokens,
                         totalRawTokens: totalRaw,
-                        tppFiveHour: nil,
+                        tppFiveHour: tppFiveHour,
                         tppSevenDay: tppSevenDay,
                         confidence: confidence,
                         messageCount: aggregate.messageCount
@@ -233,15 +232,15 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
                 let measurement = TPPMeasurement(
                     id: nil,
                     timestamp: current.timestamp,
-                    windowStart: start.timestamp,
+                    windowStart: previous.timestamp,
                     model: "unknown",
                     variant: nil,
                     source: .passiveBackfill,
-                    fiveHourBefore: nil,
-                    fiveHourAfter: nil,
-                    fiveHourDelta: nil,
-                    sevenDayBefore: start.sevenDay,
-                    sevenDayAfter: currentSevenDay,
+                    fiveHourBefore: previousFiveHour,
+                    fiveHourAfter: currentFiveHour,
+                    fiveHourDelta: fiveHourDelta,
+                    sevenDayBefore: previous.sevenDayUtil,
+                    sevenDayAfter: current.sevenDayUtil,
                     sevenDayDelta: sevenDayDelta,
                     inputTokens: 0,
                     outputTokens: 0,
@@ -280,7 +279,7 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
             guard rollup.resetCount == 0 else { continue }
 
             // Skip buckets with missing peak/min
-            guard let peak = rollup.sevenDayPeak, let min = rollup.sevenDayMin else { continue }
+            guard let peak = rollup.fiveHourPeak, let min = rollup.fiveHourMin else { continue }
 
             // Approximate delta as peak - min
             let approximateDelta = peak - min
@@ -297,7 +296,7 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
                     let totalRaw = aggregate.inputTokens + aggregate.outputTokens + aggregate.cacheCreateTokens + aggregate.cacheReadTokens
                     // cache_read is free; cache_create costs 1.25x base input
                     let effectiveTokens = Double(aggregate.inputTokens + aggregate.outputTokens) + Double(aggregate.cacheCreateTokens) * 1.25
-                    let tppSevenDay = effectiveTokens / approximateDelta
+                    let tppFiveHour = effectiveTokens / approximateDelta
 
                     let measurement = TPPMeasurement(
                         id: nil,
@@ -306,19 +305,19 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
                         model: aggregate.model,
                         variant: nil,
                         source: .rollupBackfill,
-                        fiveHourBefore: nil,
-                        fiveHourAfter: nil,
-                        fiveHourDelta: nil,
-                        sevenDayBefore: min,
-                        sevenDayAfter: peak,
-                        sevenDayDelta: approximateDelta,
+                        fiveHourBefore: min,
+                        fiveHourAfter: peak,
+                        fiveHourDelta: approximateDelta,
+                        sevenDayBefore: rollup.sevenDayMin,
+                        sevenDayAfter: rollup.sevenDayPeak,
+                        sevenDayDelta: nil,
                         inputTokens: aggregate.inputTokens,
                         outputTokens: aggregate.outputTokens,
                         cacheCreateTokens: aggregate.cacheCreateTokens,
                         cacheReadTokens: aggregate.cacheReadTokens,
                         totalRawTokens: totalRaw,
-                        tppFiveHour: nil,
-                        tppSevenDay: tppSevenDay,
+                        tppFiveHour: tppFiveHour,
+                        tppSevenDay: nil,
                         confidence: .low,
                         messageCount: aggregate.messageCount
                     )
@@ -339,12 +338,12 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
                     model: "unknown",
                     variant: nil,
                     source: .rollupBackfill,
-                    fiveHourBefore: nil,
-                    fiveHourAfter: nil,
-                    fiveHourDelta: nil,
-                    sevenDayBefore: min,
-                    sevenDayAfter: peak,
-                    sevenDayDelta: approximateDelta,
+                    fiveHourBefore: min,
+                    fiveHourAfter: peak,
+                    fiveHourDelta: approximateDelta,
+                    sevenDayBefore: rollup.sevenDayMin,
+                    sevenDayAfter: rollup.sevenDayPeak,
+                    sevenDayDelta: nil,
                     inputTokens: 0,
                     outputTokens: 0,
                     cacheCreateTokens: 0,

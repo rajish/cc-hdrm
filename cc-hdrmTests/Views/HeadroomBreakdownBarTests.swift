@@ -53,11 +53,15 @@ struct HeadroomBreakdownBarTests {
         let totalSpanMs = Int64(spanDays) * 24 * 3_600_000
         let stepMs = count > 1 ? totalSpanMs / Int64(count - 1) : 0
         return (0..<count).map { i in
-            ResetEvent.legacyFixture(
+            ResetEvent(
                 id: Int64(i + 1),
                 timestamp: nowMs - totalSpanMs + Int64(i) * stepMs,
                 fiveHourPeak: 85.0 + Double(i),
-                sevenDayUtil: 40.0 + Double(i)
+                sevenDayUtil: 40.0 + Double(i),
+                tier: "default_claude_pro",
+                usedCredits: nil,
+                constrainedCredits: nil,
+                unusedCredits: nil
             )
         }
     }
@@ -186,8 +190,8 @@ struct HeadroomBreakdownBarTests {
     func allRangeUsesEventSpan() {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         let events = [
-            ResetEvent.legacyFixture(id: 1, timestamp: nowMs - 90 * 24 * 3_600_000, fiveHourPeak: 50, sevenDayUtil: 30),
-            ResetEvent.legacyFixture(id: 2, timestamp: nowMs, fiveHourPeak: 60, sevenDayUtil: 40)
+            ResetEvent(id: 1, timestamp: nowMs - 90 * 24 * 3_600_000, fiveHourPeak: 50, sevenDayUtil: 30, tier: "default_claude_pro", usedCredits: nil, constrainedCredits: nil, unusedCredits: nil),
+            ResetEvent(id: 2, timestamp: nowMs, fiveHourPeak: 60, sevenDayUtil: 40, tier: "default_claude_pro", usedCredits: nil, constrainedCredits: nil, unusedCredits: nil)
         ]
         let days = SubscriptionValueCalculator.periodDays(for: .all, events: events)
         #expect(abs(days - 90.0) < 1.0, "Should be approximately 90 days")

@@ -305,9 +305,9 @@ private let previewEvents: [ResetEvent] = {
 
 /// Minimal preview-only stub for HeadroomAnalysisServiceProtocol.
 private struct PreviewHeadroomAnalysisService: HeadroomAnalysisServiceProtocol {
-    func analyzeResetEvent(sevenDayPeak: Double, creditLimits: CreditLimits) -> HeadroomBreakdown {
-        HeadroomBreakdown(usedPercent: 52, unusedPercent: 48,
-                          usedCredits: 2_600_000, unusedCredits: 2_400_000)
+    func analyzeResetEvent(fiveHourPeak: Double, sevenDayUtil: Double, creditLimits: CreditLimits) -> HeadroomBreakdown {
+        HeadroomBreakdown(usedPercent: 52, constrainedPercent: 12, unusedPercent: 36,
+                          usedCredits: 286_000, constrainedCredits: 66_000, unusedCredits: 198_000)
     }
 
     func aggregateBreakdown(events: [ResetEvent]) -> PeriodSummary {

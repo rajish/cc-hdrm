@@ -4,9 +4,9 @@ import SwiftUI
 /// Swift Charts view rendering TPP trend data with two-tier visualization.
 ///
 /// Renders:
-/// - Passive points as scatter dots (5h-based points as triangles)
+/// - Passive points as scatter dots
 /// - Benchmark points as diamond markers (accent color)
-/// - Smoothed trend line (monotone interpolation, separate series; 5h-based series dashed)
+/// - Smoothed trend line (monotone interpolation, separate series)
 /// - Shift annotations as vertical rule marks
 /// - Hover cursor with vertical line and value tooltip
 struct TPPTrendChartView: View {
@@ -47,15 +47,8 @@ struct TPPTrendChartView: View {
             if chartData.isEmpty {
                 emptyState
             } else {
-                VStack(alignment: .leading, spacing: 4) {
-                    chartContent
-                    if showsFiveHourBasedData {
-                        Text("Triangles and dashed trend: older 5h-based readings, not comparable with weekly values.")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(12)
+                chartContent
+                    .padding(12)
             }
         }
         .frame(minHeight: 180)
@@ -74,7 +67,7 @@ struct TPPTrendChartView: View {
                         y: .value("Passive", point.tppValue)
                     )
                     .foregroundStyle(Color.secondary.opacity(opacityForConfidence(point.confidence, base: 0.7)))
-                    .symbol(point.isFiveHourBased ? BasicChartSymbolShape.triangle : .circle)
+                    .symbol(.circle)
                     .symbolSize(50)
                 }
             }
@@ -98,10 +91,10 @@ struct TPPTrendChartView: View {
                     LineMark(
                         x: .value("Time", point.timestamp),
                         y: .value("Trend", point.tppValue),
-                        series: .value("Series", point.isFiveHourBased ? "trend-5h" : "trend")
+                        series: .value("Series", "trend")
                     )
                     .foregroundStyle(Color.orange.opacity(0.7))
-                    .lineStyle(StrokeStyle(lineWidth: 2, dash: point.isFiveHourBased ? [5, 3] : []))
+                    .lineStyle(StrokeStyle(lineWidth: 2))
                     .interpolationMethod(.monotone)
                 }
             }
@@ -202,7 +195,7 @@ struct TPPTrendChartView: View {
                 if let point = nearest {
                     HStack(spacing: 4) {
                         Circle().fill(Color.secondary).frame(width: 6, height: 6)
-                        Text("\(point.source == .benchmark ? "Benchmark" : "Passive"): \(formatTPP(point.tppValue))\(basisSuffix(point))")
+                        Text("\(point.source == .benchmark ? "Benchmark" : "Passive"): \(formatTPP(point.tppValue))")
                             .font(.caption2)
                     }
                 }
@@ -210,7 +203,7 @@ struct TPPTrendChartView: View {
                 if let trend = nearestTrend {
                     HStack(spacing: 4) {
                         Circle().fill(Color.orange).frame(width: 6, height: 6)
-                        Text("Trend: \(formatTPP(trend.tppValue))\(basisSuffix(trend))")
+                        Text("Trend: \(formatTPP(trend.tppValue))")
                             .font(.caption2)
                     }
                 }
@@ -269,17 +262,6 @@ struct TPPTrendChartView: View {
     }
 
     // MARK: - Helpers
-
-    /// True when a 5h-based triangle or dashed trend is visible. Benchmark diamonds are
-    /// excluded: they keep their shape and are labelled in the tooltip only.
-    private var showsFiveHourBasedData: Bool {
-        (showPassive && chartData.passivePoints.contains(where: \.isFiveHourBased))
-            || (showTrend && chartData.trendLine.contains(where: \.isFiveHourBased))
-    }
-
-    private func basisSuffix(_ point: TPPChartPoint) -> String {
-        point.isFiveHourBased ? " (5h-based)" : ""
-    }
 
     /// Returns opacity adjusted for measurement confidence level.
     private func opacityForConfidence(_ confidence: MeasurementConfidence, base: Double) -> Double {

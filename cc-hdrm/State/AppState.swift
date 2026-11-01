@@ -40,6 +40,12 @@ struct StatusMessage: Sendable, Equatable {
     let detail: String
 }
 
+/// Which time window is currently promoted to the menu bar display.
+enum DisplayedWindow: Sendable, Equatable {
+    case fiveHour
+    case sevenDay
+}
+
 /// OAuth authentication state — tracks whether the user has signed in.
 enum OAuthState: String, Sendable {
     case unauthenticated
@@ -122,19 +128,77 @@ final class AppState {
         return DataFreshness(lastUpdated: lastUpdated)
     }
 
-    /// Derived headroom state for the menu bar display, always from the weekly window.
-    /// Returns `.disconnected` when not connected or when no weekly data is available.
+    /// How many full 5h quotas remain in the 7d budget. Nil when credit limits are unavailable
+    /// or when `fiveHourCredits` is zero (defensive guard — prevents inf propagation).
+    var quotasRemaining: Double? {
+        guard let limits = creditLimits,
+              limits.fiveHourCredits > 0,
+              let sevenDay else { return nil }
+        let remaining7d = (100.0 - sevenDay.utilization) / 100.0 * Double(limits.sevenDayCredits)
+        return remaining7d / Double(limits.fiveHourCredits)
+    }
+
+    /// Which window is currently displayed in the menu bar.
+    /// Credit-math path: promotes 7d only when remaining 7d credits can't sustain one more full 5h cycle.
+    /// Fallback path (unknown tier): uses Story 3.2 percentage-comparison rule.
+    var displayedWindow: DisplayedWindow {
+        guard connectionStatus == .connected, fiveHour != nil else {
+            return .fiveHour
+        }
+
+        // Exhausted countdown always takes precedence over 7d promotion
+        if fiveHour?.headroomState == .exhausted { return .fiveHour }
+
+        // Credit-math path (when tier is known)
+        if let quotas = quotasRemaining {
+            return quotas < 1.0 ? .sevenDay : .fiveHour
+        }
+
+        // Fallback: Story 3.2 percentage-comparison rule (unknown tier)
+        let fiveHourHeadroom = 100.0 - (fiveHour?.utilization ?? 100.0)
+        let sevenDayHeadroom = 100.0 - (sevenDay?.utilization ?? 100.0)
+
+        if let sevenDayState = sevenDay?.headroomState,
+           (sevenDayState == .warning || sevenDayState == .critical),
+           sevenDayHeadroom < fiveHourHeadroom {
+            return .sevenDay
+        }
+
+        return .fiveHour
+    }
+
+    /// Derived headroom state for the menu bar display.
+    /// Returns `.disconnected` when not connected; promotes 7-day when tighter constraint applies.
     var menuBarHeadroomState: HeadroomState {
         guard connectionStatus == .connected else {
             return .disconnected
         }
-        return sevenDay?.headroomState ?? .disconnected
+
+        switch displayedWindow {
+        case .fiveHour:
+            return fiveHour?.headroomState ?? .disconnected
+        case .sevenDay:
+            return sevenDay?.headroomState ?? .disconnected
+        }
     }
 
-    /// Whether extra usage mode is active: enabled AND the weekly window exhausted.
+    /// The slope level for the currently displayed window.
+    /// Returns fiveHourSlope when 5h window is displayed, sevenDaySlope when 7d is promoted.
+    var displayedSlope: SlopeLevel {
+        switch displayedWindow {
+        case .fiveHour:
+            return fiveHourSlope
+        case .sevenDay:
+            return sevenDaySlope
+        }
+    }
+
+    /// Whether extra usage mode is active: enabled AND at least one window exhausted.
     var isExtraUsageActive: Bool {
         guard extraUsageEnabled else { return false }
-        return sevenDay?.headroomState == .exhausted
+        let fiveHourExhausted = fiveHour?.headroomState == .exhausted
+        let sevenDayExhausted = sevenDay?.headroomState == .exhausted
+        return fiveHourExhausted || sevenDayExhausted
     }
 
     /// Remaining prepaid extra usage balance in cents. Nil when monthly limit or used credits unknown.
@@ -164,9 +228,8 @@ final class AppState {
         return "$0.00"
     }
 
-    /// Derived menu bar text from the weekly window: headroom percentage, countdown,
-    /// or em dash when disconnected. Appends `↗` when the weekly slope is actionable
-    /// and the window is not exhausted.
+    /// Derived menu bar text: headroom percentage, countdown, or em dash when disconnected.
+    /// Appends slope arrow when slope is actionable (rising/steep) and not in exhausted state.
     /// Note: Sparkle icon removed — gauge icon now provides the visual indicator.
     var menuBarText: String {
         if menuBarHeadroomState == .disconnected {
@@ -178,17 +241,21 @@ final class AppState {
             return extraText
         }
 
-        if let sevenDay, sevenDay.headroomState == .exhausted, let resetsAt = sevenDay.resetsAt {
+        let window: WindowState? = displayedWindow == .fiveHour ? fiveHour : sevenDay
+
+        if let window, window.headroomState == .exhausted, let resetsAt = window.resetsAt {
             // Access countdownTick to register with withObservationTracking
             _ = countdownTick
-            return "\u{21BB} \(resetsAt.countdownString())" // ↻ 3d 4h
+            return "\u{21BB} \(resetsAt.countdownString())" // ↻ Xm
         }
 
-        let headroom = max(0, Int(100.0 - (sevenDay?.utilization ?? 0)))
+        let headroom = max(0, Int(100.0 - (window?.utilization ?? 0)))
+        let slope = displayedSlope
 
-        // Exhausted without resetsAt shows percentage only, no arrow
-        if sevenDaySlope.isActionable && sevenDay?.headroomState != .exhausted {
-            return "\(headroom)% \u{2197}" // ↗
+        // Append slope arrow only when actionable (rising/steep) AND not exhausted
+        // Per edge case #5: exhausted without resetsAt shows percentage only, no slope
+        if slope.isActionable && window?.headroomState != .exhausted {
+            return "\(headroom)% \(slope.arrow)"
         }
         return "\(headroom)%"
     }

@@ -30,6 +30,9 @@ struct SevenDayGaugeSection: View {
         if let resetsAt = appState.sevenDay?.resetsAt {
             label += ", resets in \(resetsAt.countdownString()), \(resetsAt.absoluteTimeString())"
         }
+        if let quotas = appState.quotasRemaining {
+            label += ", \(Int(floor(quotas))) full 5-hour quotas left"
+        }
         return label
     }
 
@@ -57,6 +60,14 @@ struct SevenDayGaugeSection: View {
                     headroomState: sevenDayState,
                     countdownTick: appState.countdownTick
                 )
+
+                // Quotas remaining (Story 3.3 AC-7)
+                if let quotas = appState.quotasRemaining {
+                    let wholeQuotas = Int(floor(quotas))
+                    Text("\(wholeQuotas) full 5h quotas left")
+                        .font(.caption2)
+                        .foregroundStyle(Color.headroomColor(for: sevenDayState))
+                }
             }
             .background(
                 RoundedRectangle(cornerRadius: 6)
