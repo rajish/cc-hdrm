@@ -82,3 +82,12 @@ Both are older drift in text restored unchanged. Neither blocks Epic 26.
 - source_spec: `_bmad-output/implementation-artifacts/spec-26-2-weekly-pace-no-five-hour.md`
   summary: Confirm that only a missing `five_hour` object means "no 5-hour number", on a real Pro, Max or unverified Ultra response.
   evidence: `cc-hdrm/Services/PollingEngine.swift` turns `five_hour: {"utilization": null}` into a 0% window, so the account counts as having a number. An idle account that reports `five_hour: null` would flip to weekly pace until its next 5-hour window opens. Only one real response has been seen.
+
+## Deferred from: build of Story 26.3 (2026-11-01)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-3-weekly-first-popover-no-five-hour.md`
+  summary: Decide whether the 60-minute chart gap limit should allow for Low Power Mode at the 30-minute poll setting.
+  evidence: `PollingEngine.computeNextInterval` in `cc-hdrm/Services/PollingEngine.swift` doubles 1800 seconds to 3600, while `SparklinePathBuilder.gapThresholdMs` in `cc-hdrm/Views/Sparkline.swift` is 3,600,000 ms. Polls just over an hour apart then count as gaps on both the 24-hour and weekly charts, so the weekly chart falls back to the analytics link.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-3-weekly-first-popover-no-five-hour.md`
+  summary: Check that VoiceOver's double-tap opens analytics from the 24-hour sparkline.
+  evidence: `cc-hdrm/Views/Sparkline.swift` marks that chart as a button with no accessibility action, and its tap handling lives in `cc-hdrm/Views/InteractionOverlay.swift`. The weekly chart got an explicit action, while the 24-hour chart was left unchanged by rule. It has not been tried with VoiceOver.

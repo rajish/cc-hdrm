@@ -175,8 +175,12 @@ struct PopoverView: View {
             )
             .padding(.horizontal)
             .padding(.vertical, 8)
+        } else if let weeklySparkline {
+            Divider()
+            weeklySparkline
+                .padding(.horizontal)
+                .padding(.vertical, 8)
         } else if showsAnalyticsButton {
-            // The sparkline only draws 5-hour data, so it would be a blank box here
             Divider()
             Button("Open analytics") { AnalyticsWindow.shared.toggle() }
                 .buttonStyle(.link)
@@ -214,10 +218,24 @@ struct PopoverView: View {
         !appState.hasNoFiveHourNumber
     }
 
-    /// Whether the analytics button replaces the sparkline.
+    /// The weekly chart, when it can open analytics and has something to draw.
+    /// Internal (not private) to allow @testable import verification.
+    var weeklySparkline: Sparkline? {
+        guard historicalDataService != nil,
+              let cycle = appState.weeklyCycle,
+              SparklinePathBuilder.hasDrawableWeeklyData(appState.weeklySparklineData, cycle: cycle) else { return nil }
+        return Sparkline(
+            data: appState.weeklySparklineData,
+            onTap: { AnalyticsWindow.shared.toggle() },
+            isAnalyticsOpen: appState.isAnalyticsWindowOpen,
+            weeklyCycle: cycle
+        )
+    }
+
+    /// Whether the analytics button takes the sparkline's place, because no weekly chart can be drawn.
     /// Internal (not private) to allow @testable import verification.
     var showsAnalyticsButton: Bool {
-        !showsFiveHourSection && historicalDataService != nil
+        !showsFiveHourSection && historicalDataService != nil && weeklySparkline == nil
     }
 
     /// Whether the scoped-limit gauge section is shown.

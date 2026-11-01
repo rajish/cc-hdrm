@@ -21,6 +21,9 @@ final class PollingEngine: PollingEngineProtocol {
     private let claudeCodeLogParser: (any ClaudeCodeLogParserProtocol)?
     private var pollingTask: Task<Void, Never>?
     private var sparklineRefreshTask: Task<Void, Never>?
+    private var weeklySparklineLoadedCycleStart: Int64?
+    private var weeklySparklineLoadedClearCount: UInt = 0
+    private var weeklySparklineLoadingCycleStart: Int64?
     /// Guards against repeated profile backfill attempts when the profile genuinely has no tier.
     /// Reset on token refresh (natural retry point for tier changes).
     private var hasAttemptedProfileBackfill = false
@@ -359,24 +362,29 @@ final class PollingEngine: PollingEngineProtocol {
                 appState.updateSlopes(fiveHour: fiveHourSlope, sevenDay: sevenDaySlope)
             }
 
-            // Cancel any in-flight sparkline refresh to prevent races
-            sparklineRefreshTask?.cancel()
+            if appState.hasNoFiveHourNumber {
+                refreshWeeklySparkline(weeklyUtilization: response.sevenDay?.utilization, timestamp: pollTimestamp)
+            } else {
+                // Cancel any in-flight sparkline refresh to prevent races
+                sparklineRefreshTask?.cancel()
+                clearWeeklySparkline()
 
-            // Refresh sparkline data for popover (async, non-blocking)
-            sparklineRefreshTask = Task { [weak self] in
-                guard let self, !Task.isCancelled else { return }
-                do {
-                    if let data = try await historicalDataService?.getRecentPolls(hours: 24) {
-                        guard !Task.isCancelled else { return }
-                        // MainActor.run required: Task escapes @MainActor context of PollingEngine
-                        await MainActor.run {
-                            appState.updateSparklineData(data)
+                // Refresh sparkline data for popover (async, non-blocking)
+                sparklineRefreshTask = Task { [weak self] in
+                    guard let self, !Task.isCancelled else { return }
+                    do {
+                        if let data = try await historicalDataService?.getRecentPolls(hours: 24) {
+                            guard !Task.isCancelled else { return }
+                            // MainActor.run required: Task escapes @MainActor context of PollingEngine
+                            await MainActor.run {
+                                appState.updateSparklineData(data)
+                            }
+                            Self.logger.debug("Sparkline data refreshed: \(data.count) points")
                         }
-                        Self.logger.debug("Sparkline data refreshed: \(data.count) points")
+                    } catch {
+                        guard !Task.isCancelled else { return }
+                        Self.logger.error("Failed to refresh sparkline data: \(error.localizedDescription)")
                     }
-                } catch {
-                    guard !Task.isCancelled else { return }
-                    Self.logger.error("Failed to refresh sparkline data: \(error.localizedDescription)")
                 }
             }
 
@@ -395,6 +403,95 @@ final class PollingEngine: PollingEngineProtocol {
             await notificationService?.evaluateConnectivity(apiReachable: false)
             await historicalDataService?.evaluateOutageState(apiReachable: false, failureReason: "unknown")
         }
+    }
+
+    /// Keeps the weekly chart current for an account with no 5-hour number.
+    /// Reads history once per cycle and adds later polls in memory: a full read can
+    /// touch 60,000 rows, too many to repeat on every poll.
+    private func refreshWeeklySparkline(weeklyUtilization: Double?, timestamp: Int64) {
+        // A returning 5-hour number must never flash these old points
+        if !appState.sparklineData.isEmpty {
+            appState.updateSparklineData([])
+        }
+
+        guard let cycle = appState.weeklyCycle else {
+            sparklineRefreshTask?.cancel()
+            clearWeeklySparkline()
+            return
+        }
+
+        let clearCount = appState.weeklySparklineClearCount
+        let isLoadedCycle = isSameWeeklyCycle(weeklySparklineLoadedCycleStart, cycle)
+
+        if isLoadedCycle, weeklySparklineLoadedClearCount == clearCount {
+            if let weeklyUtilization {
+                appState.updateWeeklySparklineData(WeeklySparklineData.appending(
+                    timestamp: timestamp,
+                    utilization: weeklyUtilization,
+                    to: appState.weeklySparklineData
+                ))
+            }
+            return
+        }
+
+        // Restarting would throw away a read slower than the poll interval, every time
+        if isSameWeeklyCycle(weeklySparklineLoadingCycleStart, cycle) { return }
+
+        sparklineRefreshTask?.cancel()
+        if !isLoadedCycle {
+            Self.logger.info("Weekly chart: loading cycle starting at \(cycle.lowerBound, privacy: .public)")
+            appState.updateWeeklySparklineData([])
+        }
+
+        guard let historicalDataService else { return }
+        let hours = Int((Double(timestamp - cycle.lowerBound) / 3_600_000).rounded(.up))
+        weeklySparklineLoadingCycleStart = cycle.lowerBound
+        sparklineRefreshTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if weeklySparklineLoadingCycleStart == cycle.lowerBound {
+                    weeklySparklineLoadingCycleStart = nil
+                }
+            }
+            guard !Task.isCancelled else { return }
+            do {
+                let rawPolls = try await historicalDataService.getRecentPolls(hours: hours)
+                let rollups = try await historicalDataService.getRolledUpData(range: .week)
+                var points = await Task.detached(priority: .utility) {
+                    WeeklySparklineData.merge(rawPolls: rawPolls, rollups: rollups, cycle: cycle)
+                }.value
+                guard !Task.isCancelled else { return }
+                // Clearing history while this read ran must not bring the deleted points back
+                guard appState.weeklySparklineClearCount == clearCount else {
+                    Self.logger.info("Weekly chart: load discarded, data was cleared while it ran")
+                    return
+                }
+                // This poll's own write may not have reached the database yet
+                if let weeklyUtilization {
+                    points = WeeklySparklineData.appending(timestamp: timestamp, utilization: weeklyUtilization, to: points)
+                }
+                appState.updateWeeklySparklineData(points)
+                weeklySparklineLoadedCycleStart = cycle.lowerBound
+                weeklySparklineLoadedClearCount = clearCount
+                Self.logger.info("Weekly chart: loaded \(points.count, privacy: .public) points from \(rawPolls.count, privacy: .public) polls and \(rollups.count, privacy: .public) rollups")
+            } catch {
+                guard !Task.isCancelled else { return }
+                Self.logger.error("Failed to load weekly chart data: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func isSameWeeklyCycle(_ start: Int64?, _ cycle: ClosedRange<Int64>) -> Bool {
+        guard let start else { return false }
+        return abs(start - cycle.lowerBound) <= SparklinePathBuilder.resetsAtJitterToleranceMs
+    }
+
+    private func clearWeeklySparkline() {
+        weeklySparklineLoadingCycleStart = nil
+        guard weeklySparklineLoadedCycleStart != nil || !appState.weeklySparklineData.isEmpty else { return }
+        Self.logger.info("Weekly chart: cleared, the 5-hour number is back or the reset time is unknown")
+        weeklySparklineLoadedCycleStart = nil
+        appState.updateWeeklySparklineData([])
     }
 
     private func handleAPIError(_ error: AppError, credentials: KeychainCredentials) async {

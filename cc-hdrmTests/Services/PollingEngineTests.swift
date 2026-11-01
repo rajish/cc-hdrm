@@ -96,6 +96,12 @@ private final class PEMockHistoricalDataService: HistoricalDataServiceProtocol, 
     var recentPollsToReturn: [UsagePoll] = []
     var shouldThrowOnGetRecentPolls = false
     var getRecentPollsCallCount = 0
+    var lastRecentPollsHours: Int?
+    var rollupsToReturn: [UsageRollup] = []
+    var getRolledUpDataCallCount = 0
+    var readOrder: [String] = []
+    /// Runs while the first history read is under way.
+    var duringRecentPollsRead: (@MainActor () async -> Void)?
 
     func persistPoll(_ response: UsageResponse) async throws {
         try await persistPoll(response, tier: nil)
@@ -112,6 +118,12 @@ private final class PEMockHistoricalDataService: HistoricalDataServiceProtocol, 
 
     func getRecentPolls(hours: Int) async throws -> [UsagePoll] {
         getRecentPollsCallCount += 1
+        lastRecentPollsHours = hours
+        readOrder.append("raw")
+        if let hook = duringRecentPollsRead {
+            duringRecentPollsRead = nil
+            await hook()
+        }
         if shouldThrowOnGetRecentPolls {
             throw AppError.databaseQueryFailed(underlying: NSError(domain: "test", code: 2))
         }
@@ -156,7 +168,9 @@ private final class PEMockHistoricalDataService: HistoricalDataServiceProtocol, 
     }
 
     func getRolledUpData(range: TimeRange) async throws -> [UsageRollup] {
-        return []
+        getRolledUpDataCallCount += 1
+        readOrder.append("rollups")
+        return rollupsToReturn
     }
 
     func pruneOldData(retentionDays: Int) async throws {
@@ -2230,5 +2244,335 @@ struct PollingEngineRestartTests {
         #expect(intervalAfter == intervalBefore, "Backoff interval should be preserved after restartPolling")
 
         engine.stop()
+    }
+}
+
+// MARK: - PollingEngine Weekly Chart Tests
+
+@Suite("PollingEngine Weekly Chart Tests")
+struct PollingEngineWeeklyChartTests {
+
+    private let hourMs: Int64 = 3_600_000
+    private let isoFormatter = ISO8601DateFormatter()
+
+    private func noNumberResponse(utilization: Double = 60, resetsAt: Date?) -> UsageResponse {
+        UsageResponse(
+            fiveHour: nil,
+            sevenDay: WindowUsage(utilization: utilization, resetsAt: resetsAt.map { isoFormatter.string(from: $0) }),
+            limits: nil,
+            extraUsage: nil
+        )
+    }
+
+    private func recentPolls() -> [UsagePoll] {
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        return [
+            UsagePoll(id: 1, timestamp: now - 2 * hourMs, fiveHourUtil: 50, fiveHourResetsAt: nil, sevenDayUtil: 30, sevenDayResetsAt: nil),
+            UsagePoll(id: 2, timestamp: now - hourMs, fiveHourUtil: 52, fiveHourResetsAt: nil, sevenDayUtil: 31, sevenDayResetsAt: nil)
+        ]
+    }
+
+    private func rollup(hoursAgo: Int64, peak: Double) -> UsageRollup {
+        let start = Int64(Date().timeIntervalSince1970 * 1000) - hoursAgo * hourMs
+        return UsageRollup(id: 1, periodStart: start, periodEnd: start + 300_000, resolution: .fiveMin, fiveHourAvg: nil, fiveHourPeak: nil, fiveHourMin: nil, sevenDayAvg: peak, sevenDayPeak: peak, sevenDayMin: peak, resetCount: 0, unusedCredits: nil)
+    }
+
+    @MainActor
+    private func makeEngine(_ responses: [UsageResponse], historical: PEMockHistoricalDataService, appState: AppState) -> PollingEngine {
+        PollingEngine(
+            keychainService: PEMockKeychainService(credentials: validCredentials()),
+            tokenRefreshService: PEMockTokenRefreshService(),
+            apiClient: PEMockAPIClient(results: responses.map { .success($0) }),
+            appState: appState,
+            historicalDataService: historical
+        )
+    }
+
+    @MainActor
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        let timeout = Date().addingTimeInterval(1.0)
+        while !condition() && Date() < timeout {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    @Test("sparkline data switches with the account state at each poll, both ways")
+    @MainActor
+    func dataSwitchesBothWays() async throws {
+        let historical = PEMockHistoricalDataService()
+        historical.recentPollsToReturn = recentPolls()
+        historical.rollupsToReturn = [rollup(hoursAgo: 30, peak: 20)]
+        let appState = AppState()
+        let engine = makeEngine(
+            [successResponse(), noNumberResponse(resetsAt: Date().addingTimeInterval(4 * 86400)), successResponse()],
+            historical: historical,
+            appState: appState
+        )
+
+        await engine.performPollCycle()
+        try await waitUntil { !appState.sparklineData.isEmpty }
+        #expect(appState.sparklineData.count == 2)
+        #expect(appState.weeklySparklineData.isEmpty)
+        #expect(historical.lastRecentPollsHours == 24)
+        #expect(historical.getRolledUpDataCallCount == 0)
+
+        await engine.performPollCycle()
+        #expect(appState.sparklineData.isEmpty)
+        try await waitUntil { !appState.weeklySparklineData.isEmpty }
+        #expect(appState.weeklySparklineData.map(\.sevenDayUtil) == [20, 30, 31, 60])
+        #expect(appState.weeklySparklineData.allSatisfy { $0.fiveHourUtil == nil })
+        #expect(historical.lastRecentPollsHours == 73)
+        #expect(historical.getRolledUpDataCallCount == 1)
+
+        await engine.performPollCycle()
+        #expect(appState.weeklySparklineData.isEmpty)
+        try await waitUntil { !appState.sparklineData.isEmpty }
+        #expect(appState.sparklineData.count == 2)
+        #expect(appState.sparklineData.first?.fiveHourUtil == 50)
+        #expect(historical.lastRecentPollsHours == 24)
+        #expect(historical.getRolledUpDataCallCount == 1)
+    }
+
+    @Test("5-hour number present → the 24-hour query runs every poll and the rollup query never does")
+    @MainActor
+    func numberKeepsTwentyFourHourRefresh() async throws {
+        let historical = PEMockHistoricalDataService()
+        historical.recentPollsToReturn = recentPolls()
+        let appState = AppState()
+        let engine = makeEngine([successResponse(), successResponse(), successResponse()], historical: historical, appState: appState)
+
+        for poll in 1...3 {
+            await engine.performPollCycle()
+            try await waitUntil { historical.getRecentPollsCallCount == poll }
+            #expect(historical.getRecentPollsCallCount == poll)
+            #expect(historical.lastRecentPollsHours == 24)
+        }
+        #expect(historical.getRolledUpDataCallCount == 0)
+        #expect(appState.weeklySparklineData.isEmpty)
+    }
+
+    @Test("ordinary polls add the new reading in memory, with no further database read")
+    @MainActor
+    func ordinaryPollsSkipDatabase() async throws {
+        let historical = PEMockHistoricalDataService()
+        historical.recentPollsToReturn = recentPolls()
+        let appState = AppState()
+        let resetsAt = Date().addingTimeInterval(4 * 86400)
+        let engine = makeEngine(
+            [noNumberResponse(utilization: 60, resetsAt: resetsAt), noNumberResponse(utilization: 61, resetsAt: resetsAt), noNumberResponse(utilization: 62, resetsAt: resetsAt)],
+            historical: historical,
+            appState: appState
+        )
+
+        await engine.performPollCycle()
+        try await waitUntil { !appState.weeklySparklineData.isEmpty }
+        #expect(appState.weeklySparklineData.last?.sevenDayUtil == 60)
+
+        // A reading needs a newer timestamp than the last point; real polls are seconds apart
+        try await Task.sleep(for: .milliseconds(5))
+        await engine.performPollCycle()
+        #expect(appState.weeklySparklineData.last?.sevenDayUtil == 61)
+
+        try await Task.sleep(for: .milliseconds(5))
+        await engine.performPollCycle()
+        #expect(appState.weeklySparklineData.last?.sevenDayUtil == 62)
+
+        #expect(historical.getRecentPollsCallCount == 1)
+        #expect(historical.getRolledUpDataCallCount == 1)
+    }
+
+    @Test("reset jitter under 60 seconds does not reload")
+    @MainActor
+    func jitterDoesNotReload() async throws {
+        let historical = PEMockHistoricalDataService()
+        historical.recentPollsToReturn = recentPolls()
+        let appState = AppState()
+        let resetsAt = Date().addingTimeInterval(4 * 86400)
+        let engine = makeEngine(
+            [noNumberResponse(resetsAt: resetsAt), noNumberResponse(resetsAt: resetsAt.addingTimeInterval(30))],
+            historical: historical,
+            appState: appState
+        )
+
+        await engine.performPollCycle()
+        try await waitUntil { !appState.weeklySparklineData.isEmpty }
+        await engine.performPollCycle()
+        #expect(historical.getRecentPollsCallCount == 1)
+        #expect(!appState.weeklySparklineData.isEmpty)
+    }
+
+    @Test("a new cycle clears the old points and loads the new cycle")
+    @MainActor
+    func newCycleReloads() async throws {
+        let historical = PEMockHistoricalDataService()
+        historical.recentPollsToReturn = recentPolls()
+        let appState = AppState()
+        let engine = makeEngine(
+            [noNumberResponse(resetsAt: Date().addingTimeInterval(4 * 86400)), noNumberResponse(resetsAt: Date().addingTimeInterval(7 * 86400 - 1800))],
+            historical: historical,
+            appState: appState
+        )
+
+        await engine.performPollCycle()
+        try await waitUntil { !appState.weeklySparklineData.isEmpty }
+        #expect(appState.weeklySparklineData.count == 3)
+
+        await engine.performPollCycle()
+        #expect(appState.weeklySparklineData.isEmpty)
+        try await waitUntil { !appState.weeklySparklineData.isEmpty }
+        #expect(historical.getRecentPollsCallCount == 2)
+        // Only the current poll falls inside the new cycle, which began 30 minutes ago
+        #expect(appState.weeklySparklineData.map(\.sevenDayUtil) == [60])
+        #expect(historical.lastRecentPollsHours == 1)
+    }
+
+    @Test("emptied data, as after clear history or sign out, is read again at the next poll")
+    @MainActor
+    func emptiedDataReloads() async throws {
+        let historical = PEMockHistoricalDataService()
+        historical.recentPollsToReturn = recentPolls()
+        let appState = AppState()
+        let resetsAt = Date().addingTimeInterval(4 * 86400)
+        let engine = makeEngine([noNumberResponse(resetsAt: resetsAt), noNumberResponse(resetsAt: resetsAt)], historical: historical, appState: appState)
+
+        await engine.performPollCycle()
+        try await waitUntil { !appState.weeklySparklineData.isEmpty }
+
+        appState.clearWeeklySparklineData()
+        await engine.performPollCycle()
+        try await waitUntil { !appState.weeklySparklineData.isEmpty }
+        #expect(historical.getRecentPollsCallCount == 2)
+    }
+
+    @Test("clearing during a load keeps the deleted points out; the next poll reads again")
+    @MainActor
+    func clearDuringLoadDiscardsResult() async throws {
+        let historical = PEMockHistoricalDataService()
+        historical.recentPollsToReturn = recentPolls()
+        let appState = AppState()
+        let resetsAt = Date().addingTimeInterval(4 * 86400)
+        let engine = makeEngine([noNumberResponse(resetsAt: resetsAt), noNumberResponse(resetsAt: resetsAt)], historical: historical, appState: appState)
+        historical.duringRecentPollsRead = { appState.clearWeeklySparklineData() }
+
+        await engine.performPollCycle()
+        try await waitUntil { historical.getRolledUpDataCallCount == 1 }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(appState.weeklySparklineData.isEmpty)
+
+        historical.recentPollsToReturn = []
+        await engine.performPollCycle()
+        try await waitUntil { !appState.weeklySparklineData.isEmpty }
+        #expect(historical.getRecentPollsCallCount == 2)
+        #expect(appState.weeklySparklineData.map(\.sevenDayUtil) == [60])
+    }
+
+    @Test("a poll arriving during a load does not restart it")
+    @MainActor
+    func pollDuringLoadKeepsLoad() async throws {
+        let historical = PEMockHistoricalDataService()
+        historical.recentPollsToReturn = recentPolls()
+        let appState = AppState()
+        let resetsAt = Date().addingTimeInterval(4 * 86400)
+        let engine = makeEngine([noNumberResponse(resetsAt: resetsAt), noNumberResponse(resetsAt: resetsAt)], historical: historical, appState: appState)
+        historical.duringRecentPollsRead = { await engine.performPollCycle() }
+
+        await engine.performPollCycle()
+        try await waitUntil { !appState.weeklySparklineData.isEmpty }
+        #expect(historical.getRecentPollsCallCount == 1)
+        #expect(appState.weeklySparklineData.count == 3)
+    }
+
+    @Test("raw polls are read before rollups, so a rollup between the reads leaves no hole")
+    @MainActor
+    func rawReadFirst() async throws {
+        let historical = PEMockHistoricalDataService()
+        let appState = AppState()
+        let engine = makeEngine([noNumberResponse(resetsAt: Date().addingTimeInterval(4 * 86400))], historical: historical, appState: appState)
+
+        await engine.performPollCycle()
+        try await waitUntil { !appState.weeklySparklineData.isEmpty }
+        #expect(historical.readOrder == ["raw", "rollups"])
+    }
+
+    @Test("a cycle with no history and no weekly number is read once, not on every poll")
+    @MainActor
+    func emptyCycleReadOnce() async throws {
+        let historical = PEMockHistoricalDataService()
+        let appState = AppState()
+        let resetsAt = Date().addingTimeInterval(4 * 86400)
+        let noUtilization = UsageResponse(
+            fiveHour: nil,
+            sevenDay: WindowUsage(utilization: nil, resetsAt: isoFormatter.string(from: resetsAt)),
+            limits: nil,
+            extraUsage: nil
+        )
+        let engine = makeEngine([noUtilization, noUtilization, noUtilization], historical: historical, appState: appState)
+
+        await engine.performPollCycle()
+        try await waitUntil { historical.getRolledUpDataCallCount == 1 }
+        try await Task.sleep(for: .milliseconds(50))
+        await engine.performPollCycle()
+        await engine.performPollCycle()
+        #expect(historical.getRecentPollsCallCount == 1)
+        #expect(appState.weeklySparklineData.isEmpty)
+    }
+
+    @Test("number → none with no reset time still empties the 24-hour points")
+    @MainActor
+    func noResetTimeEmptiesTwentyFourHourData() async throws {
+        let historical = PEMockHistoricalDataService()
+        historical.recentPollsToReturn = recentPolls()
+        let appState = AppState()
+        let engine = makeEngine([successResponse(), noNumberResponse(resetsAt: nil)], historical: historical, appState: appState)
+
+        await engine.performPollCycle()
+        try await waitUntil { !appState.sparklineData.isEmpty }
+
+        await engine.performPollCycle()
+        #expect(appState.sparklineData.isEmpty)
+        #expect(appState.weeklySparklineData.isEmpty)
+    }
+
+    @Test("reset time missing or passed → no read and no weekly data")
+    @MainActor
+    func noResetTimeSkipsLoad() async throws {
+        let historical = PEMockHistoricalDataService()
+        historical.recentPollsToReturn = recentPolls()
+        let appState = AppState()
+        let engine = makeEngine(
+            [noNumberResponse(resetsAt: Date().addingTimeInterval(4 * 86400)), noNumberResponse(resetsAt: nil), noNumberResponse(resetsAt: Date().addingTimeInterval(-60))],
+            historical: historical,
+            appState: appState
+        )
+
+        await engine.performPollCycle()
+        try await waitUntil { !appState.weeklySparklineData.isEmpty }
+
+        await engine.performPollCycle()
+        #expect(appState.weeklySparklineData.isEmpty)
+        await engine.performPollCycle()
+        #expect(appState.weeklySparklineData.isEmpty)
+        #expect(historical.getRecentPollsCallCount == 1)
+    }
+
+    @Test("a failed load keeps polling healthy and is retried at the next poll")
+    @MainActor
+    func failedLoadRetries() async throws {
+        let historical = PEMockHistoricalDataService()
+        historical.recentPollsToReturn = recentPolls()
+        historical.shouldThrowOnGetRecentPolls = true
+        let appState = AppState()
+        let resetsAt = Date().addingTimeInterval(4 * 86400)
+        let engine = makeEngine([noNumberResponse(resetsAt: resetsAt), noNumberResponse(resetsAt: resetsAt)], historical: historical, appState: appState)
+
+        await engine.performPollCycle()
+        try await waitUntil { historical.getRecentPollsCallCount == 1 }
+        #expect(appState.connectionStatus == .connected)
+        #expect(appState.weeklySparklineData.isEmpty)
+
+        historical.shouldThrowOnGetRecentPolls = false
+        await engine.performPollCycle()
+        try await waitUntil { !appState.weeklySparklineData.isEmpty }
+        #expect(appState.weeklySparklineData.map(\.sevenDayUtil) == [30, 31, 60])
     }
 }

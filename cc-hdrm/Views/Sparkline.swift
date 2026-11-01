@@ -318,11 +318,97 @@ struct SparklinePathBuilder {
         sparklineGapThresholdMs,
         Int64(maxSupportedPollInterval * 1000 * 2)
     )
+
+    /// One point of chart width covers about 56 minutes of a week, so a shorter run draws nothing readable.
+    static let minimumWeeklyRunMs: Int64 = 60 * 60 * 1000
+
+    /// Builds path segments for the weekly chart, with the horizontal axis spanning the whole cycle.
+    /// Weekly usage stays flat for long stretches. `buildSegments` stops a run at its last visible
+    /// step, which would leave such a stretch undrawn before a gap, so every run here reaches its last point.
+    static func buildWeeklySegments(from points: [UsagePoll], size: CGSize, cycle: ClosedRange<Int64>) -> [PathSegment] {
+        let valid = points.filter { point in
+            guard let utilization = point.sevenDayUtil else { return false }
+            return (0...100).contains(utilization) && cycle.contains(point.timestamp)
+        }
+
+        var segments: [PathSegment] = []
+        // A Mac asleep when the week began leaves the same hole as one asleep mid-week
+        if let first = valid.first, first.timestamp - cycle.lowerBound > gapThresholdMs {
+            segments.append(PathSegment(
+                points: [
+                    (x: 0, y: size.height),
+                    (x: xPosition(for: first.timestamp, in: size, timeRange: cycle), y: size.height)
+                ],
+                isGap: true,
+                pollCount: 0,
+                durationMs: first.timestamp - cycle.lowerBound
+            ))
+        }
+        var runStart = 0
+        for index in valid.indices {
+            let next = index + 1 < valid.count ? valid[index + 1] : nil
+            if let next, next.timestamp - valid[index].timestamp <= gapThresholdMs { continue }
+
+            segments.append(weeklyRun(valid[runStart...index], size: size, cycle: cycle))
+            if let next {
+                segments.append(PathSegment(
+                    points: [
+                        (x: xPosition(for: valid[index].timestamp, in: size, timeRange: cycle), y: size.height),
+                        (x: xPosition(for: next.timestamp, in: size, timeRange: cycle), y: size.height)
+                    ],
+                    isGap: true,
+                    pollCount: 0,
+                    durationMs: next.timestamp - valid[index].timestamp
+                ))
+            }
+            runStart = index + 1
+        }
+        return segments
+    }
+
+    private static func weeklyRun(_ run: ArraySlice<UsagePoll>, size: CGSize, cycle: ClosedRange<Int64>) -> PathSegment {
+        var points: [(x: CGFloat, y: CGFloat)] = []
+        var level: Double?
+        for poll in run {
+            guard let utilization = poll.sevenDayUtil, utilization != level else { continue }
+            let x = xPosition(for: poll.timestamp, in: size, timeRange: cycle)
+            if let level {
+                points.append((x: x, y: yPosition(for: level, in: size)))
+            }
+            points.append((x: x, y: yPosition(for: utilization, in: size)))
+            level = utilization
+        }
+        if let level, let last = run.last {
+            let lastX = xPosition(for: last.timestamp, in: size, timeRange: cycle)
+            if let drawnEnd = points.last, drawnEnd.x < lastX {
+                points.append((x: lastX, y: yPosition(for: level, in: size)))
+            }
+        }
+        return PathSegment(
+            points: points,
+            isGap: false,
+            pollCount: run.count,
+            durationMs: (run.last?.timestamp ?? 0) - (run.first?.timestamp ?? 0)
+        )
+    }
+
+    /// The even-pace line: 0% at the cycle start to 100% at the reset. The horizontal axis
+    /// spans the whole cycle, so this is the corner-to-corner diagonal.
+    static func evenPaceLine(in size: CGSize) -> (start: CGPoint, end: CGPoint) {
+        (start: CGPoint(x: 0, y: yPosition(for: 0, in: size)), end: CGPoint(x: size.width, y: yPosition(for: 100, in: size)))
+    }
+
+    /// Whether the weekly chart has a run long enough to be worth drawing.
+    static func hasDrawableWeeklyData(_ points: [UsagePoll], cycle: ClosedRange<Int64>) -> Bool {
+        buildWeeklySegments(from: points, size: CGSize(width: 1, height: 1), cycle: cycle)
+            .contains { !$0.isGap && $0.durationMs >= minimumWeeklyRunMs }
+    }
 }
 
 // MARK: - Sparkline View
 
-/// Displays a 24-hour sparkline showing 5h utilization trends.
+/// Displays a 24-hour sparkline showing 5h utilization trends, or the current weekly cycle
+/// for an account with no 5-hour number.
 /// Uses a step-area chart to honor monotonically increasing utilization within windows.
 struct Sparkline: View {
     /// Poll data for rendering (sorted by timestamp ascending).
@@ -331,6 +417,20 @@ struct Sparkline: View {
     var onTap: (() -> Void)?
     /// Whether the analytics window is currently open.
     var isAnalyticsOpen: Bool = false
+    /// When set, `data` is drawn as this weekly cycle (Unix ms) with an even-pace line.
+    var weeklyCycle: ClosedRange<Int64>? = nil
+
+    /// VoiceOver label.
+    /// Internal (not private) to allow @testable import verification.
+    var accessibilityLabelText: String {
+        weeklyCycle != nil ? "Weekly usage chart. Double-tap to open analytics." : "24-hour usage chart"
+    }
+
+    /// VoiceOver hint. The weekly label already says what double-tapping does.
+    /// Internal (not private) to allow @testable import verification.
+    var accessibilityHintText: String {
+        weeklyCycle != nil ? "" : "Double-tap to open analytics"
+    }
 
     /// Minimum height for the sparkline.
     private static let height: CGFloat = 40
@@ -340,7 +440,16 @@ struct Sparkline: View {
     /// Tracks hover state for visual feedback.
     @State private var isHovered: Bool = false
 
+    @ViewBuilder
     var body: some View {
+        if weeklyCycle != nil {
+            content.accessibilityAction { onTap?() }
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
         Group {
             if data.count < 2 {
                 placeholderView
@@ -349,8 +458,8 @@ struct Sparkline: View {
             }
         }
         .frame(minWidth: Self.minWidth, maxWidth: .infinity, minHeight: Self.height, maxHeight: Self.height)
-        .accessibilityLabel("24-hour usage chart")
-        .accessibilityHint("Double-tap to open analytics")
+        .accessibilityLabel(accessibilityLabelText)
+        .accessibilityHint(accessibilityHintText)
         .accessibilityAddTraits(.isButton)
     }
 
@@ -367,7 +476,8 @@ struct Sparkline: View {
 
     private var chartView: some View {
         Canvas { context, size in
-            let rawSegments = SparklinePathBuilder.buildSegments(from: data, size: size, gapThresholdMs: SparklinePathBuilder.gapThresholdMs)
+            let rawSegments = weeklyCycle.map { SparklinePathBuilder.buildWeeklySegments(from: data, size: size, cycle: $0) }
+                ?? SparklinePathBuilder.buildSegments(from: data, size: size, gapThresholdMs: SparklinePathBuilder.gapThresholdMs)
             let segments = SparklinePathBuilder.mergeShortSegments(rawSegments, size: size)
 
             for segment in segments {
@@ -376,6 +486,10 @@ struct Sparkline: View {
                 } else {
                     drawDataSegment(context: context, segment: segment, size: size)
                 }
+            }
+
+            if weeklyCycle != nil {
+                drawEvenPaceLine(context: context, size: size)
             }
 
             // Draw analytics open indicator dot if needed
@@ -434,6 +548,14 @@ struct Sparkline: View {
 
         // Gap fill visible in both light and dark mode
         context.fill(path, with: .color(Color.gray.opacity(0.15)))
+    }
+
+    private func drawEvenPaceLine(context: GraphicsContext, size: CGSize) {
+        let line = SparklinePathBuilder.evenPaceLine(in: size)
+        var path = Path()
+        path.move(to: line.start)
+        path.addLine(to: line.end)
+        context.stroke(path, with: .color(Color.secondary), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
     }
 
     private func drawAnalyticsIndicatorDot(context: GraphicsContext, size: CGSize) {
