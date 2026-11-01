@@ -249,7 +249,7 @@ struct SevenDayGaugeSectionTests {
 
     // MARK: - No 5-Hour Number
 
-    @Test("no 5-hour number → quotas line and its VoiceOver text are gone, section is shorter")
+    @Test("no 5-hour number → quotas line and its VoiceOver text are gone, section is shorter apart from the larger ring")
     @MainActor
     func noFiveHourHidesQuotas() {
         let sevenDay = WindowState(utilization: 70.0, resetsAt: nil)
@@ -264,7 +264,8 @@ struct SevenDayGaugeSectionTests {
         appState.updateWindows(fiveHour: nil, sevenDay: sevenDay)
         let heightWithoutQuotas = NSHostingController(rootView: SevenDayGaugeSection(appState: appState)).view.fittingSize.height
         #expect(!SevenDayGaugeSection(appState: appState).combinedAccessibilityLabel.contains("quotas"))
-        #expect(heightWithoutQuotas < heightWithQuotas)
+        let ringGrowth: CGFloat = 40
+        #expect(heightWithoutQuotas - ringGrowth < heightWithQuotas)
     }
 }
 
@@ -367,5 +368,56 @@ struct SevenDayGaugeSectionPaceTests {
         appState.updateWindows(fiveHour: nil, sevenDay: weekly)
         #expect(section.paceLineText != nil)
         #expect(section.ringSlopeLevel == nil)
+    }
+
+    // MARK: - Ring Size
+
+    @Test("no 5-hour number → the weekly ring takes the primary size")
+    @MainActor
+    func noFiveHourLargeRing() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 35, resetsAt: Date().addingTimeInterval(86400)))
+        let section = SevenDayGaugeSection(appState: appState)
+        #expect(section.ringSize == 96)
+        #expect(section.ringStrokeWidth == 7)
+    }
+
+    @Test("5-hour number present → the weekly ring stays at 56, including when weekly is promoted")
+    @MainActor
+    func fiveHourKeepsSmallRing() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        appState.updateWindows(
+            fiveHour: WindowState(utilization: 10, resetsAt: Date().addingTimeInterval(3600)),
+            sevenDay: WindowState(utilization: 97, resetsAt: Date().addingTimeInterval(86400))
+        )
+        #expect(appState.displayedWindow == .sevenDay)
+        let section = SevenDayGaugeSection(appState: appState)
+        #expect(section.ringSize == 56)
+        #expect(section.ringStrokeWidth == 4)
+    }
+
+    @Test("the ring follows a state change at the next update, and the drawn section grows by the ring")
+    @MainActor
+    func ringFollowsFlip() {
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        let weekly = WindowState(utilization: 35, resetsAt: Date().addingTimeInterval(86400))
+        let fiveHour = WindowState(utilization: 10, resetsAt: Date().addingTimeInterval(3600))
+        let section = SevenDayGaugeSection(appState: appState)
+
+        appState.updateWindows(fiveHour: fiveHour, sevenDay: weekly)
+        let small = NSHostingController(rootView: section).view.fittingSize.height
+        #expect(section.ringSize == 56)
+
+        appState.updateWindows(fiveHour: nil, sevenDay: weekly)
+        let large = NSHostingController(rootView: section).view.fittingSize.height
+        #expect(section.ringSize == 96)
+        // The on-pace line accounts for whatever exceeds the 40-point ring growth
+        #expect(large - small >= 40)
+
+        appState.updateWindows(fiveHour: fiveHour, sevenDay: weekly)
+        #expect(section.ringSize == 56)
     }
 }

@@ -635,4 +635,109 @@ struct PopoverViewNoFiveHourTests {
         view.appState.updateWindows(fiveHour: fiveHour, sevenDay: weekly)
         #expect(view.showsFiveHourSection)
     }
+
+    // MARK: - Weekly Chart
+
+    private func weeklyPoints(hours: Int) -> [UsagePoll] {
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        return (0...hours).map { hour in
+            UsagePoll(id: 0, timestamp: now - Int64(hours - hour) * 3_600_000, fiveHourUtil: nil, fiveHourResetsAt: nil, sevenDayUtil: Double(hour), sevenDayResetsAt: nil)
+        }
+    }
+
+    @Test("enough weekly data → the chart replaces the analytics button")
+    func weeklyChartReplacesButton() {
+        let view = makeView(fiveHour: nil, sevenDay: weekly)
+        let points = weeklyPoints(hours: 3)
+        view.appState.updateWeeklySparklineData(points)
+        let chart = view.weeklySparkline
+        #expect(chart?.data == points)
+        #expect(chart?.weeklyCycle == view.appState.weeklyCycle)
+        #expect(chart?.weeklyCycle != nil)
+        #expect(chart?.accessibilityLabelText == "Weekly usage chart. Double-tap to open analytics.")
+        #expect(chart?.onTap != nil)
+        #expect(!view.showsAnalyticsButton)
+        #expect(!view.showsFiveHourSection)
+    }
+
+    @Test("the chart is taller than the button it replaces")
+    func weeklyChartDrawn() {
+        let withButton = makeView(fiveHour: nil, sevenDay: weekly)
+        let withChart = makeView(fiveHour: nil, sevenDay: weekly)
+        withChart.appState.updateWeeklySparklineData(weeklyPoints(hours: 3))
+        #expect(height(withChart) > height(withButton))
+    }
+
+    @Test("reset time missing → the button stays and no chart draws, even with data")
+    func noResetTimeKeepsButton() {
+        let view = makeView(fiveHour: nil, sevenDay: WindowState(utilization: 35, resetsAt: nil))
+        view.appState.updateWeeklySparklineData(weeklyPoints(hours: 3))
+        #expect(view.weeklySparkline == nil)
+        #expect(view.showsAnalyticsButton)
+    }
+
+    @Test("reset already passed → the button stays and no chart draws")
+    func passedResetKeepsButton() {
+        let view = makeView(fiveHour: nil, sevenDay: WindowState(utilization: 35, resetsAt: Date().addingTimeInterval(-60)))
+        view.appState.updateWeeklySparklineData(weeklyPoints(hours: 3))
+        #expect(view.weeklySparkline == nil)
+        #expect(view.showsAnalyticsButton)
+    }
+
+    @Test("too little weekly data → the button stays and no empty chart draws")
+    func tooLittleDataKeepsButton() {
+        let view = makeView(fiveHour: nil, sevenDay: weekly)
+        #expect(view.weeklySparkline == nil)
+        #expect(view.showsAnalyticsButton)
+
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        view.appState.updateWeeklySparklineData([
+            UsagePoll(id: 0, timestamp: now - 60_000, fiveHourUtil: nil, fiveHourResetsAt: nil, sevenDayUtil: 1, sevenDayResetsAt: nil),
+            UsagePoll(id: 0, timestamp: now, fiveHourUtil: nil, fiveHourResetsAt: nil, sevenDayUtil: 1, sevenDayResetsAt: nil)
+        ])
+        #expect(view.weeklySparkline == nil)
+        #expect(view.showsAnalyticsButton)
+    }
+
+    @Test("no analytics service → no chart, so nothing offers a dead route")
+    func noServiceNoChart() {
+        let view = makeView(fiveHour: nil, sevenDay: weekly, withAnalytics: false)
+        view.appState.updateWeeklySparklineData(weeklyPoints(hours: 3))
+        #expect(view.weeklySparkline == nil)
+        #expect(!view.showsAnalyticsButton)
+    }
+
+    @Test("old weekly data while disconnected → the chart stays through a network blip")
+    func disconnectedKeepsChart() {
+        let view = makeView(fiveHour: nil, sevenDay: weekly)
+        view.appState.updateWeeklySparklineData(weeklyPoints(hours: 3))
+        view.appState.updateConnectionStatus(.disconnected)
+        #expect(view.weeklySparkline != nil)
+    }
+
+    @Test("5-hour number present → no weekly chart, whatever weekly data exists, and the same drawn height")
+    func fiveHourPresentIgnoresWeeklyData() {
+        let plain = makeView(fiveHour: fiveHour, sevenDay: weekly)
+        let stray = makeView(fiveHour: fiveHour, sevenDay: weekly)
+        stray.appState.updateWeeklySparklineData(weeklyPoints(hours: 3))
+        #expect(stray.weeklySparkline == nil)
+        #expect(stray.appState.weeklyCycle == nil)
+        #expect(stray.showsFiveHourSection)
+        #expect(!stray.showsAnalyticsButton)
+        #expect(height(stray) == height(plain))
+    }
+
+    @Test("state flips → the chart follows at the next update, both ways")
+    func chartFollowsFlip() {
+        let view = makeView(fiveHour: nil, sevenDay: weekly)
+        view.appState.updateWeeklySparklineData(weeklyPoints(hours: 3))
+        #expect(view.weeklySparkline != nil)
+
+        view.appState.updateWindows(fiveHour: fiveHour, sevenDay: weekly)
+        #expect(view.weeklySparkline == nil)
+        #expect(view.showsFiveHourSection)
+
+        view.appState.updateWindows(fiveHour: nil, sevenDay: weekly)
+        #expect(view.weeklySparkline != nil)
+    }
 }

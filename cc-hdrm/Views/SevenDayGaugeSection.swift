@@ -19,6 +19,18 @@ struct SevenDayGaugeSection: View {
 
     @State private var isHovered: Bool = false
 
+    /// Ring diameter: with no 5-hour number, weekly takes the primary ring's size.
+    /// Internal (not private) to allow @testable import verification.
+    var ringSize: CGFloat {
+        appState.hasNoFiveHourNumber ? 96 : 56
+    }
+
+    /// Ring stroke, matching `ringSize`.
+    /// Internal (not private) to allow @testable import verification.
+    var ringStrokeWidth: CGFloat {
+        appState.hasNoFiveHourNumber ? 7 : 4
+    }
+
     /// Pace line below the countdown. `nil` when pace is unavailable.
     /// Internal (not private) to allow @testable import verification.
     var paceLineText: String? {
@@ -63,12 +75,12 @@ struct SevenDayGaugeSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                // Ring gauge: 56px diameter, 4px stroke (AC #1-#2) + slope display (Story 11.4)
+                // Ring gauge + slope display
                 HeadroomRingGauge(
                     headroomPercentage: headroom,
                     windowLabel: "7d",
-                    ringSize: 56,
-                    strokeWidth: 4,
+                    ringSize: ringSize,
+                    strokeWidth: ringStrokeWidth,
                     slopeLevel: ringSlopeLevel
                 )
 

@@ -917,3 +917,127 @@ struct SparklineComponentTests {
         // This test verifies the view compiles and renders with accessibility modifiers applied
     }
 }
+
+// MARK: - Weekly Chart
+
+@Suite("Sparkline Weekly Chart Tests")
+@MainActor
+struct SparklineWeeklyChartTests {
+
+    private let size = CGSize(width: 168, height: 40)
+    private let hourMs: Int64 = 3_600_000
+    private var cycle: ClosedRange<Int64> { 0...(168 * hourMs) }
+
+    private func point(hour: Int64, weekly: Double?) -> UsagePoll {
+        UsagePoll(id: 0, timestamp: hour * hourMs, fiveHourUtil: nil, fiveHourResetsAt: nil, sevenDayUtil: weekly, sevenDayResetsAt: nil)
+    }
+
+    @Test("the horizontal axis spans the whole cycle, so the data stops at now")
+    func axisSpansCycle() {
+        let points = (0...84).map { point(hour: Int64($0), weekly: $0 == 84 ? 50 : 0) }
+        let segments = SparklinePathBuilder.buildWeeklySegments(from: points, size: size, cycle: cycle)
+        #expect(segments.count == 1)
+        #expect(segments[0].points.first?.x == 0)
+        #expect(segments[0].points.last?.x == 84)
+        #expect(segments[0].points.last?.y == 20)
+    }
+
+    @Test("over 60 minutes without data becomes a gap, and the flat run reaches the gap")
+    func flatRunReachesGap() {
+        let points = [0, 1, 2, 3, 12, 13].map { point(hour: $0, weekly: 25) }
+        let segments = SparklinePathBuilder.buildWeeklySegments(from: points, size: size, cycle: cycle)
+        #expect(segments.map(\.isGap) == [false, true, false])
+        #expect(segments[0].points.count == 2)
+        #expect(segments[0].points.last?.x == 3)
+        #expect(segments[1].points.first?.x == 3)
+        #expect(segments[1].points.last?.x == 12)
+        #expect(segments[2].points.first?.x == 12)
+        #expect(segments[2].points.last?.x == 13)
+    }
+
+    @Test("over 60 minutes with no data after the cycle start is also a gap")
+    func leadingGap() {
+        let late = SparklinePathBuilder.buildWeeklySegments(from: [point(hour: 48, weekly: 10), point(hour: 49, weekly: 10)], size: size, cycle: cycle)
+        #expect(late.map(\.isGap) == [true, false])
+        #expect(late[0].points.first?.x == 0)
+        #expect(late[0].points.last?.x == 48)
+
+        let early = SparklinePathBuilder.buildWeeklySegments(from: [point(hour: 1, weekly: 10), point(hour: 2, weekly: 10)], size: size, cycle: cycle)
+        #expect(early.map(\.isGap) == [false])
+    }
+
+    @Test("the even-pace line runs from 0% at the cycle start to 100% at the reset")
+    func evenPaceLine() {
+        let line = SparklinePathBuilder.evenPaceLine(in: size)
+        #expect(line.start == CGPoint(x: 0, y: 40))
+        #expect(line.end == CGPoint(x: 168, y: 0))
+    }
+
+    @Test("exactly 60 minutes between points is not a gap")
+    func sixtyMinutesIsNoGap() {
+        let segments = SparklinePathBuilder.buildWeeklySegments(from: [point(hour: 0, weekly: 25), point(hour: 1, weekly: 25)], size: size, cycle: cycle)
+        #expect(segments.map(\.isGap) == [false])
+    }
+
+    @Test("a step is vertical, and a mid-cycle drop is an ordinary step down, not split at the baseline")
+    func stepsAndDrop() {
+        let segments = SparklinePathBuilder.buildWeeklySegments(from: [point(hour: 0, weekly: 50), point(hour: 1, weekly: 75), point(hour: 2, weekly: 25)], size: size, cycle: cycle)
+        #expect(segments.count == 1)
+        #expect(segments[0].points.map(\.y) == [20, 20, 10, 10, 30])
+        #expect(segments[0].points.map(\.x) == [0, 1, 1, 2, 2])
+    }
+
+    @Test("points outside the cycle, out of range, or without a weekly number are not drawn")
+    func invalidPointsDropped() {
+        let points = [point(hour: -1, weekly: 10), point(hour: 0, weekly: nil), point(hour: 0, weekly: 101), point(hour: 1, weekly: 10), point(hour: 169, weekly: 10)]
+        let segments = SparklinePathBuilder.buildWeeklySegments(from: points, size: size, cycle: cycle)
+        #expect(segments.count == 1)
+        #expect(segments[0].pollCount == 1)
+    }
+
+    @Test("a brief isolated wake between two gaps is absorbed, as on the 24-hour chart")
+    func isolatedWakeAbsorbed() {
+        let wakeMs: Int64 = 60_000
+        let wake = UsagePoll(id: 0, timestamp: 12 * hourMs + wakeMs, fiveHourUtil: nil, fiveHourResetsAt: nil, sevenDayUtil: 30, sevenDayResetsAt: nil)
+        let points = [point(hour: 0, weekly: 10), point(hour: 1, weekly: 10), point(hour: 12, weekly: 30), wake, point(hour: 24, weekly: 30), point(hour: 25, weekly: 30)]
+        let raw = SparklinePathBuilder.buildWeeklySegments(from: points, size: size, cycle: cycle)
+        let merged = SparklinePathBuilder.mergeShortSegments(raw, size: size)
+        #expect(raw.map(\.isGap) == [false, true, false, true, false])
+        #expect(merged.map(\.isGap) == [false, true, false])
+    }
+
+    @Test("a chart needs one unbroken hour of data")
+    func drawableData() {
+        #expect(!SparklinePathBuilder.hasDrawableWeeklyData([], cycle: cycle))
+        #expect(!SparklinePathBuilder.hasDrawableWeeklyData([point(hour: 1, weekly: 10)], cycle: cycle))
+
+        let halfHour = UsagePoll(id: 0, timestamp: hourMs / 2, fiveHourUtil: nil, fiveHourResetsAt: nil, sevenDayUtil: 10, sevenDayResetsAt: nil)
+        #expect(!SparklinePathBuilder.hasDrawableWeeklyData([point(hour: 0, weekly: 10), halfHour], cycle: cycle))
+        // Two hours apart spans enough time, but only a gap would draw
+        #expect(!SparklinePathBuilder.hasDrawableWeeklyData([point(hour: 0, weekly: 10), point(hour: 2, weekly: 10)], cycle: cycle))
+        #expect(SparklinePathBuilder.hasDrawableWeeklyData([point(hour: 0, weekly: 10), point(hour: 1, weekly: 10)], cycle: cycle))
+
+        // Low Power Mode at the 30-minute setting: an hour apart, plus request latency
+        let afterLatency = UsagePoll(id: 0, timestamp: hourMs + 5_000, fiveHourUtil: nil, fiveHourResetsAt: nil, sevenDayUtil: 10, sevenDayResetsAt: nil)
+        #expect(SparklinePathBuilder.hasDrawableWeeklyData([point(hour: 0, weekly: 10), afterLatency], cycle: cycle))
+    }
+
+    @Test("VoiceOver: weekly label for the weekly chart, 24-hour label and hint unchanged otherwise")
+    func labels() {
+        let weekly = Sparkline(data: [], weeklyCycle: cycle)
+        #expect(weekly.accessibilityLabelText == "Weekly usage chart. Double-tap to open analytics.")
+        #expect(weekly.accessibilityHintText == "")
+
+        let daily = Sparkline(data: [])
+        #expect(daily.accessibilityLabelText == "24-hour usage chart")
+        #expect(daily.accessibilityHintText == "Double-tap to open analytics")
+    }
+
+    @Test("the weekly chart draws without crashing")
+    func rendersWeekly() {
+        let points = [point(hour: 0, weekly: 10), point(hour: 5, weekly: 20)]
+        let controller = NSHostingController(rootView: Sparkline(data: points, isAnalyticsOpen: true, weeklyCycle: cycle).frame(width: 180, height: 40))
+        controller.view.layoutSubtreeIfNeeded()
+        #expect(controller.view.fittingSize.height == 40)
+    }
+}

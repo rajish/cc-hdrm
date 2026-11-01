@@ -219,6 +219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.pollingEngine?.restartPolling()
         }, onClearHistory: { [weak state] in
             state?.updateSparklineData([])
+            state?.clearWeeklySparklineData()
             AnalyticsWindow.shared.close()
         }, onSignIn: { [weak self] in
             guard let self else { return }
@@ -385,6 +386,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appState.updateWindows(fiveHour: nil, sevenDay: nil)
         appState.updateScopedLimits([])
         appState.updateSparklineData([])
+        appState.clearWeeklySparklineData()
         appState.updateSubscriptionTier(nil)
         appState.updateCreditLimits(nil)
         appState.updateExtraUsage(enabled: false, monthlyLimit: nil, usedCredits: nil, utilization: nil)

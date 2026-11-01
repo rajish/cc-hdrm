@@ -103,6 +103,13 @@ final class AppState {
     /// Data is ordered by timestamp ascending. Preserved across connection state changes.
     private(set) var sparklineData: [UsagePoll] = []
 
+    /// Points for the weekly chart of an account with no 5-hour number, ordered by timestamp ascending.
+    /// Empty for every other account.
+    private(set) var weeklySparklineData: [UsagePoll] = []
+
+    /// Counts history and session clears, so a weekly load already running can tell its points are stale.
+    private(set) var weeklySparklineClearCount: UInt = 0
+
     /// Minimum data points required for sparkline rendering.
     static let sparklineMinDataPoints = 2
 
@@ -142,6 +149,15 @@ final class AppState {
         // Pace moves with the clock, so register with withObservationTracking
         _ = countdownTick
         return WeeklyPace(utilization: sevenDay.utilization, resetsAt: sevenDay.resetsAt, now: Date())
+    }
+
+    /// The current weekly cycle for an account with no 5-hour number, in Unix milliseconds.
+    /// Nil otherwise, and when the reset time is unknown or already passed.
+    var weeklyCycle: ClosedRange<Int64>? {
+        guard hasNoFiveHourNumber else { return nil }
+        // The reset passing depends on the clock, so register with withObservationTracking
+        _ = countdownTick
+        return WeeklySparklineData.cycle(resetsAt: sevenDay?.resetsAt, now: Date())
     }
 
     /// How many full 5h quotas remain in the 7d budget. Nil when credit limits are unavailable,
@@ -360,6 +376,18 @@ final class AppState {
     /// - Parameter data: Poll data ordered by timestamp ascending from HistoricalDataService
     func updateSparklineData(_ data: [UsagePoll]) {
         self.sparklineData = data
+    }
+
+    /// Updates the weekly chart data.
+    /// - Parameter data: Points ordered by timestamp ascending
+    func updateWeeklySparklineData(_ data: [UsagePoll]) {
+        self.weeklySparklineData = data
+    }
+
+    /// Empties the weekly chart because history or the session was cleared.
+    func clearWeeklySparklineData() {
+        self.weeklySparklineData = []
+        self.weeklySparklineClearCount += 1
     }
 
     /// Sets the analytics window open state.
