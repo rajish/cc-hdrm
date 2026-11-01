@@ -20,6 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-11-01
+
+### Changed
+
+- fix: show weekly headroom when there is no 5-hour number (Story 26.1) (#124)
+- revert: remove weekly-only code from Stories 26.1, 26.5 and 26.7 (#123)
+- feat: value and headroom analysis per weekly cycle (Story 26.5) (#121)
+- feat: tokens-per-percent on weekly deltas (Story 26.7) (#122)
+- feat: weekly allowance in the menu bar (Story 26.1) (#120)
+- docs: weekly-first monitoring plan (Epic 26) (#118)
+- test: make date-dependent fixtures calendar- and DST-safe (#119)
+- ci: use symbol form for cask depends_on macos (Homebrew deprecation) (#117)
+
 ## [1.6.0] - 2026-08-16
 
 ### Changed
@@ -298,7 +311,8 @@ This release ships the Token Efficiency Ratio feature (Epic 20) and fixes the Ho
 - Launch at login via SMAppService
 - Xcode project with XcodeGen configuration
 
-[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.6.1...HEAD
+[1.6.1]: https://github.com/rajish/cc-hdrm/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/rajish/cc-hdrm/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/rajish/cc-hdrm/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/rajish/cc-hdrm/compare/v1.4.9...v1.5.0
