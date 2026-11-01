@@ -43,3 +43,9 @@
 - source_spec: `_bmad-output/implementation-artifacts/spec-26-5-value-headroom-per-weekly-cycle.md`
   summary: 5h reset detection branches and `getRecentPeakUtilization` in `cc-hdrm/Services/HistoricalDataService.swift` are dead since `five_hour` is null; remove per the "remove, don't hide" principle.
   evidence: Detection still checks `fiveHourResetsAt`/`fiveHourUtil` and queries `MAX(five_hour_util)`; many `HistoricalDataServiceTests` cover them, so removal belongs in a cleanup story (26.9 or follow-up).
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-1-no-five-hour-fallback.md`
+  summary: A window object with null utilization, such as `"five_hour": {"utilization": null}`, becomes 0% used, so the app shows a false 100% headroom instead of treating it as no number.
+  evidence: `cc-hdrm/Services/PollingEngine.swift:229,235` map with `utilization ?? 0.0`. This shape has not been observed; the proposal lists unobserved Pro, Max and unverified Ultra responses as its main risk. Changing it would alter 1.6.0 behaviour, so it needs its own decision.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-1-no-five-hour-fallback.md`
+  summary: A 5-hour account with a promoted, exhausted weekly window hears the reset in thousands of minutes on VoiceOver, while the menu bar shows days and hours.
+  evidence: `cc-hdrm/App/AppDelegate.swift` keeps the minutes wording for accounts with a 5-hour number under the unchanged-behaviour rule; it is existing 1.6.0 wording.

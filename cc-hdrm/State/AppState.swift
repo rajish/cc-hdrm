@@ -128,11 +128,20 @@ final class AppState {
         return DataFreshness(lastUpdated: lastUpdated)
     }
 
-    /// How many full 5h quotas remain in the 7d budget. Nil when credit limits are unavailable
-    /// or when `fiveHourCredits` is zero (defensive guard — prevents inf propagation).
+    /// The account reports a weekly number but no 5-hour number (e.g. verified Ultra).
+    /// Ignores connection status: windows survive poll errors, so the popover must not
+    /// bring the 5-hour ring back during an outage.
+    var hasNoFiveHourNumber: Bool {
+        fiveHour == nil && sevenDay != nil
+    }
+
+    /// How many full 5h quotas remain in the 7d budget. Nil when credit limits are unavailable,
+    /// when `fiveHourCredits` is zero (defensive guard — prevents inf propagation),
+    /// or when the account has no 5-hour number.
     var quotasRemaining: Double? {
         guard let limits = creditLimits,
               limits.fiveHourCredits > 0,
+              fiveHour != nil,
               let sevenDay else { return nil }
         let remaining7d = (100.0 - sevenDay.utilization) / 100.0 * Double(limits.sevenDayCredits)
         return remaining7d / Double(limits.fiveHourCredits)
@@ -141,8 +150,15 @@ final class AppState {
     /// Which window is currently displayed in the menu bar.
     /// Credit-math path: promotes 7d only when remaining 7d credits can't sustain one more full 5h cycle.
     /// Fallback path (unknown tier): uses Story 3.2 percentage-comparison rule.
+    /// With no 5-hour number, weekly is the only window to show.
     var displayedWindow: DisplayedWindow {
-        guard connectionStatus == .connected, fiveHour != nil else {
+        guard connectionStatus == .connected else {
+            return .fiveHour
+        }
+
+        if hasNoFiveHourNumber { return .sevenDay }
+
+        guard fiveHour != nil else {
             return .fiveHour
         }
 

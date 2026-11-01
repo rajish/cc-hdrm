@@ -177,13 +177,112 @@ struct AppStateTests {
         #expect(state.menuBarText == "\u{2014}")
     }
 
-    @Test("connected with nil fiveHour → .disconnected")
+    @Test("connected with both windows nil → .disconnected")
     @MainActor
     func menuBarConnectedNilFiveHour() {
         let state = AppState()
         state.updateConnectionStatus(.connected)
+        #expect(state.displayedWindow == .fiveHour)
         #expect(state.menuBarHeadroomState == .disconnected)
         #expect(state.menuBarText == "\u{2014}")
+    }
+
+    @Test("connected with nil fiveHour and weekly present → weekly headroom and colour, not em dash")
+    @MainActor
+    func menuBarConnectedNilFiveHourShowsWeekly() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 17.0, resetsAt: nil))
+        #expect(state.displayedWindow == .sevenDay)
+        #expect(state.menuBarHeadroomState == .normal)
+        #expect(state.menuBarText == "83%")
+
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 85.0, resetsAt: nil))
+        #expect(state.menuBarHeadroomState == .warning)
+        #expect(state.menuBarText == "15%")
+    }
+
+    @Test("disconnected with old weekly data and nil fiveHour → em dash, popover state still weekly-only")
+    @MainActor
+    func disconnectedNilFiveHourKeepsEmDash() {
+        let state = AppState()
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 17.0, resetsAt: nil))
+        state.updateConnectionStatus(.disconnected)
+        #expect(state.displayedWindow == .fiveHour)
+        #expect(state.menuBarHeadroomState == .disconnected)
+        #expect(state.menuBarText == "\u{2014}")
+        #expect(state.hasNoFiveHourNumber)
+    }
+
+    @Test("5-hour number going null and coming back switches window at each update, promotion rules return")
+    @MainActor
+    func fiveHourFlipFollowsData() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateCreditLimits(RateLimitTier.pro.creditLimits)
+        let fiveHour = WindowState(utilization: 28.0, resetsAt: nil)
+
+        state.updateWindows(fiveHour: fiveHour, sevenDay: WindowState(utilization: 50.0, resetsAt: nil))
+        #expect(state.displayedWindow == .fiveHour)
+        #expect(state.menuBarText == "72%")
+        #expect(state.quotasRemaining != nil)
+
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 50.0, resetsAt: nil))
+        #expect(state.displayedWindow == .sevenDay)
+        #expect(state.menuBarText == "50%")
+        #expect(state.quotasRemaining == nil)
+
+        state.updateWindows(fiveHour: fiveHour, sevenDay: WindowState(utilization: 50.0, resetsAt: nil))
+        #expect(state.displayedWindow == .fiveHour)
+        #expect(state.menuBarText == "72%")
+
+        // Promotion still needs its own trigger: 95% weekly leaves under one full quota
+        state.updateWindows(fiveHour: fiveHour, sevenDay: WindowState(utilization: 95.0, resetsAt: nil))
+        #expect(state.displayedWindow == .sevenDay)
+        #expect(state.menuBarText == "5%")
+    }
+
+    @Test("weekly exhausted with nil fiveHour → countdown in days and hours")
+    @MainActor
+    func exhaustedWeeklyCountdownInDays() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        let resetsAt = Date().addingTimeInterval(3 * 86400 + 4 * 3600 + 120)
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 100.0, resetsAt: resetsAt))
+        #expect(state.menuBarHeadroomState == .exhausted)
+        #expect(state.menuBarText == "\u{21BB} 3d 4h")
+
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 100.0, resetsAt: nil))
+        #expect(state.menuBarText == "0%")
+    }
+
+    @Test("weekly exhausted with nil fiveHour and extra usage on → dollar text")
+    @MainActor
+    func extraUsageWithNilFiveHour() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateExtraUsage(enabled: true, monthlyLimit: 1000, usedCredits: 439, utilization: 43.9)
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 100.0, resetsAt: nil))
+        #expect(state.isExtraUsageActive)
+        #expect(state.menuBarText == "$5.61")
+
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 50.0, resetsAt: nil))
+        #expect(!state.isExtraUsageActive)
+        #expect(state.menuBarText == "50%")
+    }
+
+    @Test("nil fiveHour → arrow comes from weekly slope, none when exhausted")
+    @MainActor
+    func slopeWithNilFiveHour() {
+        let state = AppState()
+        state.updateConnectionStatus(.connected)
+        state.updateSlopes(fiveHour: .flat, sevenDay: .rising)
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 42.0, resetsAt: nil))
+        #expect(state.displayedSlope == .rising)
+        #expect(state.menuBarText == "58% \(SlopeLevel.rising.arrow)")
+
+        state.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 100.0, resetsAt: nil))
+        #expect(state.menuBarText == "0%")
     }
 
     @Test("connected with utilization 17.0 → headroom 83% → .normal")

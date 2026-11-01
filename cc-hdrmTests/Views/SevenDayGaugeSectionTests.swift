@@ -246,4 +246,24 @@ struct SevenDayGaugeSectionTests {
         appState.updateWindows(fiveHour: nil, sevenDay: nil)
         #expect(appState.sevenDay?.headroomState == nil)
     }
+
+    // MARK: - No 5-Hour Number
+
+    @Test("no 5-hour number → quotas line and its VoiceOver text are gone, section is shorter")
+    @MainActor
+    func noFiveHourHidesQuotas() {
+        let sevenDay = WindowState(utilization: 70.0, resetsAt: Date().addingTimeInterval(86400))
+        let appState = AppState()
+        appState.updateConnectionStatus(.connected)
+        appState.updateCreditLimits(RateLimitTier.pro.creditLimits)
+
+        appState.updateWindows(fiveHour: WindowState(utilization: 20.0, resetsAt: nil), sevenDay: sevenDay)
+        let heightWithQuotas = NSHostingController(rootView: SevenDayGaugeSection(appState: appState)).view.fittingSize.height
+        #expect(SevenDayGaugeSection(appState: appState).combinedAccessibilityLabel.contains("quotas"))
+
+        appState.updateWindows(fiveHour: nil, sevenDay: sevenDay)
+        let heightWithoutQuotas = NSHostingController(rootView: SevenDayGaugeSection(appState: appState)).view.fittingSize.height
+        #expect(!SevenDayGaugeSection(appState: appState).combinedAccessibilityLabel.contains("quotas"))
+        #expect(heightWithoutQuotas < heightWithQuotas)
+    }
 }
