@@ -77,8 +77,8 @@ context:
 ## Design Notes
 
 Defaults chosen, since no human is available:
-- **Icon:** no "7d" label and no dot without a 5-hour number. Nothing was promoted, so the label would mislead.
-- **VoiceOver:** "weekly" is added whenever weekly is displayed, including a promoted window on a 5-hour account (the allowed one-word change). The 5-hour wording stays. Days and hours replace minutes only without a 5-hour number.
+- **Icon:** the "7d" label shows without a 5-hour number, so sighted users can tell the number is weekly. No dot: weekly is the displayed window.
+- **VoiceOver:** "weekly" is added whenever weekly is displayed, including a promoted window on a 5-hour account (the allowed one-word change). The 5-hour wording stays. Spoken days and hours replace minutes only without a 5-hour number.
 - **Sparkline:** hidden without a 5-hour number, because it only draws 5-hour data. A small toggle keeps analytics reachable. Story 26.3 adds the weekly chart.
 - **Popover check ignores connection:** old windows survive errors, so the ring would otherwise flash back during a network blip. `displayedWindow` still requires `.connected`.
 - **Log:** in the existing transition block in `updateMenuBarDisplay`. Both nil is neither state, so it does not count as a change. Tests read the tracker behind the log, because the logger itself cannot be observed.
@@ -107,7 +107,7 @@ Defaults chosen, since no human is available:
 
 **Menu bar**
 
-- No promoted "7d" label, because nothing was promoted.
+- Weekly keeps the "7d" label; only the dot logic is untouched.
   [`AppDelegate.swift:548`](../../cc-hdrm/App/AppDelegate.swift#L548)
 
 - VoiceOver names weekly whenever weekly is displayed.

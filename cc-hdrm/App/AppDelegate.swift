@@ -517,6 +517,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// VoiceOver wording for a reset time: "3 days 4 hours" (over a day) or "2 hours 13 minutes".
+    private static func spokenCountdown(until date: Date) -> String {
+        func unit(_ value: Int, _ name: String) -> String { "\(value) \(name)\(value == 1 ? "" : "s")" }
+        let totalMinutes = max(0, Int(date.timeIntervalSinceNow / 60))
+        let days = totalMinutes / 1440
+        let hours = totalMinutes % 1440 / 60
+        let minutes = totalMinutes % 60
+        if days > 0 { return "\(unit(days, "day")) \(unit(hours, "hour"))" }
+        if hours > 0 { return "\(unit(hours, "hour")) \(unit(minutes, "minute"))" }
+        return unit(minutes, "minute")
+    }
+
     /// Updates the NSStatusItem's image, attributed title, color, weight, and accessibility
     /// based on the current AppState.
     internal func updateMenuBarDisplay() {
@@ -545,7 +557,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             // Determine 7d overlay: promoted label, colored dot, or none
             let sevenDayOverlay: GaugeIcon.SevenDayOverlay
-            if appState.sevenDay == nil || appState.hasNoFiveHourNumber {
+            if appState.sevenDay == nil {
                 sevenDayOverlay = .none
             } else if appState.displayedWindow == .sevenDay {
                 sevenDayOverlay = .promoted
@@ -593,7 +605,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let window: WindowState? = appState.displayedWindow == .fiveHour ? appState.fiveHour : appState.sevenDay
             if let resetsAt = window?.resetsAt {
                 let minutes = max(0, Int(resetsAt.timeIntervalSince(Date()) / 60))
-                let resetTime = appState.hasNoFiveHourNumber ? resetsAt.countdownString() : "\(minutes) minutes"
+                let resetTime = appState.hasNoFiveHourNumber ? Self.spokenCountdown(until: resetsAt) : "\(minutes) minutes"
                 accessibilityValue = "cc-hdrm: Claude \(windowName)headroom exhausted, resets in \(resetTime)"
             } else {
                 accessibilityValue = "cc-hdrm: Claude \(windowName)headroom exhausted"

@@ -178,7 +178,7 @@ struct PopoverView: View {
         } else if showsAnalyticsButton {
             // The sparkline only draws 5-hour data, so it would be a blank box here
             Divider()
-            Button("Open analytics") { AnalyticsWindow.shared.toggle() }
+            Button(appState.isAnalyticsWindowOpen ? "Close analytics" : "Open analytics") { AnalyticsWindow.shared.toggle() }
                 .buttonStyle(.link)
                 .font(.caption)
                 .padding(.vertical, 8)

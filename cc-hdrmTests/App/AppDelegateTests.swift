@@ -519,9 +519,9 @@ struct AppDelegateMenuBarTests {
         lhs?.tiffRepresentation == rhs.tiffRepresentation
     }
 
-    @Test("no 5-hour number → weekly text, gauge without the 7d label, VoiceOver says weekly")
+    @Test("no 5-hour number → weekly text, gauge with the 7d label, VoiceOver says weekly")
     @MainActor
-    func noFiveHourShowsWeeklyWithoutPromotedLabel() async {
+    func noFiveHourShowsWeeklyWithPromotedLabel() async {
         guard let (delegate, appState) = await launchedDelegate() else { return }
 
         appState.updateWindows(fiveHour: nil, sevenDay: WindowState(utilization: 17.0, resetsAt: nil))
@@ -529,12 +529,11 @@ struct AppDelegateMenuBarTests {
 
         let image = delegate.statusItem?.button?.image
         #expect(delegate.statusItem?.button?.attributedTitle.string == "83%")
-        #expect(sameImage(image, GaugeIcon.make(headroomPercentage: 83, state: .normal, sevenDayOverlay: .none)))
-        #expect(!sameImage(image, GaugeIcon.make(headroomPercentage: 83, state: .normal, sevenDayOverlay: .promoted)))
+        #expect(sameImage(image, GaugeIcon.make(headroomPercentage: 83, state: .normal, sevenDayOverlay: .promoted)))
         #expect(delegate.statusItem?.button?.accessibilityLabel() == "cc-hdrm: Claude weekly headroom 83 percent, normal")
     }
 
-    @Test("no 5-hour number, weekly exhausted → VoiceOver says weekly and days, not minutes")
+    @Test("no 5-hour number, weekly exhausted → VoiceOver says weekly and spoken days and hours, not minutes")
     @MainActor
     func noFiveHourExhaustedAccessibility() async {
         guard let (delegate, appState) = await launchedDelegate() else { return }
@@ -544,7 +543,7 @@ struct AppDelegateMenuBarTests {
         delegate.updateMenuBarDisplay()
 
         #expect(delegate.statusItem?.button?.attributedTitle.string == "\u{21BB} 3d 4h")
-        #expect(delegate.statusItem?.button?.accessibilityLabel() == "cc-hdrm: Claude weekly headroom exhausted, resets in 3d 4h")
+        #expect(delegate.statusItem?.button?.accessibilityLabel() == "cc-hdrm: Claude weekly headroom exhausted, resets in 3 days 4 hours")
     }
 
     @Test("no 5-hour number, extra usage active → dollar text and extra-usage icon")
@@ -642,7 +641,7 @@ struct AppDelegateMenuBarTests {
         #expect(delegate.statusItem?.button?.accessibilityLabel() == "cc-hdrm: Claude headroom disconnected")
     }
 
-    @Test("flip back to a 5-hour number → the weekly dot overlay returns")
+    @Test("flip back to a 5-hour number → the weekly label gives way to the dot")
     @MainActor
     func flipBackRestoresOverlay() async {
         guard let (delegate, appState) = await launchedDelegate() else { return }
@@ -650,7 +649,7 @@ struct AppDelegateMenuBarTests {
 
         appState.updateWindows(fiveHour: nil, sevenDay: weekly)
         delegate.updateMenuBarDisplay()
-        #expect(sameImage(delegate.statusItem?.button?.image, GaugeIcon.make(headroomPercentage: 30, state: .caution, sevenDayOverlay: .none)))
+        #expect(sameImage(delegate.statusItem?.button?.image, GaugeIcon.make(headroomPercentage: 30, state: .caution, sevenDayOverlay: .promoted)))
 
         appState.updateWindows(fiveHour: WindowState(utilization: 17.0, resetsAt: nil), sevenDay: weekly)
         delegate.updateMenuBarDisplay()
