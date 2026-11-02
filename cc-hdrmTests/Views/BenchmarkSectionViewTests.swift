@@ -25,4 +25,26 @@ struct BenchmarkSectionViewTests {
         #expect(BenchmarkSectionView.fableCapNote.contains("Fable"))
         #expect(BenchmarkSectionView.fableCapNote.localizedCaseInsensitiveContains("weekly cap"))
     }
+
+    @Test("The explanation says why Measure is gone")
+    func noFiveHourNoteExplains() {
+        #expect(BenchmarkSectionView.noFiveHourNote.contains("5-hour limit"))
+    }
+
+    @Test("Earlier cards return only when the number is gone and the run finished nothing")
+    func resultsAfterRun() {
+        let earlier = [BenchmarkVariantResult(model: "earlier", variant: .outputHeavy, measurement: nil, inconclusive: true, retryCount: 3)]
+        let newer = [BenchmarkVariantResult(model: "newer", variant: .outputHeavy, measurement: nil, inconclusive: true, retryCount: 3)]
+
+        #expect(BenchmarkSectionView.resultsAfterRun(returned: [], previous: earlier, hasFiveHourNumber: false) == earlier)
+        #expect(BenchmarkSectionView.resultsAfterRun(returned: newer, previous: earlier, hasFiveHourNumber: false) == newer)
+        #expect(BenchmarkSectionView.resultsAfterRun(returned: [], previous: earlier, hasFiveHourNumber: true).isEmpty)
+        #expect(BenchmarkSectionView.resultsAfterRun(returned: newer, previous: earlier, hasFiveHourNumber: true) == newer)
+    }
+
+    @Test("Empty trend text points at Measure only for accounts with a number")
+    func emptyStateWording() {
+        #expect(TPPSectionView.emptyStateText(hasNoFiveHourNumber: false).contains("Measure button"))
+        #expect(TPPSectionView.emptyStateText(hasNoFiveHourNumber: true).contains("Measure") == false)
+    }
 }

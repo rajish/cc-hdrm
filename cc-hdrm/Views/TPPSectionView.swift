@@ -14,6 +14,7 @@ struct TPPSectionView: View {
     let tppStorageService: any TPPStorageServiceProtocol
     let preferencesManager: (any PreferencesManagerProtocol)?
     let selectedTimeRange: TimeRange
+    let hasNoFiveHourNumber: Bool
 
     @State private var chartData: TPPChartData = .empty
     @State private var isLoading = false
@@ -33,6 +34,12 @@ struct TPPSectionView: View {
         preferencesManager?.isBenchmarkEnabled ?? false
     }
 
+    static func emptyStateText(hasNoFiveHourNumber: Bool) -> String {
+        hasNoFiveHourNumber
+            ? "Token efficiency will appear once your Claude Code use moves your weekly usage."
+            : "Enable the Measure button in Settings to start tracking token efficiency. Passive data will also appear after your next Claude Code session."
+    }
+
     var body: some View {
         // Use a single stable view tree to avoid structural if/else oscillation.
         // When the condition is false the content is hidden but the view identity is preserved,
@@ -49,6 +56,9 @@ struct TPPSectionView: View {
             Task { await loadData() }
         }
         .onChange(of: selectedBasis) { _, _ in
+            Task { await loadData() }
+        }
+        .onChange(of: hasNoFiveHourNumber) { _, _ in
             Task { await loadData() }
         }
     }
@@ -125,7 +135,7 @@ struct TPPSectionView: View {
             Image(systemName: "gauge.with.dots.needle.33percent")
                 .font(.system(size: 24))
                 .foregroundStyle(.secondary)
-            Text("Enable the Measure button in Settings to start tracking token efficiency. Passive data will also appear after your next Claude Code session.")
+            Text(Self.emptyStateText(hasNoFiveHourNumber: hasNoFiveHourNumber))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -276,7 +286,8 @@ struct TPPSectionView: View {
             let loaded = try await service.loadTPPData(
                 timeRange: selectedTimeRange,
                 model: selectedModel,
-                basis: selectedBasis
+                basis: selectedBasis,
+                hasNoFiveHourNumber: hasNoFiveHourNumber
             )
             // Loads run off the main actor and can finish out of order
             guard generation == loadGeneration else { return }

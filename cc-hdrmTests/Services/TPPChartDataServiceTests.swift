@@ -438,6 +438,43 @@ struct TPPChartDataServiceBasisTests {
         #expect(fiveHour.passivePoints.isEmpty)
     }
 
+    @Test("No 5-hour number: past benchmarks stay charted, described as history with no prompt to run one")
+    func noNumberPastBenchmarks() async throws {
+        let (service, _) = makeService([
+            makeMeasurement(timestamp: nowMs - oneHourMs, source: .benchmark, tppFiveHour: 4000),
+        ])
+
+        let noNumber = try await service.loadTPPData(timeRange: .day, model: nil, basis: .fiveHour, hasNoFiveHourNumber: true)
+        #expect(noNumber.benchmarkPoints.map(\.tppValue) == [4000])
+        #expect(noNumber.insightText == "These are earlier 5-hour readings. This account no longer has a 5-hour limit.")
+
+        let withNumber = try await service.loadTPPData(timeRange: .day, model: nil, basis: .fiveHour)
+        #expect(withNumber.insightText == "Run a benchmark to get a calibrated reading of your token efficiency.")
+    }
+
+    @Test("No 5-hour number: old trends and benchmark comparisons are not presented as current")
+    func noNumberOldTrend() async throws {
+        let (service, storage) = makeService([
+            makeMeasurement(timestamp: nowMs - oneHourMs * 3, source: .benchmark, tppFiveHour: 4000),
+            makeMeasurement(timestamp: nowMs - oneHourMs * 2, tppFiveHour: 1000),
+            makeMeasurement(timestamp: nowMs - oneHourMs, tppFiveHour: 2000),
+        ])
+        storage.averageResult = (fiveHour: 8000, sevenDay: nil)
+
+        let data = try await service.loadTPPData(timeRange: .day, model: nil, basis: .fiveHour, hasNoFiveHourNumber: true)
+
+        #expect(data.insightText == "These are earlier 5-hour readings. This account no longer has a 5-hour limit.")
+    }
+
+    @Test("No 5-hour number: the weekly basis keeps its own text")
+    func noNumberWeeklyBasis() async throws {
+        let (service, _) = makeService([weekly(nowMs - oneHourMs, tpp: 40_000)])
+
+        let data = try await service.loadTPPData(timeRange: .day, model: nil, hasNoFiveHourNumber: true)
+
+        #expect(data.insightText.hasPrefix("Collecting weekly-step readings"))
+    }
+
     @Test("A day holding both bases is never averaged together, on either basis")
     func bucketsNeverMix() async throws {
         // Noon yesterday, so all four rows share a calendar day and none lies in the future.

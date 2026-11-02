@@ -314,6 +314,13 @@ struct SettingsView: View {
                 }
                 .accessibilityLabel("Enable benchmark measure button, \(benchmarkEnabled ? "on" : "off")")
 
+            if appState?.hasNoFiveHourNumber == true {
+                Text(BenchmarkSectionView.noFiveHourNote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             if benchmarkEnabled {
                 Text("Benchmark variants")
                     .font(.caption)

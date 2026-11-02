@@ -82,7 +82,10 @@ private final class MockBenchmarkKeychainService: KeychainServiceProtocol, @unch
         scopes: ["user:inference"]
     )
 
+    var readCount = 0
+
     func readCredentials() async throws -> KeychainCredentials {
+        readCount += 1
         return credentials
     }
 
@@ -564,5 +567,228 @@ struct BenchmarkServiceTests {
         #expect(response.usage.outputTokens == 532)
         #expect(response.usage.cacheCreationInputTokens == nil)
         #expect(response.usage.cacheReadInputTokens == nil)
+    }
+}
+
+// MARK: - Accounts With No 5-Hour Number
+
+private final class RequestCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage = 0
+
+    func increment() {
+        lock.lock()
+        defer { lock.unlock() }
+        storage += 1
+    }
+
+    var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+}
+
+@Suite("BenchmarkService No 5-Hour Number Tests")
+@MainActor
+struct BenchmarkServiceNoFiveHourTests {
+    private let appState = AppState()
+    private let keychain = MockBenchmarkKeychainService()
+    private let pollingEngine = MockBenchmarkPollingEngine()
+    private let storage = MockTPPStorageService()
+    private let requests = RequestCounter()
+    private let progress = ProgressCollector()
+
+    private let withNumber = WindowState(utilization: 50.0, resetsAt: nil)
+    private let weekly = WindowState(utilization: 10.0, resetsAt: nil)
+
+    init() {
+        appState.updateOAuthState(.authenticated)
+        appState.updateConnectionStatus(.connected)
+    }
+
+    private func makeService() -> BenchmarkService {
+        let body = #"{"usage": {"input_tokens": 15, "output_tokens": 500}}"#.data(using: .utf8)!
+        let response = HTTPURLResponse(
+            url: URL(string: "https://api.anthropic.com/v1/messages")!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+        let requests = requests
+        return BenchmarkService(
+            appState: appState,
+            keychainService: keychain,
+            pollingEngine: pollingEngine,
+            tppStorageService: storage,
+            historicalDataService: MockHistoricalDataService(),
+            dataLoader: { _ in
+                requests.increment()
+                return (body, response)
+            }
+        )
+    }
+
+    private func run(
+        _ service: BenchmarkService,
+        models: [String] = ["claude-sonnet-4-6"],
+        variants: [BenchmarkVariant] = [.outputHeavy]
+    ) async throws -> [BenchmarkVariantResult] {
+        let progress = progress
+        return try await service.runBenchmark(
+            models: models,
+            variants: variants,
+            onProgress: { progress.append($0) }
+        )
+    }
+
+    private func expectNothingSpent() {
+        #expect(requests.count == 0)
+        #expect(pollingEngine.performForcedPollCallCount == 0)
+        #expect(storage.storedMeasurements.isEmpty)
+        #expect(keychain.readCount == 0)
+    }
+
+    private var failedAndNotCompleted: Bool {
+        let values = progress.values
+        let failed = values.contains { if case .failed = $0 { true } else { false } }
+        return failed && !values.contains(.completed)
+    }
+
+    @Test("Validation refuses a connected account with no 5-hour number")
+    func validationRefuses() async {
+        appState.updateWindows(fiveHour: nil, sevenDay: weekly)
+
+        #expect(await makeService().validatePreconditions() == .noFiveHourNumber)
+    }
+
+    @Test("Validation still reports sign-in first when disconnected, and the run stays blocked")
+    func disconnected() async throws {
+        appState.updateWindows(fiveHour: nil, sevenDay: weekly)
+        appState.updateConnectionStatus(.disconnected)
+        let service = makeService()
+
+        #expect(await service.validatePreconditions() == .tokenExpired)
+        #expect(try await run(service).isEmpty)
+        expectNothingSpent()
+    }
+
+    @Test("A run called directly with no 5-hour number spends nothing and reads no credentials")
+    func runBlocked() async throws {
+        appState.updateWindows(fiveHour: nil, sevenDay: weekly)
+
+        #expect(try await run(makeService()).isEmpty)
+
+        expectNothingSpent()
+        #expect(failedAndNotCompleted)
+    }
+
+    @Test("With neither window a run is blocked and validation refuses")
+    func neitherWindow() async throws {
+        appState.updateWindows(fiveHour: nil, sevenDay: nil)
+        let service = makeService()
+
+        #expect(appState.hasNoFiveHourNumber == false)
+        #expect(await service.validatePreconditions() == .noFiveHourNumber)
+        #expect(try await run(service).isEmpty)
+        expectNothingSpent()
+    }
+
+    @Test("Number gone after a request: no retry, no row, no further variant or model")
+    func numberGoneAfterRequest() async throws {
+        appState.updateWindows(fiveHour: withNumber, sevenDay: weekly)
+        let (appState, weekly) = (appState, weekly)
+        pollingEngine.onForcedPoll = { appState.updateWindows(fiveHour: nil, sevenDay: weekly) }
+
+        let results = try await run(
+            makeService(),
+            models: ["claude-sonnet-4-6", "claude-fable-5"],
+            variants: [.outputHeavy, .inputHeavy]
+        )
+
+        #expect(requests.count == 1)
+        #expect(pollingEngine.performForcedPollCallCount == 1)
+        #expect(results.isEmpty)
+        #expect(storage.storedMeasurements.isEmpty)
+        #expect(failedAndNotCompleted)
+    }
+
+    @Test("Number gone on the last retry: no inconclusive result and no completed report")
+    func numberGoneOnLastRetry() async throws {
+        appState.updateWindows(fiveHour: withNumber, sevenDay: weekly)
+        let (appState, weekly, pollingEngine) = (appState, weekly, pollingEngine)
+        pollingEngine.onForcedPoll = {
+            if pollingEngine.performForcedPollCallCount == 4 {
+                appState.updateWindows(fiveHour: nil, sevenDay: weekly)
+            }
+        }
+
+        let results = try await run(makeService())
+
+        #expect(requests.count == 4)
+        #expect(results.isEmpty)
+        #expect(storage.storedMeasurements.isEmpty)
+        #expect(failedAndNotCompleted)
+    }
+
+    @Test("Number gone between models: the next request is not sent and the finished result stays")
+    func numberGoneBetweenModels() async throws {
+        appState.updateWindows(fiveHour: withNumber, sevenDay: weekly)
+        let (appState, weekly) = (appState, weekly)
+        pollingEngine.onForcedPoll = {
+            appState.updateWindows(fiveHour: WindowState(utilization: 52.0, resetsAt: nil), sevenDay: weekly)
+        }
+        let progress = progress
+        let service = makeService()
+
+        let results = try await service.runBenchmark(
+            models: ["claude-sonnet-4-6", "claude-fable-5"],
+            variants: [.outputHeavy],
+            onProgress: { update in
+                progress.append(update)
+                if case .computingResult = update {
+                    MainActor.assumeIsolated { appState.updateWindows(fiveHour: nil, sevenDay: weekly) }
+                }
+            }
+        )
+
+        #expect(requests.count == 1)
+        #expect(results.map(\.model) == ["claude-sonnet-4-6"])
+        #expect(results.first?.measurement != nil)
+        #expect(storage.storedMeasurements.count == 1)
+        #expect(failedAndNotCompleted)
+    }
+
+    @Test("State changes take effect at the next poll, in both directions")
+    func stateChangesBothWays() async throws {
+        let service = makeService()
+
+        appState.updateWindows(fiveHour: nil, sevenDay: weekly)
+        #expect(await service.validatePreconditions() == .noFiveHourNumber)
+
+        appState.updateWindows(fiveHour: withNumber, sevenDay: weekly)
+        #expect(await service.validatePreconditions() == .ready)
+        #expect(try await run(service).count == 1)
+        #expect(requests.count == 4)
+
+        appState.updateWindows(fiveHour: nil, sevenDay: weekly)
+        #expect(await service.validatePreconditions() == .noFiveHourNumber)
+        #expect(try await run(service).isEmpty)
+        #expect(requests.count == 4)
+    }
+
+    @Test("With a number and no change, a run still retries three times and ends inconclusive")
+    func numberPresentKeepsRetries() async throws {
+        appState.updateWindows(fiveHour: withNumber, sevenDay: weekly)
+
+        let results = try await run(makeService())
+
+        #expect(requests.count == 4)
+        #expect(pollingEngine.performForcedPollCallCount == 4)
+        #expect(results.count == 1)
+        #expect(results.first?.inconclusive == true)
+        #expect(results.first?.retryCount == 3)
+        #expect(storage.storedMeasurements.isEmpty)
+        #expect(progress.values.contains(.completed))
     }
 }
