@@ -321,7 +321,7 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
     ) async throws -> String {
         // 5-hour rows are all history here, so a trend or a benchmark prompt would mislead.
         if hasNoFiveHourNumber && basis == .fiveHour {
-            return "These are earlier 5-hour readings. This account no longer has a 5-hour limit."
+            return "These are earlier 5-hour readings. Your usage data no longer includes a 5-hour number."
         }
 
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)

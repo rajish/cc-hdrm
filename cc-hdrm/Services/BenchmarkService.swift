@@ -141,13 +141,13 @@ final class BenchmarkService: BenchmarkServiceProtocol {
             return .tokenExpired
         }
 
-        guard appState.fiveHour != nil else {
+        guard let fiveHour = appState.fiveHour else {
             Self.logger.info("Benchmark validation: no 5-hour number, run not allowed")
             return .noFiveHourNumber
         }
 
         // Check 5h utilization <= 90%
-        if let fiveHour = appState.fiveHour, fiveHour.utilization > 90.0 {
+        if fiveHour.utilization > 90.0 {
             return .utilizationTooHigh
         }
 

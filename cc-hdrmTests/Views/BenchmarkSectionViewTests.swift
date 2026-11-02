@@ -28,7 +28,7 @@ struct BenchmarkSectionViewTests {
 
     @Test("The explanation says why Measure is gone")
     func noFiveHourNoteExplains() {
-        #expect(BenchmarkSectionView.noFiveHourNote.contains("5-hour limit"))
+        #expect(BenchmarkSectionView.noFiveHourNote.contains("5-hour number"))
     }
 
     @Test("Earlier cards return only when the number is gone and the run finished nothing")

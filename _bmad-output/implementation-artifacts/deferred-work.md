@@ -281,3 +281,6 @@ All are narrow, and the data can be rebuilt from Settings with a force re-run.
 - source_spec: `_bmad-output/implementation-artifacts/spec-26-8-hide-benchmark-no-five-hour.md`
   summary: `degradationSuggestion` tells users to press the Measure button, but nothing shows it today.
   evidence: `cc-hdrm/Services/PassiveTPPEngine.swift` `getHealth` is read only by tests. Adapt the wording if it is ever displayed.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-8-hide-benchmark-no-five-hour.md`
+  summary: Nothing tests that Measure is hidden, the note shows, or "Proceed" is blocked in the view.
+  evidence: `cc-hdrm/Views/BenchmarkSectionView.swift` reads `appState` straight in `body` and `executeBenchmark`. The service block is tested and is the real guard. A view-level test needs a SwiftUI inspection library, which the project does not use.

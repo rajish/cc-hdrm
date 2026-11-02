@@ -36,7 +36,7 @@ struct BenchmarkSectionView: View {
     static let fableCapNote = "Fable requests also count against your Fable weekly cap."
 
     /// Shown in place of Measure when the account has no 5-hour number.
-    static let noFiveHourNote = "The benchmark needs a 5-hour limit, which this account doesn't have. A weekly test would use too much of your weekly allowance, so it isn't offered."
+    static let noFiveHourNote = "The benchmark needs a 5-hour number, and your usage data doesn't include one. A weekly test would use too much of your weekly allowance, so it isn't offered."
 
     /// A run stopped with nothing finished keeps the earlier cards when the 5-hour number is gone.
     static func resultsAfterRun(

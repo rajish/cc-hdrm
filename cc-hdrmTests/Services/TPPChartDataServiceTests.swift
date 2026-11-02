@@ -446,7 +446,7 @@ struct TPPChartDataServiceBasisTests {
 
         let noNumber = try await service.loadTPPData(timeRange: .day, model: nil, basis: .fiveHour, hasNoFiveHourNumber: true)
         #expect(noNumber.benchmarkPoints.map(\.tppValue) == [4000])
-        #expect(noNumber.insightText == "These are earlier 5-hour readings. This account no longer has a 5-hour limit.")
+        #expect(noNumber.insightText == "These are earlier 5-hour readings. Your usage data no longer includes a 5-hour number.")
 
         let withNumber = try await service.loadTPPData(timeRange: .day, model: nil, basis: .fiveHour)
         #expect(withNumber.insightText == "Run a benchmark to get a calibrated reading of your token efficiency.")
@@ -463,7 +463,7 @@ struct TPPChartDataServiceBasisTests {
 
         let data = try await service.loadTPPData(timeRange: .day, model: nil, basis: .fiveHour, hasNoFiveHourNumber: true)
 
-        #expect(data.insightText == "These are earlier 5-hour readings. This account no longer has a 5-hour limit.")
+        #expect(data.insightText == "These are earlier 5-hour readings. Your usage data no longer includes a 5-hour number.")
     }
 
     @Test("No 5-hour number: the weekly basis keeps its own text")
