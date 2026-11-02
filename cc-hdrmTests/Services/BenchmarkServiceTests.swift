@@ -67,7 +67,7 @@ private final class MockTPPStorageService: TPPStorageServiceProtocol, @unchecked
         return (nil, nil)
     }
 
-    func deleteBackfillRecords() async throws {
+    func deleteBackfillRecords(passiveFrom: Int64?, rollupFrom: Int64?) async throws {
         storedMeasurements.removeAll { $0.source == .passiveBackfill || $0.source == .rollupBackfill }
     }
 }

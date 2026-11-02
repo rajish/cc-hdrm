@@ -2612,3 +2612,155 @@ struct PollingEngineWeeklyChartTests {
         #expect(historical.getRecentPollsCallCount == 2)
     }
 }
+
+// MARK: - Passive TPP Through the Real Poll Path
+
+private final class PEStubLogParser: ClaudeCodeLogParserProtocol, @unchecked Sendable {
+    func scan() async {}
+
+    func getTokens(from start: Int64, to end: Int64, model: String?) -> [TokenAggregate] {
+        [TokenAggregate(model: "claude-sonnet-4-6", inputTokens: 600, outputTokens: 400, cacheCreateTokens: 0, cacheReadTokens: 0, messageCount: 1)]
+    }
+
+    func getHealth() -> LogParserHealth {
+        LogParserHealth(totalLinesProcessed: 0, successfulExtractions: 0, failedLines: 0, successRate: 100, lastScanTimestamp: Date(), filesScanned: 0)
+    }
+}
+
+/// Forwards to the real engine and counts finished calls, because the poll cycle runs it fire-and-forget.
+private final class PEEngineProbe: PassiveTPPEngineProtocol, @unchecked Sendable {
+    private let engine: any PassiveTPPEngineProtocol
+    private let lock = NSLock()
+    private var polls: [UsagePoll] = []
+
+    init(engine: any PassiveTPPEngineProtocol) {
+        self.engine = engine
+    }
+
+    var finished: [UsagePoll] {
+        lock.withLock { polls }
+    }
+
+    func processPoll(current: UsagePoll, previous: UsagePoll) async {
+        await engine.processPoll(current: current, previous: previous)
+        lock.withLock { polls.append(current) }
+    }
+
+    func getHealth() async -> PassiveTPPHealth { await engine.getHealth() }
+    func resetAccumulation() async { await engine.resetAccumulation() }
+}
+
+@Suite("PollingEngine Passive TPP Tests")
+struct PollingEnginePassiveTPPTests {
+    private let resetsAt = "2030-01-07T00:00:00Z"
+
+    private func response(fiveHour: Double?, weekly: Double) -> UsageResponse {
+        UsageResponse(
+            fiveHour: fiveHour.map { WindowUsage(utilization: $0, resetsAt: "2030-01-01T05:00:00Z") },
+            sevenDay: WindowUsage(utilization: weekly, resetsAt: resetsAt),
+            limits: nil,
+            extraUsage: nil
+        )
+    }
+
+    /// Runs real poll cycles against a real engine and a temporary database, and returns the stored rows.
+    @MainActor
+    private func run(_ responses: [UsageResponse]) async throws -> (rows: [TPPMeasurement], polls: [UsagePoll]) {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("pe_tpp_\(UUID().uuidString).db")
+        let manager = DatabaseManager(databasePath: path)
+        try manager.ensureSchema()
+        defer {
+            manager.closeConnection()
+            try? FileManager.default.removeItem(at: path)
+        }
+        let storage = TPPStorageService(databaseManager: manager)
+        let parser = PEStubLogParser()
+        let probe = PEEngineProbe(engine: PassiveTPPEngine(logParser: parser, tppStorage: storage))
+        let historical = HistoricalDataService(databaseManager: manager)
+        let engine = PollingEngine(
+            keychainService: PEMockKeychainService(credentials: validCredentials()),
+            tokenRefreshService: PEMockTokenRefreshService(),
+            apiClient: PEMockAPIClient(results: responses.map { .success($0) }),
+            appState: AppState(),
+            preferencesManager: MockPreferencesManager(),
+            historicalDataService: historical,
+            passiveTPPEngine: probe,
+            claudeCodeLogParser: parser
+        )
+
+        for index in responses.indices {
+            await engine.performPollCycle()
+            // The first cycle has no previous poll, so it never reaches the engine. The poll must also
+            // be persisted before the next cycle reads it, and later than it by at least a millisecond.
+            let timeout = Date().addingTimeInterval(5)
+            while Date() < timeout {
+                let persisted = try await historical.getRecentPolls(hours: 1).count
+                if persisted > index && probe.finished.count >= index { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            try await Task.sleep(for: .milliseconds(5))
+            #expect(probe.finished.count == index)
+        }
+
+        let rows = try await storage.getMeasurements(from: 0, to: Int64.max, source: nil, model: nil, confidence: nil)
+        return (rows, probe.finished)
+    }
+
+    @Test("Polls with no number store a weekly measurement in the database, with the reset time passed through")
+    @MainActor
+    func noNumberStoresWeeklyRow() async throws {
+        let result = try await run([
+            response(fiveHour: nil, weekly: 28),
+            response(fiveHour: nil, weekly: 29),
+            response(fiveHour: nil, weekly: 30),
+        ])
+
+        #expect(result.rows.count == 1)
+        let row = try #require(result.rows.first)
+        #expect(row.source == .passive)
+        #expect(row.basis == .weekly)
+        #expect(row.tppSevenDay == 1000)
+        #expect(row.sevenDayBefore == 29 && row.sevenDayAfter == 30)
+        #expect(row.fiveHourDelta == nil && row.tppFiveHour == nil)
+
+        let expectedResetsAt = Date.fromISO8601(resetsAt).map { Int64($0.timeIntervalSince1970 * 1000) }
+        #expect(expectedResetsAt != nil)
+        #expect(result.polls.allSatisfy { $0.sevenDayResetsAt == expectedResetsAt })
+    }
+
+    @Test("Polls with a number store a 5-hour measurement in the database, as in 1.6.0")
+    @MainActor
+    func numberStoresFiveHourRow() async throws {
+        let result = try await run([
+            response(fiveHour: 10, weekly: 28),
+            response(fiveHour: 14, weekly: 29),
+        ])
+
+        #expect(result.rows.count == 1)
+        let row = try #require(result.rows.first)
+        #expect(row.basis == .fiveHour)
+        #expect(row.fiveHourBefore == 10 && row.fiveHourAfter == 14)
+        #expect(row.tppFiveHour == 250)
+        #expect(row.tppSevenDay == 1000)
+        #expect(row.confidence == .medium)
+    }
+
+    @Test("An account changing state both ways in real polls stores rows that each hold one basis")
+    @MainActor
+    func stateChange() async throws {
+        let result = try await run([
+            response(fiveHour: 10, weekly: 28),
+            response(fiveHour: 14, weekly: 29),
+            response(fiveHour: nil, weekly: 30),
+            response(fiveHour: nil, weekly: 31),
+            response(fiveHour: nil, weekly: 32),
+            response(fiveHour: 5, weekly: 33),
+            response(fiveHour: 8, weekly: 34),
+        ])
+
+        #expect(result.rows.map(\.basis) == [.fiveHour, .weekly, .fiveHour])
+        #expect(result.rows[1].sevenDayBefore == 31)
+        #expect(result.rows[1].fiveHourBefore == nil)
+        #expect(result.rows[2].fiveHourBefore == 5)
+    }
+}

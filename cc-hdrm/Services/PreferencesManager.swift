@@ -39,6 +39,7 @@ final class PreferencesManager: PreferencesManagerProtocol {
         static let benchmarkModels = "com.cc-hdrm.benchmarkModels"
         static let benchmarkVariants = "com.cc-hdrm.benchmarkVariants"
         static let tppBackfillCompleted = "com.cc-hdrm.tppBackfillCompleted"
+        static let tppWeeklyBackfillCompleted = "com.cc-hdrm.tppWeeklyBackfillCompleted"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -381,6 +382,11 @@ final class PreferencesManager: PreferencesManagerProtocol {
         set { defaults.set(newValue, forKey: Keys.tppBackfillCompleted) }
     }
 
+    var tppWeeklyBackfillCompleted: Bool {
+        get { defaults.bool(forKey: Keys.tppWeeklyBackfillCompleted) }
+        set { defaults.set(newValue, forKey: Keys.tppWeeklyBackfillCompleted) }
+    }
+
     // MARK: - Reset
 
     func resetToDefaults() {
@@ -412,5 +418,6 @@ final class PreferencesManager: PreferencesManagerProtocol {
         defaults.removeObject(forKey: Keys.benchmarkModels)
         defaults.removeObject(forKey: Keys.benchmarkVariants)
         defaults.removeObject(forKey: Keys.tppBackfillCompleted)
+        defaults.removeObject(forKey: Keys.tppWeeklyBackfillCompleted)
     }
 }

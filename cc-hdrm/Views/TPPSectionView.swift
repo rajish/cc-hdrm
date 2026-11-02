@@ -17,7 +17,9 @@ struct TPPSectionView: View {
 
     @State private var chartData: TPPChartData = .empty
     @State private var isLoading = false
+    @State private var loadGeneration = 0
     @State private var selectedModel: String?
+    @State private var selectedBasis: TPPBasis?
     @State private var showPassive = true
     @State private var showBenchmark = true
     @State private var showTrend = true
@@ -44,6 +46,9 @@ struct TPPSectionView: View {
             await loadData()
         }
         .onChange(of: selectedModel) { _, _ in
+            Task { await loadData() }
+        }
+        .onChange(of: selectedBasis) { _, _ in
             Task { await loadData() }
         }
     }
@@ -78,6 +83,10 @@ struct TPPSectionView: View {
                 // Controls: model picker + series toggles
                 controlsRow
 
+                if chartData.availableBases.count > 1 {
+                    basisPicker
+                }
+
                 // Chart
                 TPPTrendChartView(
                     chartData: chartData,
@@ -89,6 +98,12 @@ struct TPPSectionView: View {
 
                 // Legend
                 legendRow
+
+                if let caption = chartData.basisCaption {
+                    Text(caption)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
 
                 // Weighting discovery card (AC-6)
                 if let discovery = chartData.weightingDiscovery {
@@ -117,6 +132,20 @@ struct TPPSectionView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
+    }
+
+    // MARK: - Basis Picker
+
+    private var basisPicker: some View {
+        Picker("Measured on", selection: Binding(
+            get: { chartData.basis },
+            set: { selectedBasis = $0 }
+        )) {
+            Text("Weekly steps").tag(TPPBasis.weekly)
+            Text("5-hour steps").tag(TPPBasis.fiveHour)
+        }
+        .pickerStyle(.segmented)
+        .frame(maxWidth: 280)
     }
 
     // MARK: - Controls Row
@@ -235,15 +264,23 @@ struct TPPSectionView: View {
     // MARK: - Data Loading
 
     private func loadData() async {
+        loadGeneration += 1
+        let generation = loadGeneration
         isLoading = true
-        defer { isLoading = false }
+        defer {
+            if generation == loadGeneration { isLoading = false }
+        }
 
         do {
             let service = TPPChartDataService(tppStorage: tppStorageService)
-            chartData = try await service.loadTPPData(
+            let loaded = try await service.loadTPPData(
                 timeRange: selectedTimeRange,
-                model: selectedModel
+                model: selectedModel,
+                basis: selectedBasis
             )
+            // Loads run off the main actor and can finish out of order
+            guard generation == loadGeneration else { return }
+            chartData = loaded
 
             // Default to the most recently measured model if none selected
             if selectedModel == nil, let firstModel = chartData.availableModels.first {

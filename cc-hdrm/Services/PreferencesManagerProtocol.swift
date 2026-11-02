@@ -95,5 +95,9 @@ protocol PreferencesManagerProtocol: AnyObject {
     /// Whether the historical TPP backfill has completed (fast-path idempotency check).
     var tppBackfillCompleted: Bool { get set }
 
+    /// Whether the weekly-step backfill has run. Separate from `tppBackfillCompleted` because
+    /// installs that already finished the 5-hour backfill still need the weekly pass once.
+    var tppWeeklyBackfillCompleted: Bool { get set }
+
     func resetToDefaults()
 }

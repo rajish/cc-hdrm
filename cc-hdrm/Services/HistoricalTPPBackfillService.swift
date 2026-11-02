@@ -11,6 +11,7 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
     private let preferencesManager: PreferencesManagerProtocol
     private let lock = NSLock()
     private var isRunning = false
+    private var weeklyStoreFailed = false
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -41,7 +42,12 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
     func runBackfillIfNeeded() async {
         // Fast path: preference check
         if preferencesManager.tppBackfillCompleted {
-            Self.logger.debug("Backfill already completed (preference check)")
+            if preferencesManager.tppWeeklyBackfillCompleted {
+                Self.logger.debug("Backfill already completed (preference check)")
+            } else {
+                Self.logger.info("5-hour backfill already completed — running the weekly pass once")
+                await run(force: false, weeklyOnly: true)
+            }
             return
         }
 
@@ -64,8 +70,11 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
                 )
                 : []
             if !existingPassive.isEmpty || !existingRollup.isEmpty {
-                Self.logger.info("Backfill records found in DB — marking preference and skipping")
+                Self.logger.info("Backfill records found in DB — marking preference and running only the weekly pass")
                 preferencesManager.tppBackfillCompleted = true
+                if !preferencesManager.tppWeeklyBackfillCompleted {
+                    await run(force: false, weeklyOnly: true)
+                }
                 return
             }
         } catch {
@@ -78,6 +87,11 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
 
     @discardableResult
     func runBackfill(force: Bool) async -> Int {
+        await run(force: force, weeklyOnly: false)
+    }
+
+    @discardableResult
+    private func run(force: Bool, weeklyOnly: Bool) async -> Int {
         // Prevent concurrent runs
         let canRun = lock.withLock { () -> Bool in
             guard !isRunning else { return false }
@@ -90,14 +104,21 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
         }
         defer { lock.withLock { isRunning = false } }
 
-        Self.logger.info("Starting historical TPP backfill (force=\(force))")
+        Self.logger.info("Starting historical TPP backfill (force=\(force), weeklyOnly=\(weeklyOnly))")
         let startTime = CFAbsoluteTimeGetCurrent()
 
         if force {
             do {
-                try await tppStorage.deleteBackfillRecords()
+                // The rebuild only reaches back as far as these sources, so older rows must survive.
+                // The first poll only opens a pair, so no row can be rebuilt at its timestamp.
+                let polls = try await historicalDataService.getRecentPolls(hours: 24)
+                let rollups = try await historicalDataService.getRolledUpData(range: .month)
+                try await tppStorage.deleteBackfillRecords(
+                    passiveFrom: polls.count >= 2 ? polls[1].timestamp : nil,
+                    rollupFrom: rollups.map(\.periodEnd).min()
+                )
                 preferencesManager.tppBackfillCompleted = false
-                Self.logger.info("Deleted existing backfill records for force re-run")
+                Self.logger.info("Deleted rebuildable backfill records for force re-run")
             } catch {
                 Self.logger.error("Failed to delete existing backfill records: \(error.localizedDescription)")
                 return 0
@@ -106,35 +127,83 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
 
         var totalMeasurements = 0
 
+        // Weekly rows are skipped this run if the overlap check has nothing to check against,
+        // and the pass stays open so a later launch retries it.
+        var existingWeekly: [TPPMeasurement]?
+        do {
+            existingWeekly = try await tppStorage.getMeasurements(from: 0, to: Int64.max, source: nil, model: nil, confidence: nil)
+                .filter { $0.basis == .weekly }
+        } catch {
+            Self.logger.error("Failed to read existing weekly rows, skipping weekly backfill this run: \(error.localizedDescription)")
+        }
+        weeklyStoreFailed = false
+        var weeklyPassFinished = existingWeekly != nil
+
         // Phase 1: Raw poll backfill (last ~24 hours)
         do {
-            let pollCount = try await processRawPolls()
+            let pollCount = try await processRawPolls(weeklyOnly: weeklyOnly, existingWeekly: existingWeekly)
             totalMeasurements += pollCount
             Self.logger.info("Raw poll backfill complete: \(pollCount) measurements stored")
         } catch {
+            weeklyPassFinished = false
             Self.logger.error("Raw poll backfill failed: \(error.localizedDescription)")
         }
 
         // Phase 2: Rollup-based backfill (older data)
-        do {
-            let rollupCount = try await processRollups()
-            totalMeasurements += rollupCount
-            Self.logger.info("Rollup backfill complete: \(rollupCount) measurements stored")
-        } catch {
-            Self.logger.error("Rollup backfill failed: \(error.localizedDescription)")
+        if !weeklyOnly {
+            do {
+                let rollupCount = try await processRollups()
+                totalMeasurements += rollupCount
+                Self.logger.info("Rollup backfill complete: \(rollupCount) measurements stored")
+            } catch {
+                Self.logger.error("Rollup backfill failed: \(error.localizedDescription)")
+            }
         }
 
         let elapsed = CFAbsoluteTimeGetCurrent() - startTime
         Self.logger.info("Historical TPP backfill complete: \(totalMeasurements) total measurements in \(String(format: "%.2f", elapsed))s")
 
         preferencesManager.tppBackfillCompleted = true
+        if weeklyPassFinished && !weeklyStoreFailed {
+            preferencesManager.tppWeeklyBackfillCompleted = true
+        }
 
         return totalMeasurements
     }
 
+    // MARK: - Weekly Rows
+
+    /// Stores weekly rows except those overlapping the same model's weekly row already in the
+    /// database, because the same step would otherwise count twice in chart averages. A stored row with
+    /// no value blocks only another row with no value, so it cannot hide a real reading.
+    private func storeWeekly(_ measurements: [TPPMeasurement], existing: [TPPMeasurement]?) async -> Int {
+        guard let existing else { return 0 }
+        var stored = 0
+        for measurement in measurements {
+            let start = measurement.windowStart ?? measurement.timestamp
+            let overlaps = existing.contains {
+                $0.model == measurement.model
+                    && ($0.windowStart ?? $0.timestamp) < measurement.timestamp && start < $0.timestamp
+                    && ($0.chartTPP != nil || measurement.chartTPP == nil)
+            }
+            guard !overlaps else {
+                Self.logger.debug("Skipping weekly backfill row at \(measurement.timestamp): overlaps a stored weekly row")
+                continue
+            }
+            do {
+                try await tppStorage.storePassiveResult(measurement)
+                stored += 1
+            } catch {
+                weeklyStoreFailed = true
+                Self.logger.error("Failed to store weekly backfill measurement, the weekly pass stays open: \(error.localizedDescription)")
+            }
+        }
+        return stored
+    }
+
     // MARK: - Raw Poll Backfill
 
-    private func processRawPolls() async throws -> Int {
+    private func processRawPolls(weeklyOnly: Bool, existingWeekly: [TPPMeasurement]?) async throws -> Int {
         let polls = try await historicalDataService.getRecentPolls(hours: 24)
         guard polls.count >= 2 else {
             Self.logger.info("Fewer than 2 raw polls — skipping raw poll backfill")
@@ -142,6 +211,7 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
         }
 
         var measurementCount = 0
+        var weeklyTracker = WeeklyStepTracker(source: .passiveBackfill)
 
         for i in 1..<polls.count {
             let previous = polls[i - 1]
@@ -149,8 +219,13 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
 
             guard let currentFiveHour = current.fiveHourUtil,
                   let previousFiveHour = previous.fiveHourUtil else {
+                let tokens = logParser.getTokens(from: previous.timestamp, to: current.timestamp)
+                let outcome = weeklyTracker.process(current: current, previous: previous, tokens: tokens)
+                measurementCount += await storeWeekly(outcome.measurements, existing: existingWeekly)
                 continue
             }
+            weeklyTracker.reset()
+            if weeklyOnly { continue }
 
             // Reset detection: 5h utilization drops by >= 50%
             if previousFiveHour - currentFiveHour >= Self.resetDropThreshold {

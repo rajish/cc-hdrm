@@ -339,7 +339,9 @@ final class PollingEngine: PollingEngineProtocol {
                         fiveHourUtil: response.fiveHour?.utilization,
                         fiveHourResetsAt: nil,
                         sevenDayUtil: response.sevenDay?.utilization,
-                        sevenDayResetsAt: nil
+                        sevenDayResetsAt: response.sevenDay?.resetsAt
+                            .flatMap { Date.fromISO8601($0) }
+                            .map { Int64($0.timeIntervalSince1970 * 1000) }
                     )
                     await engine.processPoll(current: currentPoll, previous: prevPoll)
                 }

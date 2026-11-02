@@ -30,6 +30,13 @@ enum MeasurementConfidence: String, Sendable {
     case low
 }
 
+/// The utilization step a TPP value was measured against.
+/// Weekly values run about 10x higher than 5-hour values, so the two are never combined.
+enum TPPBasis: String, Sendable, CaseIterable {
+    case weekly
+    case fiveHour
+}
+
 /// A single token-per-percent (TPP) measurement result.
 struct TPPMeasurement: Sendable, Equatable {
     let id: Int64?
@@ -53,6 +60,18 @@ struct TPPMeasurement: Sendable, Equatable {
     let tppSevenDay: Double?
     let confidence: MeasurementConfidence
     let messageCount: Int
+
+    /// Every row written before weekly measurement has a 5-hour delta, so the absence of one
+    /// identifies a weekly row. This holds after the account changes state.
+    var basis: TPPBasis {
+        fiveHourDelta != nil ? .fiveHour : .weekly
+    }
+
+    /// The TPP value on this row's own basis. A 5-hour row's `tppSevenDay` covers a 5-hour
+    /// style window, so it must not stand in for a weekly reading.
+    var chartTPP: Double? {
+        basis == .fiveHour ? tppFiveHour : tppSevenDay
+    }
 
     /// Effective tokens that count toward rate limits.
     /// cache_read is free; cache_create costs 1.25x base input.

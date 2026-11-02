@@ -42,6 +42,27 @@ struct TPPChartData: Sendable {
     let insightText: String
     let availableModels: [String]
     let weightingDiscovery: TPPWeightingDiscovery?
+    /// The basis every value in this chart was computed from.
+    var basis: TPPBasis = .fiveHour
+    /// Bases with readings in the selected range, weekly first.
+    var availableBases: [TPPBasis] = []
+
+    /// Accounts with only 5-hour readings keep the original axis label.
+    var yAxisLabel: String {
+        guard basis == .weekly || availableBases.count > 1 else { return "tokens/%" }
+        return basis == .weekly ? "tokens per weekly %" : "tokens per 5-hour %"
+    }
+
+    /// Explains the basis when it is not obvious. Nil for accounts with only 5-hour readings.
+    var basisCaption: String? {
+        guard basis == .weekly || availableBases.count > 1 else { return nil }
+        switch basis {
+        case .weekly:
+            return "Measured on weekly steps: each reading covers at least 1% of the weekly allowance. Whole-percent steps make single readings rough, so read the trend."
+        case .fiveHour:
+            return "Measured on 5-hour steps. These values run about 10x lower than weekly readings and are not comparable with them."
+        }
+    }
 
     /// True when there is no passive AND no benchmark data.
     var isEmpty: Bool {

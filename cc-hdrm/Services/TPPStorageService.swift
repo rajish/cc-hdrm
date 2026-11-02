@@ -182,7 +182,11 @@ final class TPPStorageService: TPPStorageServiceProtocol, @unchecked Sendable {
         }
 
         let whereClause = conditions.joined(separator: " AND ")
-        let sql = "SELECT AVG(tpp_five_hour), AVG(tpp_seven_day) FROM tpp_measurements WHERE \(whereClause)"
+        let sql = """
+            SELECT AVG(CASE WHEN five_hour_delta IS NOT NULL THEN tpp_five_hour END),
+                   AVG(CASE WHEN five_hour_delta IS NULL THEN tpp_seven_day END)
+            FROM tpp_measurements WHERE \(whereClause)
+            """
 
         var statement: OpaquePointer?
         defer {
@@ -206,7 +210,7 @@ final class TPPStorageService: TPPStorageServiceProtocol, @unchecked Sendable {
         return (fiveHour, sevenDay)
     }
 
-    func deleteBackfillRecords() async throws {
+    func deleteBackfillRecords(passiveFrom: Int64?, rollupFrom: Int64?) async throws {
         guard databaseManager.isAvailable else {
             Self.logger.debug("Database unavailable - skipping backfill record deletion")
             return
@@ -214,7 +218,12 @@ final class TPPStorageService: TPPStorageServiceProtocol, @unchecked Sendable {
 
         let connection = try databaseManager.getConnection()
 
-        let sql = "DELETE FROM tpp_measurements WHERE source IN ('passive-backfill', 'rollup-backfill')"
+        let sql = """
+            DELETE FROM tpp_measurements
+            WHERE five_hour_delta IS NOT NULL
+              AND ((source = 'passive-backfill' AND timestamp >= ?)
+                OR (source = 'rollup-backfill' AND timestamp >= ?))
+            """
 
         var statement: OpaquePointer?
         defer {
@@ -228,6 +237,10 @@ final class TPPStorageService: TPPStorageServiceProtocol, @unchecked Sendable {
             throw AppError.databaseQueryFailed(underlying: SQLiteError.prepareFailed(code: prepareResult))
         }
 
+        // NULL never compares true, so a nil limit deletes nothing for that source.
+        bindOptionalInt64(statement, 1, passiveFrom)
+        bindOptionalInt64(statement, 2, rollupFrom)
+
         let stepResult = sqlite3_step(statement)
         guard stepResult == SQLITE_DONE else {
             let errorMessage = String(cString: sqlite3_errmsg(connection))
@@ -236,7 +249,7 @@ final class TPPStorageService: TPPStorageServiceProtocol, @unchecked Sendable {
         }
 
         let deletedCount = sqlite3_changes(connection)
-        Self.logger.info("Deleted \(deletedCount) backfill records")
+        Self.logger.info("Deleted \(deletedCount) backfill records (passive from \(passiveFrom ?? -1), rollup from \(rollupFrom ?? -1))")
     }
 
     // MARK: - Private Helpers
