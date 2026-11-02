@@ -56,7 +56,7 @@ Claude Pro, Max and Ultra subscribers have no passive way to see how much capaci
 
 Verified Ultra accounts have no 5-hour limit. cc-hdrm follows what your usage data reports, not your plan name. It checks on every poll, so an account adapts automatically — no restart, no setting.
 
-- **With a 5-hour number** (everything above) — nothing changes.
+- **With a 5-hour number** (everything above) — the app looks and works as before.
 - **Without one** — weekly leads:
   - **Menu bar and popover** — weekly headroom and color in the menu bar; a large weekly ring, reset time and a pace line ("On pace" or "Ahead of pace — runs out ~Thu 2:00 PM") in the popover; ↗ appears only when the weekly allowance is projected to run out before reset
   - **Weekly chart** — the popover sparkline shows the current weekly cycle with an even-pace line
