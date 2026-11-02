@@ -72,11 +72,11 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
             passivePoints = computeWeeklyAverages(from: sortedPassive)
         }
 
-        // Compute trend line from passive data
-        let trendLine = computeMovingAverage(points: passivePoints)
+        // A 7-day range holds at most 8 daily points, too few for a line from a 7-point average.
+        let trendLine = computeMovingAverage(points: passivePoints, windowSize: timeRange == .week ? 3 : 7)
 
-        // Detect shifts
-        let shiftAnnotations = detectShifts(points: passivePoints, trendLine: trendLine)
+        // Shift markers stay on the 7-point average, so the shorter line adds none.
+        let shiftAnnotations = detectShifts(points: passivePoints, trendLine: computeMovingAverage(points: passivePoints))
 
         // Compute insight text
         let insightText = try await computeInsightText(
@@ -211,7 +211,7 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
 
     // MARK: - Trend Line
 
-    /// Computes a 7-point moving average from the given points.
+    /// Computes a moving average over `windowSize` points.
     func computeMovingAverage(points: [TPPChartPoint], windowSize: Int = 7) -> [TPPChartPoint] {
         guard points.count >= windowSize else { return [] }
         var result: [TPPChartPoint] = []

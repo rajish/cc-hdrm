@@ -6,8 +6,10 @@ import os
 /// Layout:
 /// - Title bar with "Usage Analytics" and close button
 /// - Controls row: TimeRangeSelector (left) + series toggles (right)
-/// - UsageChart (expands to fill available space)
-/// - Value section: conditional HeadroomBreakdownBar (80px) + TierRecommendationCard + InsightStack
+/// - Vertical scroll area holding everything below:
+///   - UsageChart (60% of the scroll area, at least 280 points)
+///   - Value section: conditional HeadroomBreakdownBar (80px) + TierRecommendationCard + InsightStack
+///   - Benchmark and tokens-per-percent sections
 struct AnalyticsView: View {
     var onClose: () -> Void
     let historicalDataService: any HistoricalDataServiceProtocol
@@ -152,42 +154,50 @@ struct AnalyticsView: View {
             titleBar
             controlsRow
             outageLegend
-            UsageChart(
-                pollData: chartData,
-                rollupData: rollupData,
-                timeRange: selectedTimeRange,
-                fiveHourVisible: effectiveSeries.fiveHour,
-                sevenDayVisible: effectiveSeries.sevenDay,
-                fableVisible: effectiveSeries.fable,
-                fableLabel: fableLabel,
-                isLoading: isLoading,
-                hasAnyHistoricalData: hasAnyHistoricalData,
-                outagePeriods: outagePeriods
-            )
-            valueSection
+            ScrollView(.vertical) {
+                VStack(spacing: 12) {
+                    UsageChart(
+                        pollData: chartData,
+                        rollupData: rollupData,
+                        timeRange: selectedTimeRange,
+                        fiveHourVisible: effectiveSeries.fiveHour,
+                        sevenDayVisible: effectiveSeries.sevenDay,
+                        fableVisible: effectiveSeries.fable,
+                        fableLabel: fableLabel,
+                        isLoading: isLoading,
+                        hasAnyHistoricalData: hasAnyHistoricalData,
+                        outagePeriods: outagePeriods
+                    )
+                    .containerRelativeFrame(.vertical) { scrollAreaHeight, _ in
+                        max(280, scrollAreaHeight * 0.6)
+                    }
+                    valueSection
 
-            // Token Efficiency benchmark section (Story 20.1)
-            if let benchmarkService, let tppStorageService, let preferencesManager,
-               preferencesManager.isBenchmarkEnabled {
-                Divider()
-                BenchmarkSectionView(
-                    benchmarkService: benchmarkService,
-                    tppStorageService: tppStorageService,
-                    preferencesManager: preferencesManager,
-                    appState: appState
-                )
-            }
+                    // Token Efficiency benchmark section (Story 20.1)
+                    if let benchmarkService, let tppStorageService, let preferencesManager,
+                       preferencesManager.isBenchmarkEnabled {
+                        Divider()
+                        BenchmarkSectionView(
+                            benchmarkService: benchmarkService,
+                            tppStorageService: tppStorageService,
+                            preferencesManager: preferencesManager,
+                            appState: appState
+                        )
+                    }
 
-            // TPP Trend Visualization (Story 20.4)
-            if let tppStorageService {
-                Divider()
-                TPPSectionView(
-                    tppStorageService: tppStorageService,
-                    preferencesManager: preferencesManager,
-                    selectedTimeRange: selectedTimeRange,
-                    hasNoFiveHourNumber: appState.hasNoFiveHourNumber
-                )
+                    // TPP Trend Visualization (Story 20.4)
+                    if let tppStorageService {
+                        Divider()
+                        TPPSectionView(
+                            tppStorageService: tppStorageService,
+                            preferencesManager: preferencesManager,
+                            selectedTimeRange: selectedTimeRange,
+                            hasNoFiveHourNumber: appState.hasNoFiveHourNumber
+                        )
+                    }
+                }
             }
+            .scrollIndicatorsFlash(onAppear: true)
         }
         .padding()
         .onAppear {

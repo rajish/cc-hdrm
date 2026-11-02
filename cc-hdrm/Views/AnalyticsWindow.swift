@@ -9,7 +9,7 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
 
     static let shared = AnalyticsWindow()
 
-    private var panel: NSPanel?
+    private(set) var panel: NSPanel?
     private weak var appState: AppState?
     private var historicalDataService: (any HistoricalDataServiceProtocol)?
     private var headroomAnalysisService: (any HeadroomAnalysisServiceProtocol)?
@@ -119,7 +119,6 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
         panel.level = .floating
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.moveToActiveSpace]  // NOT .canJoinAllSpaces
-        panel.minSize = NSSize(width: 400, height: 350)
         panel.delegate = self
         panel.center()
 
@@ -139,9 +138,37 @@ final class AnalyticsWindow: NSObject, NSWindowDelegate {
             benchmarkService: benchmarkService,
             tppStorageService: tppStorageService
         )
-        panel.contentView = NSHostingView(rootView: contentView)
+        .frame(minWidth: 400, minHeight: 350)
+        let hostingView = NSHostingView(rootView: contentView)
+        hostingView.sizingOptions = [.minSize]
+        panel.contentView = hostingView
+
+        fitToScreen(panel)
 
         self.panel = panel
+    }
+
+    private func fitToScreen(_ panel: NSPanel) {
+        let visible = (panel.screen ?? NSScreen.main)?.visibleFrame
+        let restored = panel.frame
+        let fitted = Self.fitted(restored, in: visible)
+        guard fitted != restored else { return }
+        Self.logger.info("Analytics window fitted to the screen: restored=\(NSStringFromRect(restored), privacy: .public) fitted=\(NSStringFromRect(fitted), privacy: .public)")
+        panel.setFrame(fitted, display: false)
+    }
+
+    /// Returns `frame` shrunk to fit `visible` if needed, then moved fully inside it.
+    /// With no known screen, returns `frame` unchanged.
+    static func fitted(_ frame: NSRect, in visible: NSRect?) -> NSRect {
+        guard let visible else { return frame }
+        let width = min(frame.width, visible.width)
+        let height = min(frame.height, visible.height)
+        return NSRect(
+            x: min(max(frame.minX, visible.minX), visible.maxX - width),
+            y: min(max(frame.minY, visible.minY), visible.maxY - height),
+            width: width,
+            height: height
+        )
     }
 
     // MARK: - NSWindowDelegate
