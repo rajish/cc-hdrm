@@ -14,6 +14,7 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
     // MARK: - Accumulation Window State (protected by lock)
 
     private var accumulationWindow: AccumulationWindow?
+    private var weeklyTracker = WeeklyStepTracker(source: .passive)
 
     // MARK: - Health Tracking (protected by lock)
 
@@ -43,6 +44,12 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
     }
 
     func processPoll(current: UsagePoll, previous: UsagePoll) async {
+        guard current.fiveHourUtil != nil else {
+            await processWeeklyPoll(current: current, previous: previous)
+            return
+        }
+        lock.withLock { weeklyTracker.reset() }
+
         guard let currentFiveHour = current.fiveHourUtil,
               let previousFiveHour = previous.fiveHourUtil else {
             Self.logger.debug("Skipping passive TPP: missing 5h utilization data")
@@ -267,11 +274,36 @@ final class PassiveTPPEngine: PassiveTPPEngineProtocol, @unchecked Sendable {
     }
 
     func resetAccumulation() async {
-        lock.withLock { accumulationWindow = nil }
+        lock.withLock {
+            accumulationWindow = nil
+            weeklyTracker.reset()
+        }
         Self.logger.info("Accumulation window reset")
     }
 
     // MARK: - Private Helpers
+
+    private func processWeeklyPoll(current: UsagePoll, previous: UsagePoll) async {
+        let tokens = logParser.getTokens(from: previous.timestamp, to: current.timestamp)
+        let outcome = lock.withLock { () -> WeeklyStepTracker.Outcome in
+            accumulationWindow = nil
+            let outcome = weeklyTracker.process(current: current, previous: previous, tokens: tokens)
+            if outcome.isStep {
+                totalUtilizationChanges += 1
+                if outcome.hadTokens { windowsWithTokenData += 1 }
+            }
+            return outcome
+        }
+
+        for measurement in outcome.measurements {
+            do {
+                try await tppStorage.storePassiveResult(measurement)
+                Self.logger.info("Stored weekly passive TPP: model=\(measurement.model, privacy: .public) tpp7d=\(measurement.tppSevenDay ?? -1) delta7d=\(measurement.sevenDayDelta ?? -1) confidence=\(measurement.confidence.rawValue, privacy: .public)")
+            } catch {
+                Self.logger.error("Failed to store weekly passive TPP measurement: \(error.localizedDescription)")
+            }
+        }
+    }
 
     private func storePerModelMeasurements(
         tokensByModel: [String: TokenAggregate],

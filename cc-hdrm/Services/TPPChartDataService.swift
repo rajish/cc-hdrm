@@ -19,7 +19,7 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
 
     // MARK: - Public API
 
-    func loadTPPData(timeRange: TimeRange, model: String?) async throws -> TPPChartData {
+    func loadTPPData(timeRange: TimeRange, model: String?, basis requestedBasis: TPPBasis? = nil) async throws -> TPPChartData {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         let fromMs = timeRange.startTimestamp
         let toMs = nowMs
@@ -45,8 +45,17 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
         }
 
         // Separate by source — exclude rollup-backfill (too noisy for charting)
-        let passiveMeasurements = allMeasurements.filter { $0.source == .passive || $0.source == .passiveBackfill }
-        let benchmarkMeasurements = allMeasurements.filter { $0.source == .benchmark }
+        let allPassive = allMeasurements.filter { $0.source == .passive || $0.source == .passiveBackfill }
+        let allBenchmark = allMeasurements.filter { $0.source == .benchmark }
+
+        // Every value below comes from one basis, so nothing downstream can average them together.
+        let availableBases = TPPBasis.allCases.filter { candidate in
+            (allPassive + allBenchmark).contains { $0.basis == candidate && $0.chartTPP != nil }
+        }
+        let basis = requestedBasis.flatMap { availableBases.contains($0) ? $0 : nil }
+            ?? Self.defaultBasis(passive: allPassive, benchmark: allBenchmark)
+        let passiveMeasurements = allPassive.filter { $0.basis == basis }
+        let benchmarkMeasurements = allBenchmark.filter { $0.basis == basis }
 
         // Convert benchmark measurements to chart points (always individual)
         let benchmarkPoints = benchmarkMeasurements.compactMap { toChartPoint($0) }
@@ -73,7 +82,8 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
         let insightText = try await computeInsightText(
             benchmarkMeasurements: benchmarkMeasurements,
             passivePoints: passivePoints,
-            model: model
+            model: model,
+            basis: basis
         )
 
         // Compute weighting discovery
@@ -86,7 +96,7 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
 
         let models = try await availableModels()
 
-        Self.logger.info("TPP chart data loaded: \(passivePoints.count) passive, \(benchmarkPoints.count) benchmark, \(trendLine.count) trend, \(shiftAnnotations.count) shifts")
+        Self.logger.info("TPP chart data loaded: basis=\(basis.rawValue, privacy: .public) (requested \(requestedBasis?.rawValue ?? "default", privacy: .public), \(availableBases.count) available), \(passivePoints.count) passive, \(benchmarkPoints.count) benchmark, \(trendLine.count) trend, \(shiftAnnotations.count) shifts")
 
         return TPPChartData(
             passivePoints: passivePoints,
@@ -95,8 +105,18 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
             shiftAnnotations: shiftAnnotations,
             insightText: insightText,
             availableModels: models,
-            weightingDiscovery: weightingDiscovery
+            weightingDiscovery: weightingDiscovery,
+            basis: basis,
+            availableBases: availableBases
         )
+    }
+
+    /// The newest passive reading follows the account's current state; old benchmarks do not.
+    private static func defaultBasis(passive: [TPPMeasurement], benchmark: [TPPMeasurement]) -> TPPBasis {
+        let newest = { (rows: [TPPMeasurement]) in
+            rows.filter { $0.chartTPP != nil }.max { $0.timestamp < $1.timestamp }
+        }
+        return (newest(passive) ?? newest(benchmark))?.basis ?? .fiveHour
     }
 
     func availableModels() async throws -> [String] {
@@ -109,7 +129,8 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
         // what the user is using now rather than what has the most history
         var latestTimestamp: [String: Int64] = [:]
         var modelCounts: [String: Int] = [:]
-        for m in allMeasurements {
+        // A weekly step with no tokens leaves an "unknown" row with no value. As the default model it would empty the chart.
+        for m in allMeasurements where m.basis == .fiveHour || m.chartTPP != nil {
             latestTimestamp[m.model] = max(latestTimestamp[m.model] ?? 0, m.timestamp)
             modelCounts[m.model, default: 0] += 1
         }
@@ -125,7 +146,7 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
     // MARK: - Chart Point Conversion
 
     private func toChartPoint(_ measurement: TPPMeasurement) -> TPPChartPoint? {
-        guard let tppValue = measurement.tppFiveHour else { return nil }
+        guard let tppValue = measurement.chartTPP else { return nil }
         return TPPChartPoint(
             timestamp: Date(timeIntervalSince1970: Double(measurement.timestamp) / 1000.0),
             tppValue: tppValue,
@@ -155,7 +176,7 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
 
     private func computeAverages(from measurements: [TPPMeasurement], groupBy: (Date) -> Date) -> [TPPChartPoint] {
         // Filter to measurements with valid TPP
-        let valid = measurements.filter { $0.tppFiveHour != nil }
+        let valid = measurements.filter { $0.chartTPP != nil }
         guard !valid.isEmpty else { return [] }
 
         // Group by time bucket
@@ -168,7 +189,7 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
 
         // Compute average for each bucket
         return buckets.sorted { $0.key < $1.key }.compactMap { (bucket, measurements) -> TPPChartPoint? in
-            let tppValues = measurements.compactMap(\.tppFiveHour)
+            let tppValues = measurements.compactMap(\.chartTPP)
             guard !tppValues.isEmpty else { return nil }
             let avg = tppValues.reduce(0, +) / Double(tppValues.count)
 
@@ -293,7 +314,8 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
     func computeInsightText(
         benchmarkMeasurements: [TPPMeasurement],
         passivePoints: [TPPChartPoint],
-        model: String?
+        model: String?,
+        basis: TPPBasis = .fiveHour
     ) async throws -> String {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         let thirtyDaysAgoMs = nowMs - (30 * 24 * 60 * 60 * 1000)
@@ -341,11 +363,16 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
                 } else {
                     direction = "stable"
                 }
-                return "Passive monitoring suggests efficiency is \(direction). Run a benchmark to confirm."
+                return basis == .weekly
+                    ? "Weekly-step readings suggest efficiency is \(direction)."
+                    : "Passive monitoring suggests efficiency is \(direction). Run a benchmark to confirm."
             }
         }
 
         // Priority 3: No data
+        if basis == .weekly {
+            return "Collecting weekly-step readings. A trend appears after a few more weekly steps."
+        }
         return "Run a benchmark to get a calibrated reading of your token efficiency."
     }
 

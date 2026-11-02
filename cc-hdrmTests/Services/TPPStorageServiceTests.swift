@@ -167,3 +167,107 @@ struct TPPStorageServiceTests {
         #expect(latest?.totalRawTokens == 1000)
     }
 }
+
+// MARK: - Weekly Basis
+
+@Suite("TPPStorageService Weekly Basis Tests")
+struct TPPStorageServiceWeeklyBasisTests {
+    private func makeService() throws -> (TPPStorageService, DatabaseManager, URL) {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("tpp_weekly_\(UUID().uuidString).db")
+        let manager = DatabaseManager(databasePath: path)
+        try manager.ensureSchema()
+        return (TPPStorageService(databaseManager: manager), manager, path)
+    }
+
+    private func row(
+        _ timestamp: Int64,
+        source: MeasurementSource = .passive,
+        basis: TPPBasis,
+        tppFiveHour: Double? = nil,
+        tppSevenDay: Double? = nil
+    ) -> TPPMeasurement {
+        TPPMeasurement(
+            id: nil, timestamp: timestamp, windowStart: timestamp - 100, model: "m", variant: nil, source: source,
+            fiveHourBefore: basis == .fiveHour ? 1 : nil, fiveHourAfter: basis == .fiveHour ? 2 : nil, fiveHourDelta: basis == .fiveHour ? 1 : nil,
+            sevenDayBefore: 10, sevenDayAfter: 11, sevenDayDelta: 1,
+            inputTokens: 1, outputTokens: 1, cacheCreateTokens: 0, cacheReadTokens: 0, totalRawTokens: 2,
+            tppFiveHour: tppFiveHour, tppSevenDay: tppSevenDay, confidence: .low, messageCount: 1
+        )
+    }
+
+    @Test("A stored row keeps its basis on an existing schema, with no migration")
+    func basisSurvivesStorage() async throws {
+        let (service, manager, path) = try makeService()
+        defer { manager.closeConnection(); try? FileManager.default.removeItem(at: path) }
+
+        try await service.storePassiveResult(row(1000, basis: .weekly, tppSevenDay: 500))
+        try await service.storePassiveResult(row(2000, basis: .fiveHour, tppFiveHour: 50, tppSevenDay: 40))
+
+        let rows = try await service.getMeasurements(from: 0, to: Int64.max, source: nil, model: nil, confidence: nil)
+        #expect(rows.map(\.basis) == [.weekly, .fiveHour])
+        #expect(rows.map(\.chartTPP) == [500, 50])
+        #expect(try manager.getSchemaVersion() == 9)
+    }
+
+    @Test("Averages stay on one basis: a 5-hour row's weekly value does not join weekly rows")
+    func averagesPerBasis() async throws {
+        let (service, manager, path) = try makeService()
+        defer { manager.closeConnection(); try? FileManager.default.removeItem(at: path) }
+
+        try await service.storePassiveResult(row(1000, basis: .fiveHour, tppFiveHour: 100, tppSevenDay: 7))
+        try await service.storePassiveResult(row(2000, basis: .fiveHour, tppFiveHour: 200, tppSevenDay: 9))
+        try await service.storePassiveResult(row(3000, basis: .weekly, tppSevenDay: 1000))
+        try await service.storePassiveResult(row(4000, basis: .weekly, tppSevenDay: 3000))
+
+        let average = try await service.getAverageTPP(from: 0, to: Int64.max, model: nil, source: nil)
+        #expect(average.fiveHour == 150)
+        #expect(average.sevenDay == 2000)
+    }
+
+    @Test("Scoped delete keeps weekly backfill rows")
+    func scopedDeleteKeepsWeekly() async throws {
+        let (service, manager, path) = try makeService()
+        defer { manager.closeConnection(); try? FileManager.default.removeItem(at: path) }
+
+        try await service.storePassiveResult(row(5000, source: .passiveBackfill, basis: .weekly, tppSevenDay: 500))
+        try await service.storePassiveResult(row(5000, source: .rollupBackfill, basis: .weekly, tppSevenDay: 500))
+
+        try await service.deleteBackfillRecords(passiveFrom: 0, rollupFrom: 0)
+
+        let rows = try await service.getMeasurements(from: 0, to: Int64.max, source: nil, model: nil, confidence: nil)
+        #expect(rows.count == 2)
+    }
+
+    @Test("Scoped delete removes only rebuildable backfill rows, never passive or benchmark rows")
+    func scopedDelete() async throws {
+        let (service, manager, path) = try makeService()
+        defer { manager.closeConnection(); try? FileManager.default.removeItem(at: path) }
+
+        try await service.storePassiveResult(row(1000, source: .passiveBackfill, basis: .fiveHour))
+        try await service.storePassiveResult(row(5000, source: .passiveBackfill, basis: .fiveHour))
+        try await service.storePassiveResult(row(1000, source: .rollupBackfill, basis: .fiveHour))
+        try await service.storePassiveResult(row(5000, source: .rollupBackfill, basis: .fiveHour))
+        try await service.storePassiveResult(row(5000, source: .passive, basis: .fiveHour))
+        try await service.storePassiveResult(row(5000, source: .benchmark, basis: .fiveHour))
+
+        try await service.deleteBackfillRecords(passiveFrom: 5000, rollupFrom: 2000)
+
+        let rows = try await service.getMeasurements(from: 0, to: Int64.max, source: nil, model: nil, confidence: nil)
+        let remaining = rows.map { "\($0.source.rawValue)@\($0.timestamp)" }.sorted()
+        #expect(remaining == ["benchmark@5000", "passive-backfill@1000", "passive@5000", "rollup-backfill@1000"])
+    }
+
+    @Test("A nil limit deletes nothing for that source")
+    func nilLimits() async throws {
+        let (service, manager, path) = try makeService()
+        defer { manager.closeConnection(); try? FileManager.default.removeItem(at: path) }
+
+        try await service.storePassiveResult(row(5000, source: .passiveBackfill, basis: .fiveHour))
+        try await service.storePassiveResult(row(5000, source: .rollupBackfill, basis: .fiveHour))
+
+        try await service.deleteBackfillRecords(passiveFrom: nil, rollupFrom: nil)
+
+        let rows = try await service.getMeasurements(from: 0, to: Int64.max, source: nil, model: nil, confidence: nil)
+        #expect(rows.count == 2)
+    }
+}

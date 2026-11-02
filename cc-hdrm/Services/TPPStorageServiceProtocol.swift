@@ -38,10 +38,13 @@ protocol TPPStorageServiceProtocol: Sendable {
     ///   - to: End of time range (Unix milliseconds, inclusive)
     ///   - model: Optional model filter. Nil averages across all models.
     ///   - source: Optional source filter. Nil averages across all sources.
-    /// - Returns: Tuple of average TPP values (nil if no data)
+    /// - Returns: The average of 5-hour rows and the average of weekly rows (nil if no data). Bases are never combined.
     func getAverageTPP(from: Int64, to: Int64, model: String?, source: MeasurementSource?) async throws -> (fiveHour: Double?, sevenDay: Double?)
 
-    /// Deletes all backfill records (passive-backfill and rollup-backfill sources).
-    /// Used by the force re-run backfill feature.
-    func deleteBackfillRecords() async throws
+    /// Deletes the 5-hour backfill records a force re-run is about to rebuild, so rows it cannot rebuild survive.
+    /// Weekly rows are never deleted: a rebuild starts unanchored and cannot recreate its first step.
+    /// - Parameters:
+    ///   - passiveFrom: Deletes passive-backfill rows at or after this time. Nil deletes none.
+    ///   - rollupFrom: Deletes rollup-backfill rows at or after this time. Nil deletes none.
+    func deleteBackfillRecords(passiveFrom: Int64?, rollupFrom: Int64?) async throws
 }

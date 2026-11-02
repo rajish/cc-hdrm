@@ -210,3 +210,33 @@ The `$0/mo` forgotten-subscription item above was fixed in this review: the summ
 - **Maintainer decision.** The whole-week downgrade bound is safe but almost never lets a downgrade through. It compares one 7-day total with a single 5-hour limit, so only an Ultra account at about 3.3% of its weekly allowance (about 0.55% for Pro) earns "Consider Max". That is already the forgotten-subscription range. Accounts at 5% to 40% of Ultra's weekly allowance fit Max's weekly allowance and get "Ultra is a good fit", which asserts more than the data can show. Options: (1) take the largest rise in weekly use across any 5-hour stretch of stored polls and compare it with the cheaper plan's 5-hour credits; (2) judge by weekly use only and word the card as "Max's 5-hour limit cannot be checked"; (3) keep the strict bound. Option 1 uses data already stored.
 - A numbered account whose history holds one weekly cycle (for example a short gap in the 5-hour number) has every cheaper plan blocked by that cycle for the whole selected range, even though 5-hour peaks now exist. 1.6.0 would have judged it from the 5-hour peaks. Safe, but stricter than 1.6.0 for that account.
 - The footer shows the raw lowercase `max` for a consumer account whose tier string is unknown. That is likely the state of a verified Ultra account until its real string is confirmed.
+
+## Deferred from: Story 26.7 (2026-11-02)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-7-tpp-weekly-steps-no-five-hour.md`
+  summary: An account using less than 1% of its weekly allowance within 6 hours of its first tokens never records a weekly value.
+  evidence: `cc-hdrm/Services/WeeklyStepTracker.swift` discards a window older than the cap, and the next step only anchors. The 6-hour window is a project decision. If real light users see an empty chart, raise `maxWindowMs`.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-7-tpp-weekly-steps-no-five-hour.md`
+  summary: Weekly history older than 24 hours is not backfilled.
+  evidence: The chart excludes `rollup-backfill` rows and a bucket edge is not an observed weekly step, so weekly rollup rows were removed in review. To add this, replay rollups through `WeeklyStepTracker` and decide whether the chart shows them.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-7-tpp-weekly-steps-no-five-hour.md`
+  summary: On the 5-hour path, backfill rows still overlap passive rows, and a flush still ignores the 30-minute cap.
+  evidence: `cc-hdrm/Services/HistoricalTPPBackfillService.swift` raw 5-hour branch and `cc-hdrm/Services/PassiveTPPEngine.swift` flush branch. Fixing either changes results for accounts with a number, which must match 1.6.0. Both are fixed on the weekly path.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-7-tpp-weekly-steps-no-five-hour.md`
+  summary: On an account with a number, a newest delta-only row makes "unknown" the default model, which empties the chart and hides the picker.
+  evidence: `cc-hdrm/Views/TPPSectionView.swift` selects `availableModels.first`. Also in 1.6.0. Weekly rows with no value are now excluded in `cc-hdrm/Services/TPPChartDataService.swift`; 5-hour rows are left unchanged.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-7-tpp-weekly-steps-no-five-hour.md`
+  summary: Story 26.8 should check the wording no-number accounts still see about the Measure button and benchmarks.
+  evidence: `cc-hdrm/Views/TPPSectionView.swift` `emptyState`, the "Run a benchmark" text when `cc-hdrm/Services/TPPChartDataService.swift` has no rows at all, and `degradationSuggestion` in `cc-hdrm/Services/PassiveTPPEngine.swift`.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-7-tpp-weekly-steps-no-five-hour.md`
+  summary: The insight text and shift markers use the 5-hour thresholds on noisier weekly readings.
+  evidence: `computeInsightText` says "declining" at a 10% change across as few as two points, and `detectShifts` marks 20%. Tuning needs real weekly data, and only one Ultra account has been observed.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-7-tpp-weekly-steps-no-five-hour.md`
+  summary: A multi-model weekly step charges the whole step to each model, which understates each model's value.
+  evidence: `cc-hdrm/Services/WeeklyStepTracker.swift` matches the 5-hour rule and marks these rows low confidence. Longer windows make mixed models more likely, and low confidence only fades the point.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-7-tpp-weekly-steps-no-five-hour.md`
+  summary: Overlapping loads in the tokens-per-percent section can show stale data.
+  evidence: `cc-hdrm/Views/TPPSectionView.swift` starts an uncancelled `Task` from each `.onChange`, as it already did for the model picker. The new basis picker follows the same pattern. `.task(id:)` over range, model and basis would fix both.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-7-tpp-weekly-steps-no-five-hour.md`
+  summary: If the app quits during a force re-run, surviving older rows now make the next launch mark backfill complete without rebuilding the deleted range.
+  evidence: The slow path in `runBackfillIfNeeded` treats any backfill row as done. The window is short, and the rows can be rebuilt by pressing "Re-run TPP Backfill" again.

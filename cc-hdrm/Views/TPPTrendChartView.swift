@@ -134,7 +134,7 @@ struct TPPTrendChartView: View {
                 AxisValueLabel()
             }
         }
-        .chartYAxisLabel("tokens/%", position: .trailing)
+        .chartYAxisLabel(chartData.yAxisLabel, position: .trailing)
         .chartOverlay { proxy in
             GeometryReader { geometry in
                 Rectangle()
