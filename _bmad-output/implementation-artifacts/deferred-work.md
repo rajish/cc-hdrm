@@ -284,3 +284,6 @@ All are narrow, and the data can be rebuilt from Settings with a force re-run.
 - source_spec: `_bmad-output/implementation-artifacts/spec-26-8-hide-benchmark-no-five-hour.md`
   summary: Nothing tests that Measure is hidden, the note shows, or "Proceed" is blocked in the view.
   evidence: `cc-hdrm/Views/BenchmarkSectionView.swift` reads `appState` straight in `body` and `executeBenchmark`. The service block is tested and is the real guard. A view-level test needs a SwiftUI inspection library, which the project does not use.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-9-docs-minor-release.md`
+  summary: The README threshold alerts line still names the 5-hour window without saying it applies only when a 5-hour number exists.
+  evidence: `README.md` Notifications section. Not changed in this story because alert behaviour with no 5-hour number was not part of its scope and was not checked.
