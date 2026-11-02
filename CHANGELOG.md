@@ -20,6 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-02
+
+### Changed
+
+- feat: support accounts without a 5-hour limit (Story 26.9) (#133)
+- feat: block the benchmark when there is no 5-hour number (Story 26.8) (#132)
+- feat: tokens-per-percent from weekly steps with no 5-hour number (Story 26.7) (#131)
+- feat: tier advice and plan names for accounts with no 5-hour number (Story 26.6) (#130)
+- feat: value and headroom per weekly cycle with no 5-hour number (Story 26.5) (#129)
+- feat: analytics charts follow the 5-hour data in each range (Story 26.4) (#128)
+- feat: weekly-first popover and chart for accounts with no 5-hour number (Story 26.3) (#127)
+- feat: weekly pace for accounts with no 5-hour number (Story 26.2) (#126)
+- docs: correct Epic 26 plan for accounts without a 5-hour limit (#125)
+
 ## [1.6.1] - 2026-11-01
 
 ### Changed
@@ -311,7 +325,8 @@ This release ships the Token Efficiency Ratio feature (Epic 20) and fixes the Ho
 - Launch at login via SMAppService
 - Xcode project with XcodeGen configuration
 
-[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.6.1...HEAD
+[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/rajish/cc-hdrm/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/rajish/cc-hdrm/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/rajish/cc-hdrm/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/rajish/cc-hdrm/compare/v1.5.0...v1.5.1
