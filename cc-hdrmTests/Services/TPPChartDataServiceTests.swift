@@ -340,6 +340,48 @@ struct TPPChartDataServiceTests {
 
         #expect(data.passivePoints.count == 1)
     }
+
+    // MARK: - Trend Window
+
+    /// One reading a day at noon, newest yesterday, so daylight-saving days still give one bucket each.
+    private func dailyStorage(values: [Double]) -> MockChartTPPStorage {
+        let storage = MockChartTPPStorage()
+        let calendar = Calendar.current
+        let noonToday = calendar.date(bySettingHour: 12, minute: 0, second: 0, of: Date())!
+        for (index, value) in values.reversed().enumerated() {
+            let day = calendar.date(byAdding: .day, value: -(index + 1), to: noonToday)!
+            storage.measurements.append(makeMeasurement(timestamp: Int64(day.timeIntervalSince1970 * 1000), tppFiveHour: value))
+        }
+        return storage
+    }
+
+    @Test("7-day range draws a trend from 3 daily points")
+    func weekTrendUsesThreePoints() async throws {
+        let service = TPPChartDataService(tppStorage: dailyStorage(values: [1000, 2000, 3000, 4000, 5000]))
+        let data = try await service.loadTPPData(timeRange: .week, model: nil)
+
+        #expect(data.passivePoints.count == 5)
+        #expect(data.trendLine.map(\.tppValue) == [2000, 3000, 4000])
+    }
+
+    @Test("30-day range still needs 7 daily points for a trend")
+    func monthTrendUsesSevenPoints() async throws {
+        let service = TPPChartDataService(tppStorage: dailyStorage(values: [1000, 2000, 3000, 4000, 5000]))
+        let data = try await service.loadTPPData(timeRange: .month, model: nil)
+        #expect(data.trendLine.isEmpty)
+
+        let sevenDays = TPPChartDataService(tppStorage: dailyStorage(values: [1, 2, 3, 4, 5, 6, 7].map { $0 * 1000 }))
+        #expect(try await sevenDays.loadTPPData(timeRange: .month, model: nil).trendLine.map(\.tppValue) == [4000])
+    }
+
+    @Test("the shorter 7-day trend does not create shift annotations")
+    func weekShiftsStayOnSevenPointAverage() async throws {
+        let service = TPPChartDataService(tppStorage: dailyStorage(values: [1000, 1000, 1000, 2000, 4000, 8000]))
+        let data = try await service.loadTPPData(timeRange: .week, model: nil)
+
+        #expect(!data.trendLine.isEmpty)
+        #expect(data.shiftAnnotations.isEmpty)
+    }
 }
 
 // MARK: - Bases

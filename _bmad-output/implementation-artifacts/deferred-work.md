@@ -284,3 +284,33 @@ All are narrow, and the data can be rebuilt from Settings with a force re-run.
 - source_spec: `_bmad-output/implementation-artifacts/spec-26-8-hide-benchmark-no-five-hour.md`
   summary: Nothing tests that Measure is hidden, the note shows, or "Proceed" is blocked in the view.
   evidence: `cc-hdrm/Views/BenchmarkSectionView.swift` reads `appState` straight in `body` and `executeBenchmark`. The service block is tested and is the real guard. A view-level test needs a SwiftUI inspection library, which the project does not use.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-9-docs-minor-release.md`
+  summary: The README threshold alerts line still names the 5-hour window without saying it applies only when a 5-hour number exists.
+  evidence: `README.md` Notifications section. Not changed in this story because alert behaviour with no 5-hour number was not part of its scope and was not checked.
+- source_spec: `_bmad-output/implementation-artifacts/spec-analytics-window-fits-screen.md`
+  summary: Opening a range from a popover gauge while Analytics is scrolled down changes the range but leaves the chart out of view.
+  evidence: `cc-hdrm/Views/AnalyticsView.swift` keeps its scroll position on `requestedAnalyticsTimeRange` changes. A `ScrollViewReader` could scroll back to the chart.
+- source_spec: `_bmad-output/implementation-artifacts/spec-analytics-window-fits-screen.md`
+  summary: Opening Analytics on a smaller screen saves the fitted frame, so the larger size is lost when the bigger display returns.
+  evidence: `AnalyticsWindow.fitToScreen` runs with the autosave name set, and there is one saved frame rather than one per display.
+- source_spec: `_bmad-output/implementation-artifacts/spec-analytics-window-fits-screen.md`
+  summary: Tests that open the Analytics window overwrite the user's saved window frame.
+  evidence: The test host shares the `com.cc-hdrm.app` defaults, and `cc-hdrmTests/Views/AnalyticsWindowTests.swift` opens a panel with the real autosave name.
+- source_spec: `_bmad-output/implementation-artifacts/spec-analytics-window-fits-screen.md`
+  summary: Opening Analytics logged "Unknown rate limit tier: nil" 21 times in the 1.7.0 trial.
+  evidence: `cc-hdrm/Models/RateLimitTier.swift` warns on every lookup with a nil tier. Three stored reset events have no tier, which is the likely source.
+- source_spec: `_bmad-output/implementation-artifacts/spec-tpp-chart-reload-and-weekly-trend.md`
+  summary: The "All" choice in the token efficiency model picker snaps back to the newest model.
+  evidence: `cc-hdrm/Views/TPPSectionView.swift` `loadData` treats a nil model as "not chosen yet". 1.6.0 did the same.
+- source_spec: `_bmad-output/implementation-artifacts/spec-tpp-chart-reload-and-weekly-trend.md`
+  summary: A chosen model with no readings in the new range leaves no picker to change it, and the section can vanish.
+  evidence: `cc-hdrm/Views/TPPSectionView.swift` shows the picker only when the chart has data, and `selectedModel` persists across ranges.
+- source_spec: `_bmad-output/implementation-artifacts/spec-tpp-chart-reload-and-weekly-trend.md`
+  summary: The token efficiency trend tooltip can show a far-off value and only hour and minute on longer ranges.
+  evidence: `findNearestTrendPoint` in `cc-hdrm/Views/TPPTrendChartView.swift` has no distance limit, and more 7-day charts now have a line.
+- source_spec: `_bmad-output/implementation-artifacts/spec-tpp-chart-reload-and-weekly-trend.md`
+  summary: Token efficiency history lost before a weekly-step reading cannot be rebuilt on upgrade.
+  evidence: `cc-hdrm/Services/ClaudeCodeLogParser.swift` keeps only records since its saved offsets, so the first weekly pass found tokens for 1 of 17 steps in the 1.7.0 trial.
+- source_spec: `_bmad-output/implementation-artifacts/spec-tpp-chart-reload-and-weekly-trend.md`
+  summary: Test runs write to the real settings and log scan state of the developer machine.
+  evidence: The test host shares the `com.cc-hdrm.app` defaults and `log-scan-state.json`. A test run almost certainly set `tppWeeklyBackfillCompleted` before the first real 1.7.0 launch, so the trial skipped the weekly pass.

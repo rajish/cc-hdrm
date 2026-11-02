@@ -5,7 +5,7 @@ Like iStat Menus for your Claude subscription. A macOS menu bar app that shows y
 <p align="center">
   <img src="docs/images/demo.gif" alt="cc-hdrm popover showing ring gauges and extra usage bar, and analytics window with 24h, 7d, 30d, and All time range charts" width="640">
   <br>
-  <sub>Demo recorded before model-scoped caps — the popover now also shows a gauge for per-model weekly limits such as Claude Fable 5.</sub>
+  <sub>Demo recorded before model-scoped caps — the popover now also shows a gauge for per-model weekly limits such as Claude Fable 5. An account with no 5-hour number sees a weekly-first popover instead (see <a href="#accounts-with-no-5-hour-number">below</a>).</sub>
 </p>
 
 ```sh
@@ -14,7 +14,7 @@ brew install rajish/tap/cc-hdrm
 
 ## Why This Exists
 
-Claude Pro and Max subscribers have no passive way to see how much capacity they have left. The only options — `/usage`, the web dashboard, browser extensions — all interrupt your workflow. cc-hdrm polls the usage API in the background and puts the answer in your menu bar. Zero tokens spent, zero workflow interruption.
+Claude Pro, Max and Ultra subscribers have no passive way to see how much capacity they have left. The only options — `/usage`, the web dashboard, browser extensions — all interrupt your workflow. cc-hdrm polls the usage API in the background and puts the answer in your menu bar. Zero tokens spent, zero workflow interruption.
 
 ## Features
 
@@ -27,7 +27,7 @@ Claude Pro and Max subscribers have no passive way to see how much capacity they
 
 ### Popover Detail
 
-- **Ring gauges** — 5-hour and 7-day headroom with animated fill and slope indicators
+- **Ring gauges** — 5-hour (when your account has one) and 7-day headroom with animated fill and slope indicators
 - **Reset countdowns** — relative ("resets in 2h 13m") and absolute ("at 4:52 PM")
 - **Model-scoped caps** — separate gauge for per-model weekly limits (such as Claude Fable 5's weekly cap), labeled from the API with its own reset countdown; hidden when your plan reports none
 - **Extra usage tracking** — dollar-based spend vs. limit with color-coded progress bar
@@ -51,6 +51,17 @@ Claude Pro and Max subscribers have no passive way to see how much capacity they
 - **Local SQLite storage** — every poll snapshot persisted, tiered rollups for efficient querying
 - **Configurable retention** — 30 days to 5 years
 - **Configurable poll interval** — 10s to 5 min
+
+### Accounts With No 5-Hour Number
+
+Verified Ultra accounts have no 5-hour limit. cc-hdrm follows what your usage data reports, not your plan name. It checks on every poll, so an account adapts automatically — no restart, no setting.
+
+- **With a 5-hour number** (everything above) — the app looks and works as before.
+- **Without one** — weekly leads:
+  - **Menu bar and popover** — weekly headroom and color in the menu bar; a large weekly ring, reset time and a pace line ("On pace" or "Ahead of pace — runs out ~Thu 2:00 PM") in the popover; ↗ appears only when the weekly allowance is projected to run out before reset
+  - **Weekly chart** — the popover sparkline shows the current weekly cycle with an even-pace line
+  - **Analytics** — the 5-hour series is hidden for ranges with no 5-hour data; value, tier advice, and tokens-per-percent are worked out from weekly data
+  - **Benchmark unavailable** — the Measure button is replaced by a short explanation, because a weekly test would use too much of your weekly allowance
 
 ## Install
 
@@ -104,7 +115,7 @@ sequenceDiagram
         A->>K: Read OAuth credentials
         K-->>A: Access token + refresh token
         A->>API: GET /api/oauth/usage
-        API-->>A: Quota data (5h, 7d, model-scoped limits)
+        API-->>A: Quota data (5h if reported, 7d, model-scoped limits)
         A->>A: Compute headroom, slope, update display
         A->>DB: Persist poll snapshot
     end
@@ -120,7 +131,7 @@ sequenceDiagram
 ## Requirements
 
 - macOS 14.0 (Sonoma) or later
-- An active [Claude Pro or Max](https://claude.ai/upgrade) subscription
+- An active [Claude Pro, Max or Ultra](https://claude.ai/upgrade) subscription
 - macOS only for now — contributions for other platforms welcome
 
 ## Contributing

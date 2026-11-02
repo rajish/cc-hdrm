@@ -17,6 +17,8 @@ struct TPPSectionView: View {
     let hasNoFiveHourNumber: Bool
 
     @State private var chartData: TPPChartData = .empty
+    /// The range `chartData` was loaded for, which lags `selectedTimeRange` during a reload.
+    @State private var chartDataRange: TimeRange?
     @State private var isLoading = false
     @State private var loadGeneration = 0
     @State private var selectedModel: String?
@@ -73,7 +75,7 @@ struct TPPSectionView: View {
                 Spacer()
             }
 
-            if isLoading {
+            if isLoading && chartData.isEmpty {
                 HStack {
                     ProgressView()
                         .controlSize(.small)
@@ -103,7 +105,7 @@ struct TPPSectionView: View {
                     showPassive: showPassive,
                     showBenchmark: showBenchmark,
                     showTrend: showTrend,
-                    timeRange: selectedTimeRange
+                    timeRange: chartDataRange ?? selectedTimeRange
                 )
 
                 // Legend
@@ -283,8 +285,17 @@ struct TPPSectionView: View {
 
         do {
             let service = TPPChartDataService(tppStorage: tppStorageService)
+            // Default to the most recently measured model. The picker's reload supersedes this
+            // load, so no all-models chart is shown on the way there.
+            if selectedModel == nil {
+                let newest = try await service.availableModels().first
+                guard generation == loadGeneration else { return }
+                Self.logger.info("Defaulting token efficiency chart to model \(newest ?? "none", privacy: .public)")
+                selectedModel = newest
+            }
+            let timeRange = selectedTimeRange
             let loaded = try await service.loadTPPData(
-                timeRange: selectedTimeRange,
+                timeRange: timeRange,
                 model: selectedModel,
                 basis: selectedBasis,
                 hasNoFiveHourNumber: hasNoFiveHourNumber
@@ -292,11 +303,7 @@ struct TPPSectionView: View {
             // Loads run off the main actor and can finish out of order
             guard generation == loadGeneration else { return }
             chartData = loaded
-
-            // Default to the most recently measured model if none selected
-            if selectedModel == nil, let firstModel = chartData.availableModels.first {
-                selectedModel = firstModel
-            }
+            chartDataRange = timeRange
         } catch is CancellationError {
             // Discarded — user switched time ranges
         } catch {
