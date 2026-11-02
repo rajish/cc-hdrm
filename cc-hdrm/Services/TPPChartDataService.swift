@@ -19,7 +19,7 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
 
     // MARK: - Public API
 
-    func loadTPPData(timeRange: TimeRange, model: String?, basis requestedBasis: TPPBasis? = nil) async throws -> TPPChartData {
+    func loadTPPData(timeRange: TimeRange, model: String?, basis requestedBasis: TPPBasis? = nil, hasNoFiveHourNumber: Bool = false) async throws -> TPPChartData {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         let fromMs = timeRange.startTimestamp
         let toMs = nowMs
@@ -83,7 +83,8 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
             benchmarkMeasurements: benchmarkMeasurements,
             passivePoints: passivePoints,
             model: model,
-            basis: basis
+            basis: basis,
+            hasNoFiveHourNumber: hasNoFiveHourNumber
         )
 
         // Compute weighting discovery
@@ -315,8 +316,14 @@ final class TPPChartDataService: TPPChartDataServiceProtocol, Sendable {
         benchmarkMeasurements: [TPPMeasurement],
         passivePoints: [TPPChartPoint],
         model: String?,
-        basis: TPPBasis = .fiveHour
+        basis: TPPBasis = .fiveHour,
+        hasNoFiveHourNumber: Bool = false
     ) async throws -> String {
+        // 5-hour rows are all history here, so a trend or a benchmark prompt would mislead.
+        if hasNoFiveHourNumber && basis == .fiveHour {
+            return "These are earlier 5-hour readings. Your usage data no longer includes a 5-hour number."
+        }
+
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         let thirtyDaysAgoMs = nowMs - (30 * 24 * 60 * 60 * 1000)
 

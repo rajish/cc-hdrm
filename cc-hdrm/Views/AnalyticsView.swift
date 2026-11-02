@@ -184,7 +184,8 @@ struct AnalyticsView: View {
                 TPPSectionView(
                     tppStorageService: tppStorageService,
                     preferencesManager: preferencesManager,
-                    selectedTimeRange: selectedTimeRange
+                    selectedTimeRange: selectedTimeRange,
+                    hasNoFiveHourNumber: appState.hasNoFiveHourNumber
                 )
             }
         }

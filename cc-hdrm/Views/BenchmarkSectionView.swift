@@ -35,6 +35,18 @@ struct BenchmarkSectionView: View {
     /// Shown wherever benchmark cost is explained: Fable requests draw down the separate Fable weekly cap.
     static let fableCapNote = "Fable requests also count against your Fable weekly cap."
 
+    /// Shown in place of Measure when the account has no 5-hour number.
+    static let noFiveHourNote = "The benchmark needs a 5-hour number, and your usage data doesn't include one. A weekly test would use too much of your weekly allowance, so it isn't offered."
+
+    /// A run stopped with nothing finished keeps the earlier cards when the 5-hour number is gone.
+    static func resultsAfterRun(
+        returned: [BenchmarkVariantResult],
+        previous: [BenchmarkVariantResult],
+        hasFiveHourNumber: Bool
+    ) -> [BenchmarkVariantResult] {
+        returned.isEmpty && !hasFiveHourNumber ? previous : returned
+    }
+
     /// Stored preference wins when non-empty; otherwise the known defaults.
     static func resolveModels(stored: [String]) -> [String] {
         stored.isEmpty ? defaultModels : stored
@@ -56,7 +68,7 @@ struct BenchmarkSectionView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.red)
-                } else {
+                } else if !appState.hasNoFiveHourNumber {
                     Button {
                         Task { await startMeasurement() }
                     } label: {
@@ -65,6 +77,13 @@ struct BenchmarkSectionView: View {
                     .help("Send test requests to measure token efficiency per model. Uses real tokens from your quota. \(Self.fableCapNote)")
                     .disabled(benchmarkState.isRunning)
                 }
+            }
+
+            if appState.hasNoFiveHourNumber {
+                Text(Self.noFiveHourNote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             // Progress display
@@ -249,10 +268,19 @@ struct BenchmarkSectionView: View {
             benchmarkState.progress = .failed("Not enough headroom for a reliable measurement. Wait for a reset.")
         case .recentActivity:
             showActivityWarning = true
+        case .noFiveHourNumber:
+            benchmarkState.progress = .failed(BenchmarkService.noFiveHourNumberReason)
         }
     }
 
     private func executeBenchmark() async {
+        // An alert can outlive the number. Checked here so results on screen are not cleared.
+        guard appState.fiveHour != nil else {
+            Self.logger.info("Benchmark not started: no 5-hour number when confirmed")
+            return
+        }
+
+        let previousResults = benchmarkState.results
         benchmarkState.isRunning = true
         benchmarkState.results = []
 
@@ -272,7 +300,11 @@ struct BenchmarkSectionView: View {
                     }
                 }
             )
-            benchmarkState.results = results
+            benchmarkState.results = Self.resultsAfterRun(
+                returned: results,
+                previous: previousResults,
+                hasFiveHourNumber: appState.fiveHour != nil
+            )
             benchmarkState.lastMeasurementTimestamp = try? await tppStorageService.lastBenchmarkTimestamp()
         } catch {
             benchmarkState.progress = .failed(error.localizedDescription)

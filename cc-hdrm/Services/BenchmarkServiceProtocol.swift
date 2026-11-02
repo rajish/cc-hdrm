@@ -6,6 +6,7 @@ enum BenchmarkValidation: Sendable, Equatable {
     case tokenExpired
     case utilizationTooHigh
     case recentActivity
+    case noFiveHourNumber
 }
 
 /// Progress state during benchmark execution.

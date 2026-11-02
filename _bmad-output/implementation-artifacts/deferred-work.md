@@ -264,3 +264,23 @@ All are narrow, and the data can be rebuilt from Settings with a force re-run.
 - The live weekly path and the weekly backfill have no shared write check, so a step written live during the first post-upgrade pass can be stored twice. A fix needs one synchronization point or a check and insert in one transaction.
 - `cc-hdrm/Services/PollingEngine.swift` starts passive processing in unawaited tasks, so a forced poll overlapping a cycle can reach the weekly tracker out of order and attribute tokens to the wrong step.
 
+## Deferred from: Story 26.8 (2026-11-02)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-8-hide-benchmark-no-five-hour.md`
+  summary: Benchmark failure messages never appear on screen, including "Sign in to Anthropic first" and "Not enough headroom".
+  evidence: `cc-hdrm/Views/BenchmarkSectionView.swift` renders `progressView` only while `isRunning` is true, and these failures happen with it false. Also in 1.6.0. Showing them changes what accounts with a number see. A connected account with neither window therefore gets a Measure click with no visible result.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-8-hide-benchmark-no-five-hour.md`
+  summary: Cancel followed quickly by Measure can revive the cancelled run.
+  evidence: The view clears `isRunning` at once, while the old run waits on a request. A new `runBenchmark` then resets the shared `cancelled` flag in `cc-hdrm/Services/BenchmarkService.swift`. Both runs continue. Also in 1.6.0.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-8-hide-benchmark-no-five-hour.md`
+  summary: A `five_hour` object with a null `utilization` is treated as a 5-hour number of 0, across the app and in this guard.
+  evidence: `cc-hdrm/Services/PollingEngine.swift` maps a present window with `utilization ?? 0`, so `hasNoFiveHourNumber` is false. Only `five_hour: null` has been observed, on one Ultra account. Fix it in one place if this response shape is ever seen.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-8-hide-benchmark-no-five-hour.md`
+  summary: The earlier note that Story 26.8 stores weekly-era benchmark rows no longer applies.
+  evidence: This story stores no benchmark rows without a 5-hour number. The "average only rows where `fiveHourDelta == nil`" item from code review 2 of `spec-26-7-tpp-weekly-deltas` needs no action.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-8-hide-benchmark-no-five-hour.md`
+  summary: `degradationSuggestion` tells users to press the Measure button, but nothing shows it today.
+  evidence: `cc-hdrm/Services/PassiveTPPEngine.swift` `getHealth` is read only by tests. Adapt the wording if it is ever displayed.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-8-hide-benchmark-no-five-hour.md`
+  summary: Nothing tests that Measure is hidden, the note shows, or "Proceed" is blocked in the view.
+  evidence: `cc-hdrm/Views/BenchmarkSectionView.swift` reads `appState` straight in `body` and `executeBenchmark`. The service block is tested and is the real guard. A view-level test needs a SwiftUI inspection library, which the project does not use.

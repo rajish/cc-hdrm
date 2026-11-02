@@ -37,6 +37,8 @@ final class BenchmarkService: BenchmarkServiceProtocol {
 
     private static let messagesEndpoint = URL(string: "https://api.anthropic.com/v1/messages")!
 
+    static let noFiveHourNumberReason = "No 5-hour number to measure against."
+
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
         category: "benchmark"
@@ -139,8 +141,13 @@ final class BenchmarkService: BenchmarkServiceProtocol {
             return .tokenExpired
         }
 
+        guard let fiveHour = appState.fiveHour else {
+            Self.logger.info("Benchmark validation: no 5-hour number, run not allowed")
+            return .noFiveHourNumber
+        }
+
         // Check 5h utilization <= 90%
-        if let fiveHour = appState.fiveHour, fiveHour.utilization > 90.0 {
+        if fiveHour.utilization > 90.0 {
             return .utilizationTooHigh
         }
 
@@ -169,6 +176,13 @@ final class BenchmarkService: BenchmarkServiceProtocol {
         variants: [BenchmarkVariant],
         onProgress: @escaping @Sendable (BenchmarkProgress) -> Void
     ) async throws -> [BenchmarkVariantResult] {
+        // Before the credentials read, so a blocked run touches nothing.
+        guard appState.fiveHour != nil else {
+            Self.logger.info("Benchmark run blocked: no 5-hour number (\(models.count) models requested)")
+            onProgress(.failed(Self.noFiveHourNumberReason))
+            return []
+        }
+
         cancelled = false
         var results: [BenchmarkVariantResult] = []
 
@@ -193,12 +207,16 @@ final class BenchmarkService: BenchmarkServiceProtocol {
                     break
                 }
 
-                let result = await runVariant(
+                guard let result = await runVariant(
                     model: model,
                     variant: variant,
                     token: token,
                     onProgress: onProgress
-                )
+                ) else {
+                    Self.logger.warning("Benchmark stopped: 5-hour number gone during \(model, privacy: .public)/\(variant.rawValue, privacy: .public), keeping \(results.count) finished results")
+                    onProgress(.failed(Self.noFiveHourNumberReason))
+                    return results
+                }
                 results.append(result)
 
                 // Store successful measurements
@@ -223,12 +241,13 @@ final class BenchmarkService: BenchmarkServiceProtocol {
     // MARK: - Private
 
     /// Runs a single benchmark variant with adaptive retry.
+    /// Returns nil when the 5-hour number is gone, because further requests could only end inconclusive.
     private func runVariant(
         model: String,
         variant: BenchmarkVariant,
         token: String,
         onProgress: @escaping @Sendable (BenchmarkProgress) -> Void
-    ) async -> BenchmarkVariantResult {
+    ) async -> BenchmarkVariantResult? {
         var retryCount = 0
         var wordCount = 500
 
@@ -238,7 +257,7 @@ final class BenchmarkService: BenchmarkServiceProtocol {
             }
 
             // Record "before" utilization
-            let fiveHourBefore = appState.fiveHour?.utilization ?? 0
+            guard let fiveHourBefore = appState.fiveHour?.utilization else { return nil }
             let sevenDayBefore = appState.sevenDay?.utilization
 
             // Send API request
@@ -265,7 +284,7 @@ final class BenchmarkService: BenchmarkServiceProtocol {
             await pollingEngine.performForcedPoll()
 
             // Record "after" utilization
-            let fiveHourAfter = appState.fiveHour?.utilization ?? 0
+            guard let fiveHourAfter = appState.fiveHour?.utilization else { return nil }
             let sevenDayAfter = appState.sevenDay?.utilization
 
             let fiveHourDelta = fiveHourAfter - fiveHourBefore
