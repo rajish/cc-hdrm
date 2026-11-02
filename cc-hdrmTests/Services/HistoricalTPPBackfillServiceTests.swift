@@ -712,6 +712,26 @@ struct HistoricalTPPBackfillWeeklyTests {
         #expect(storage.storedMeasurements.map(\.tppSevenDay) == [120])
     }
 
+    @Test("Another model's stored weekly row does not block a backfill row for the same step")
+    func overlapIsPerModel() async {
+        let (service, storage, _, _) = make(polls: [
+            makePoll(id: 1, timestamp: 1000, fiveHourUtil: nil, sevenDayUtil: 28),
+            makePoll(id: 2, timestamp: 2000, fiveHourUtil: nil, sevenDayUtil: 29),
+            makePoll(id: 3, timestamp: 3000, fiveHourUtil: nil, sevenDayUtil: 30),
+        ])
+        let otherModel = TPPMeasurement(
+            id: nil, timestamp: 3000, windowStart: 2000, model: "another-model", variant: nil, source: .passive,
+            fiveHourBefore: nil, fiveHourAfter: nil, fiveHourDelta: nil, sevenDayBefore: 29, sevenDayAfter: 30, sevenDayDelta: 1,
+            inputTokens: 1, outputTokens: 1, cacheCreateTokens: 0, cacheReadTokens: 0, totalRawTokens: 2,
+            tppFiveHour: nil, tppSevenDay: 2, confidence: .low, messageCount: 1
+        )
+        storage.storedMeasurements = [otherModel]
+
+        await service.runBackfill(force: false)
+
+        #expect(storage.storedMeasurements.contains { $0.model == model && $0.timestamp == 3000 })
+    }
+
     @Test("A backfill row overlapping a stored weekly row is skipped; a 5-hour row never blocks one")
     func overlap() async {
         let (service, storage, _, _) = make(polls: [

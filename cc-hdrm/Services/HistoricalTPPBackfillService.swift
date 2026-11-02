@@ -173,8 +173,8 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
 
     // MARK: - Weekly Rows
 
-    /// Stores weekly rows except those overlapping a weekly row already in the database,
-    /// because the same step would otherwise count twice in chart averages. A stored row with
+    /// Stores weekly rows except those overlapping the same model's weekly row already in the
+    /// database, because the same step would otherwise count twice in chart averages. A stored row with
     /// no value blocks only another row with no value, so it cannot hide a real reading.
     private func storeWeekly(_ measurements: [TPPMeasurement], existing: [TPPMeasurement]?) async -> Int {
         guard let existing else { return 0 }
@@ -182,7 +182,8 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
         for measurement in measurements {
             let start = measurement.windowStart ?? measurement.timestamp
             let overlaps = existing.contains {
-                ($0.windowStart ?? $0.timestamp) < measurement.timestamp && start < $0.timestamp
+                $0.model == measurement.model
+                    && ($0.windowStart ?? $0.timestamp) < measurement.timestamp && start < $0.timestamp
                     && ($0.chartTPP != nil || measurement.chartTPP == nil)
             }
             guard !overlaps else {

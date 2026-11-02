@@ -17,6 +17,7 @@ struct TPPSectionView: View {
 
     @State private var chartData: TPPChartData = .empty
     @State private var isLoading = false
+    @State private var loadGeneration = 0
     @State private var selectedModel: String?
     @State private var selectedBasis: TPPBasis?
     @State private var showPassive = true
@@ -263,16 +264,23 @@ struct TPPSectionView: View {
     // MARK: - Data Loading
 
     private func loadData() async {
+        loadGeneration += 1
+        let generation = loadGeneration
         isLoading = true
-        defer { isLoading = false }
+        defer {
+            if generation == loadGeneration { isLoading = false }
+        }
 
         do {
             let service = TPPChartDataService(tppStorage: tppStorageService)
-            chartData = try await service.loadTPPData(
+            let loaded = try await service.loadTPPData(
                 timeRange: selectedTimeRange,
                 model: selectedModel,
                 basis: selectedBasis
             )
+            // Loads run off the main actor and can finish out of order
+            guard generation == loadGeneration else { return }
+            chartData = loaded
 
             // Default to the most recently measured model if none selected
             if selectedModel == nil, let firstModel = chartData.availableModels.first {

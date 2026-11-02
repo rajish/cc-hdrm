@@ -255,3 +255,12 @@ The `$0/mo` forgotten-subscription item above was fixed in this review: the summ
 - source_spec: `_bmad-output/implementation-artifacts/spec-26-7-tpp-weekly-steps-no-five-hour.md`
   summary: A weekly row stored by an unreleased build of the reverted attempt can still sit in a developer database.
   evidence: The reverted weekly commit wrote rows with no 5-hour delta, so they read as weekly rows. They came from partial windows and a 2% medium-confidence rule, and no release (1.6.0 or 1.6.1) wrote them. Only a developer database is affected.
+
+## Deferred from: CodeRabbit review of Story 26.7 (2026-11-02)
+
+All are narrow, and the data can be rebuilt from Settings with a force re-run.
+
+- A force re-run interrupted after its delete and before the first rebuilt row: surviving rows mark the backfill complete at next launch, so the deleted recent 5-hour rows wait for another force re-run. `cc-hdrm/Services/HistoricalTPPBackfillService.swift`.
+- The live weekly path and the weekly backfill have no shared write check, so a step written live during the first post-upgrade pass can be stored twice. A fix needs one synchronization point or a check and insert in one transaction.
+- `cc-hdrm/Services/PollingEngine.swift` starts passive processing in unawaited tasks, so a forced poll overlapping a cycle can reach the weekly tracker out of order and attribute tokens to the wrong step.
+
