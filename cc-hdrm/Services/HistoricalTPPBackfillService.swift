@@ -11,6 +11,7 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
     private let preferencesManager: PreferencesManagerProtocol
     private let lock = NSLock()
     private var isRunning = false
+    private var weeklyStoreFailed = false
 
     private static let logger = Logger(
         subsystem: "com.cc-hdrm.app",
@@ -135,6 +136,7 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
         } catch {
             Self.logger.error("Failed to read existing weekly rows, skipping weekly backfill this run: \(error.localizedDescription)")
         }
+        weeklyStoreFailed = false
         var weeklyPassFinished = existingWeekly != nil
 
         // Phase 1: Raw poll backfill (last ~24 hours)
@@ -162,7 +164,7 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
         Self.logger.info("Historical TPP backfill complete: \(totalMeasurements) total measurements in \(String(format: "%.2f", elapsed))s")
 
         preferencesManager.tppBackfillCompleted = true
-        if weeklyPassFinished {
+        if weeklyPassFinished && !weeklyStoreFailed {
             preferencesManager.tppWeeklyBackfillCompleted = true
         }
 
@@ -191,7 +193,8 @@ final class HistoricalTPPBackfillService: HistoricalTPPBackfillServiceProtocol, 
                 try await tppStorage.storePassiveResult(measurement)
                 stored += 1
             } catch {
-                Self.logger.error("Failed to store weekly backfill measurement: \(error.localizedDescription)")
+                weeklyStoreFailed = true
+                Self.logger.error("Failed to store weekly backfill measurement, the weekly pass stays open: \(error.localizedDescription)")
             }
         }
         return stored

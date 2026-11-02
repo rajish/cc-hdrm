@@ -44,6 +44,7 @@ private final class MockBackfillTPPStorage: TPPStorageServiceProtocol, @unchecke
     var storedMeasurements: [TPPMeasurement] = []
     var deleteCallCount = 0
     var shouldThrowOnGetMeasurements = false
+    var shouldThrowOnStorePassive = false
 
     func storeBenchmarkResult(_ measurement: TPPMeasurement) async throws {
         storedMeasurements.append(measurement)
@@ -58,6 +59,7 @@ private final class MockBackfillTPPStorage: TPPStorageServiceProtocol, @unchecke
     }
 
     func storePassiveResult(_ measurement: TPPMeasurement) async throws {
+        if shouldThrowOnStorePassive { throw AppError.databaseQueryFailed(underlying: SQLiteError.execFailed(message: "mock")) }
         storedMeasurements.append(measurement)
     }
 
@@ -810,6 +812,31 @@ struct HistoricalTPPBackfillWeeklyTests {
         #expect(storage.storedMeasurements.isEmpty)
 
         hist.shouldThrowOnGetRecentPolls = false
+        await service.runBackfillIfNeeded()
+        #expect(prefs.tppWeeklyBackfillCompleted)
+        #expect(storage.storedMeasurements.count == 1)
+    }
+
+    @Test("A weekly row that fails to store keeps the weekly pass open for the next launch")
+    func failedStoreRetries() async {
+        let hist = MockHistoricalDataService()
+        hist.recentPollsToReturn = [
+            makePoll(id: 1, timestamp: 1000, fiveHourUtil: nil, sevenDayUtil: 27),
+            makePoll(id: 2, timestamp: 2000, fiveHourUtil: nil, sevenDayUtil: 28),
+            makePoll(id: 3, timestamp: 3000, fiveHourUtil: nil, sevenDayUtil: 29),
+        ]
+        let parser = MockBackfillLogParser()
+        parser.tokensToReturn = [tokens]
+        let storage = MockBackfillTPPStorage()
+        storage.shouldThrowOnStorePassive = true
+        let prefs = MockPreferencesManager()
+        prefs.tppBackfillCompleted = true
+        let service = HistoricalTPPBackfillService(historicalDataService: hist, logParser: parser, tppStorage: storage, preferencesManager: prefs)
+
+        await service.runBackfillIfNeeded()
+        #expect(!prefs.tppWeeklyBackfillCompleted)
+
+        storage.shouldThrowOnStorePassive = false
         await service.runBackfillIfNeeded()
         #expect(prefs.tppWeeklyBackfillCompleted)
         #expect(storage.storedMeasurements.count == 1)

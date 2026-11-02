@@ -240,3 +240,18 @@ The `$0/mo` forgotten-subscription item above was fixed in this review: the summ
 - source_spec: `_bmad-output/implementation-artifacts/spec-26-7-tpp-weekly-steps-no-five-hour.md`
   summary: If the app quits during a force re-run, surviving older rows now make the next launch mark backfill complete without rebuilding the deleted range.
   evidence: The slow path in `runBackfillIfNeeded` treats any backfill row as done. The window is short, and the rows can be rebuilt by pressing "Re-run TPP Backfill" again.
+
+## Deferred from: code review of Story 26.7 (2026-11-02)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-7-tpp-weekly-steps-no-five-hour.md`
+  summary: Force re-run on a weekly-only account reports "0 measurements generated", which reads like a failure.
+  evidence: `cc-hdrm/Views/SettingsView.swift` prints the count of newly stored rows. Weekly rows are never deleted and the rebuild skips rows overlapping them, so the count is usually 0. Reword the message or report skipped rows.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-7-tpp-weekly-steps-no-five-hour.md`
+  summary: With the database unavailable, both backfill flags are still set and the weekly pass never runs again.
+  evidence: `cc-hdrm/Services/HistoricalTPPBackfillService.swift` `run` sees empty reads and finishes. The 5-hour flag already behaved this way in 1.6.0. The weekly pass only reaches back 24 hours, so the loss is small.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-7-tpp-weekly-steps-no-five-hour.md`
+  summary: The chosen basis in the tokens-per-percent section stays fixed once picked, so it does not return to the default when the account changes state.
+  evidence: `cc-hdrm/Views/TPPSectionView.swift` `selectedBasis` is never cleared. A user who picked "5-hour steps" keeps it while both bases exist in the range.
+- source_spec: `_bmad-output/implementation-artifacts/spec-26-7-tpp-weekly-steps-no-five-hour.md`
+  summary: A weekly row stored by an unreleased build of the reverted attempt can still sit in a developer database.
+  evidence: The reverted weekly commit wrote rows with no 5-hour delta, so they read as weekly rows. They came from partial windows and a 2% medium-confidence rule, and no release (1.6.0 or 1.6.1) wrote them. Only a developer database is affected.
